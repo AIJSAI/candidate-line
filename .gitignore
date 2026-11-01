@@ -1,0 +1,38 @@
+# Secrets and environment: values live in 1Password and the environment, never in a file.
+.env
+.env.*
+*.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node (in case the arm B sample ever sits inside this repository)
+node_modules/
+
+# Audio: the line keeps no audio, and neither does this repository.
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.opus
+*.webm
+*.ulaw
+*.mulaw
+*.pcm
+*.raw
+*.au
+
+# Bake-off recordings stay local; the measurements go in bakeoff/2026-11-01.csv.
+bakeoff/recordings/
+
+# macOS
+.DS_Store
+
+# The trace store's path is added here when DR-012 picks it.
