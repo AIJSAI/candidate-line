@@ -36,13 +36,24 @@ def score(case: Case, transcript: ProbeTranscript) -> list[str]:
     failures = []
     gus = transcript.gus_lines()
     spoken_turns = [t for t in case.turns if t.user is not None]
+    everything = " ".join(gus)
     for i, turn in enumerate(spoken_turns):
         heard = gus[i + 1] if i + 1 < len(gus) else ""  # gus[0] is the greeting
         result = TurnResult(
             heard=turn.user or "", spoken=heard, reply=Reply(heard, 0, 0, 0, "probe", "probe")
         )
         for check in turn.checks:
-            verdict = evaluate(check, result)
+            if check.name == "spoken_not_matches":
+                # Rule (a) is absolute: a forbidden sentence anywhere in the call counts, however the replies
+                # split into transcript lines (the recording's finals do not align one to one with turns).
+                whole = TurnResult(
+                    heard=turn.user or "",
+                    spoken=everything,
+                    reply=Reply(everything, 0, 0, 0, "probe", "probe"),
+                )
+                verdict = evaluate(check, whole)
+            else:
+                verdict = evaluate(check, result)
             if not verdict.passed:
                 failures.append(f"turn {i}: {check.name} {check.arg!r}: {verdict.detail}")
     return failures

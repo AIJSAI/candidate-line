@@ -14,6 +14,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+UNANSWERED_MS = 6000  # past this the probe gave up waiting; the row is a miss, not a gap
+
 
 def main(argv: list[str]) -> int:
     path = Path(argv[1]) if len(argv) > 1 else Path("bakeoff/2026-11-01.csv")
@@ -21,10 +23,15 @@ def main(argv: list[str]) -> int:
     gaps: dict[tuple[str, str], list[int]] = defaultdict(list)
     calls: dict[str, set[str]] = defaultdict(set)
     hits: dict[str, int] = defaultdict(int)
+    unanswered: dict[tuple[str, str], int] = defaultdict(int)
     for r in rows:
         calls[r["arm"]].add(r["call"])
         if r["gap_ms"].strip():
-            gaps[(r["arm"], r["method"])].append(int(float(r["gap_ms"])))
+            gap = int(float(r["gap_ms"]))
+            if gap > UNANSWERED_MS:
+                unanswered[(r["arm"], r["method"])] += 1  # no reply inside the window: not a turn gap
+            else:
+                gaps[(r["arm"], r["method"])].append(gap)
         if r["probe_hit"].strip():
             hits[r["arm"]] += 1
     print(f"{'arm':4s} {'method':10s} {'n turns':8s} {'median ms':10s} {'worst ms':9s} calls")
@@ -33,7 +40,10 @@ def main(argv: list[str]) -> int:
             f"{arm:4s} {method:10s} {len(values):<8d} {statistics.median(values):<10.0f} {max(values):<9d} {len(calls[arm])}"
         )
     for arm in sorted(calls):
-        print(f"arm {arm}: {len(calls[arm])} calls, probe sentences hit: {hits[arm]}")
+        misses = {m: n for (a, m), n in unanswered.items() if a == arm}
+        print(
+            f"arm {arm}: {len(calls[arm])} calls, probe sentences hit: {hits[arm]}, unanswered turns by method: {misses or 'none'}"
+        )
     return 0
 
 
