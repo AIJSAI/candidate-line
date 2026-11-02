@@ -10,8 +10,8 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | - | - | - | - | - |
 | 0 | The repository skeleton: `KICKOFF.md`, `AGENTS.md` (draft), DR-000, DR-001 with its rule (draft), `docs/learn/`, this file, the `Makefile` stub, `.gitignore` | 2026-11-01, the first commit | DR-000, DR-001 | |
 | 1 | AWS account, CLI profile with no long-lived key in a file, budget alarm, model access | | DR-002, DR-003 | |
-| 2 | Twilio number (upgraded), tunnel, webhook | | DR-004, DR-005 | |
-| 3 | Arm A's audio path and turn loop, with a brain that only echoes; barge-in | | DR-006 | |
+| 2 | Twilio number (upgraded), tunnel, webhook | 2026-11-02, c45159b (number, webhook and tunnel live 15:16 CT; account and identity check by James) | DR-004, DR-005 | |
+| 3 | Arm A's audio path and turn loop, with a brain that only echoes; barge-in | 2026-11-02, first real call 15:17 CT (code 09eccfb, 2026-11-01) | DR-006 | |
 | 4 | Arm B: the AWS sample, as-is | | DR-007 | |
 | 5 | Text-mode REPL; four empty hooks (`on_turn`, `before_speak`, `on_silence`, `on_tool`) | 2026-11-01, 7d236e3 | DR-008 | |
 | 6 | Synthetic data: eight candidates with codes and PINs, two weeks of slots, a three-page FAQ with section ids, and a labelled baseline of past invites with their invite-to-booked hours for the scorecard; the generating prompt committed | 2026-11-01, e39dde6 | DR-009 | |

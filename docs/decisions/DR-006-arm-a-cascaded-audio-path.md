@@ -38,6 +38,8 @@ The first real call (then the turn gap is measured from the recording, DR-001's 
 - **The whole local path, driven by the probe caller (DR-011), 2026-11-01:** greeting, two caller lines, two echoes, with real Transcribe and Polly on both sides and no phone in between; turn gap 775 and 767 ms with the echo brain, which is the floor the model's latency adds to (Haiku 4.5 measured about 600 ms, DR-003). The same mis-hearing as the first live clip ("coat" for "code", "4,821" for the spoken digits) appeared on both sides.
 - First real call from James's phone: (filled when the Twilio number exists)
 
+- **First real call, 2026-11-02, 15:17:52 to 15:18:21 CT (29 s by Twilio's call record).** James dialled the line's new number from his own phone. Twilio's signed `POST /voice` from one of its own addresses returned 200 (an unsigned test request two minutes earlier had returned 403, so the signature check was live for the real call); Twilio's media server opened the `/media` WebSocket; James's words: "i called and gus answered". The brain was Haiku 5.5 on the Anthropic API behind the cloudflared quick tunnel. What Gus heard and said on this call was not captured: the media session logs only exceptions and the per-turn spans are `prompts/03`'s work, so the line gained one INFO line per turn (heard, reply, brain and gap milliseconds) right after this call, and the second call carries the numbers.
+
 ## Say it like this
 
 > (written after the teach-back)
