@@ -11,12 +11,19 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
 from xml.sax.saxutils import escape
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 
+from candidate_line.brain import Brain, make_brain
+from candidate_line.hooks import Hooks, NoHooks
+from candidate_line.persona import ECHO_SYSTEM, GREETING
 from candidate_line.settings import Settings
+from candidate_line.telephony.media import MediaSession
+from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
 
 HELLO_LINE = (
     "Thanks for calling the ACME candidate line. This is Gus. "
@@ -38,6 +45,36 @@ def twiml_say(text: str) -> str:
     )
 
 
+def twiml_stream(public_base_url: str) -> str:
+    """`<Connect><Stream>`: the bidirectional stream (DR-005). The greeting comes through the stream so barge-in applies."""
+    wss = public_base_url.rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<Response><Connect><Stream url="{escape(wss)}/media" /></Connect></Response>'
+    )
+
+
+@dataclass(frozen=True)
+class Deps:
+    """Ears, mouth and brain for a call. The tests pass fakes; `default_deps` builds the real ones from settings."""
+
+    transcriber: Callable[[], Transcriber]
+    speaker: Callable[[], Speaker]
+    brain: Callable[[], Brain]
+    hooks: Callable[[], Hooks]
+    system: str = ECHO_SYSTEM
+    greeting: str | None = GREETING
+
+
+def default_deps(settings: Settings) -> Deps:
+    return Deps(
+        transcriber=lambda: TranscribeStreamingTranscriber(settings.aws_region),
+        speaker=lambda: PollySpeaker(settings.aws_region, voice_id=settings.polly_voice),
+        brain=lambda: make_brain(settings),
+        hooks=NoHooks,
+    )
+
+
 def public_url(request: Request, settings: Settings) -> str:
     """The URL Twilio signed. Behind the tunnel the app sees 127.0.0.1, so the public base comes from settings."""
     if settings.public_base_url:
@@ -46,8 +83,9 @@ def public_url(request: Request, settings: Settings) -> str:
     return str(request.url)
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None)
+    deps = deps or default_deps(settings)
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -63,7 +101,52 @@ def create_app(settings: Settings) -> FastAPI:
                 raise HTTPException(status_code=403, detail="bad Twilio signature")
         elif not settings.allow_unsigned_webhooks:
             raise HTTPException(status_code=503, detail="TWILIO_AUTH_TOKEN is not set")
-        return Response(content=twiml_say(HELLO_LINE), media_type="text/xml")
+        if settings.voice_mode == "say":
+            return Response(content=twiml_say(HELLO_LINE), media_type="text/xml")
+        if not settings.public_base_url:
+            raise HTTPException(
+                status_code=503, detail="PUBLIC_BASE_URL is not set; the stream needs a public wss host"
+            )
+        return Response(content=twiml_stream(settings.public_base_url), media_type="text/xml")
+
+    @app.websocket("/media")
+    async def media(ws: WebSocket) -> None:
+        await ws.accept()
+        start: dict[str, Any] | None = None
+        try:
+            while start is None:
+                message = await ws.receive_json()
+                if message.get("event") == "start":
+                    start = message
+                elif message.get("event") == "stop":
+                    return
+        except WebSocketDisconnect:
+            return
+        stream_sid = str(start["streamSid"])
+        call_id = str(start.get("start", {}).get("callSid") or stream_sid)
+
+        async def incoming() -> AsyncIterator[dict[str, Any]]:
+            while True:
+                try:
+                    message = await ws.receive_json()
+                except WebSocketDisconnect:
+                    return
+                yield message
+                if message.get("event") == "stop":
+                    return
+
+        session = MediaSession(
+            send=ws.send_json,
+            transcriber=deps.transcriber(),
+            speaker=deps.speaker(),
+            brain=deps.brain(),
+            hooks=deps.hooks(),
+            system=deps.system,
+            call_id=call_id,
+            stream_sid=stream_sid,
+            greeting=deps.greeting,
+        )
+        await session.run(incoming())
 
     return app
 

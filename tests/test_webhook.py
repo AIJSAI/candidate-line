@@ -32,7 +32,7 @@ def test_voice_fails_closed_without_a_token() -> None:
 
 
 def test_voice_answers_twiml_when_unsigned_is_allowed_locally() -> None:
-    response = client(ALLOW_UNSIGNED_WEBHOOKS="1").post("/voice", data={"CallSid": "CA1"})
+    response = client(ALLOW_UNSIGNED_WEBHOOKS="1", VOICE_MODE="say").post("/voice", data={"CallSid": "CA1"})
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/xml")
     assert "<Say" in response.text and "This is Gus." in response.text

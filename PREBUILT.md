@@ -19,8 +19,8 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 8 | `docs/refs/`: dated saved copies of the Nova 2.5 Sonic and Claude model cards, the pricing pages and the two statute pages | 2026-11-01, b847815 | cited by each record | |
 | 9 | An eval runner with zero cases | 2026-11-01, a96ebad | DR-010 | |
 | 10 | The probe caller: a scripted synthetic candidate that dials the line and is scored against the case file; the cases it plays are written live | | DR-011 | |
-| 11 | The trace store and the cockpit's list view; the spans from the turn loop, the kill switch and the override log are written live | | DR-012 | |
-| 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | | DR-013 | |
+| 11 | The trace store and the cockpit's list view; the spans from the turn loop, the kill switch and the override log are written live | 2026-11-01, 000102a | DR-012 | |
+| 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | 2026-11-01, 93ad659 | DR-013 | |
 | 13 | The coding tool, chosen by Monday's scratch task | | DR-014 | |
 | 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open | | DR-015 | |
 | 15 | The tag `prebuilt-2026-11-03` | | | |

@@ -13,6 +13,7 @@ from typing import Literal
 
 Provider = Literal["bedrock", "anthropic", "echo"]
 PROVIDERS: tuple[Provider, ...] = ("bedrock", "anthropic", "echo")
+VoiceMode = Literal["say", "stream"]
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,8 @@ class Settings:
     public_base_url: str | None
     twilio_auth_token: str | None
     allow_unsigned_webhooks: bool
+    voice_mode: VoiceMode
+    polly_voice: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -31,6 +34,9 @@ class Settings:
         provider = e.get("BRAIN_PROVIDER", "bedrock")
         if provider not in PROVIDERS:
             raise ValueError(f"BRAIN_PROVIDER must be one of {PROVIDERS}, not {provider!r}")
+        voice_mode = e.get("VOICE_MODE", "stream")
+        if voice_mode not in ("say", "stream"):
+            raise ValueError(f"VOICE_MODE must be say or stream, not {voice_mode!r}")
         return cls(
             brain_provider=provider,  # type: ignore[arg-type]
             # DR-003: Haiku 5.5 through the US geo profile; the global profile is the throttle spare.
@@ -41,4 +47,7 @@ class Settings:
             twilio_auth_token=e.get("TWILIO_AUTH_TOKEN") or None,
             # Local curl tests only. Twilio's signature is checked whenever this is off (the default).
             allow_unsigned_webhooks=e.get("ALLOW_UNSIGNED_WEBHOOKS", "") == "1",
+            # "stream" answers a call with the media stream (arm A); "say" is item 5's one spoken line.
+            voice_mode=voice_mode,  # type: ignore[arg-type]
+            polly_voice=e.get("POLLY_VOICE", "Matthew"),
         )

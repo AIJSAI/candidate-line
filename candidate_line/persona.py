@@ -6,3 +6,8 @@ PLACEHOLDER_SYSTEM = (
     "The real instructions are not written yet; if asked anything about a person, say that you do not "
     "evaluate people and offer to help with the process instead."
 )
+
+GREETING = "ACME candidate line, this is Gus."
+
+# Arm A before Wednesday: the model repeats the caller, so the audio path is proven with nothing deciding anything.
+ECHO_SYSTEM = "Repeat the caller's words back to them, exactly, and say nothing else."

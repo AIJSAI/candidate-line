@@ -11,6 +11,8 @@ dependencies = [
   "boto3>=1.35",
   "anthropic>=0.60",
   "pyyaml>=6",
+  "aws-sdk-transcribe-streaming>=0.12.0",
+  "smithy-http[awscrt]>=0.6.0",
 ]
 
 [dependency-groups]
@@ -22,6 +24,8 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# audioop is deprecated on 3.12 and gone on 3.13; the project pins 3.12 for it on purpose (DR-004).
+filterwarnings = ["ignore:'audioop' is deprecated:DeprecationWarning"]
 
 [tool.ruff]
 line-length = 110
