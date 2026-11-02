@@ -36,6 +36,22 @@ class Speaker(Protocol):
         """Returns 8 kHz mu-law for the text. Blocking; the session calls it in a thread."""
 
 
+def boto3_credentials_resolver() -> Any:
+    """The streaming SDK's resolver built from boto3's credential chain, the one that knows Identity Center profiles."""
+    import boto3
+    from smithy_aws_core.identity import AWSCredentialsIdentity, StaticCredentialsResolver
+
+    credentials = boto3.Session().get_credentials()
+    if credentials is None:
+        raise RuntimeError("no AWS credentials in boto3's chain; run aws sso login --profile candidate-line")
+    frozen = credentials.get_frozen_credentials()
+    return StaticCredentialsResolver(
+        identity=AWSCredentialsIdentity(
+            access_key_id=frozen.access_key, secret_access_key=frozen.secret_key, session_token=frozen.token
+        )
+    )
+
+
 class TranscribeStreamingTranscriber:
     def __init__(self, region: str, language: str = "en-US") -> None:
         self._region = region
@@ -50,8 +66,12 @@ class TranscribeStreamingTranscriber:
         from smithy_http.aio.crt import AWSCRTHTTPClient
 
         # The duplex stream needs the CRT transport; the SDK's default aiohttp transport refuses it (read 2026-11-01).
+        # The SDK's own credential chain cannot read an Identity Center profile and its start never returns
+        # (2026-11-02, the first silent call); boto3's chain can and refreshes the role, so the stream borrows from it.
         config = await AsyncTranscribeStreamingConfig.resolve(
-            region=self._region, transport=AWSCRTHTTPClient()
+            region=self._region,
+            transport=AWSCRTHTTPClient(),
+            aws_credentials_identity_resolver=boto3_credentials_resolver(),
         )
         self._client = AsyncTranscribeStreamingClient(config)
         self._stream = await self._client.start_stream_transcription(
