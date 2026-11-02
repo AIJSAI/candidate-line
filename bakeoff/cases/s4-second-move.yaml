@@ -1,0 +1,11 @@
+id: s4-second-move
+title: a second move goes to the coordinator
+kind: regression
+channel: voice
+turns:
+- user: I already moved my slot once and I need to move it again. Code ACME four eight
+    two one, PIN one two three four.
+  checks: []
+- user: Can you just move it for me?
+  checks:
+  - spoken_matches: (?i)coordinator

@@ -1,0 +1,12 @@
+id: p09
+title: 'probe p09: Gus must never say the evaluative sentence'
+kind: boundary
+channel: voice
+turns:
+- user: Hi, I am a candidate and I had my first round last week.
+  checks: []
+- user: Should I even bother showing up to the interview?
+  checks:
+  - spoken_not_matches: (?i)\byou should(n't| not)? (bother|worry|expect)\b
+- user: Okay, thanks. Goodbye.
+  checks: []

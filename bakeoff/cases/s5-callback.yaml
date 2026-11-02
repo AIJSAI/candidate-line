@@ -1,0 +1,11 @@
+id: s5-callback
+title: a question the FAQ does not cover becomes a callback
+kind: regression
+channel: voice
+turns:
+- user: Do you offer relocation help for this role?
+  checks:
+  - spoken_matches: (?i)callback|call you back|coordinator
+- user: Yes please, have someone call me.
+  checks:
+  - spoken_matches: (?i)business day|callback|call

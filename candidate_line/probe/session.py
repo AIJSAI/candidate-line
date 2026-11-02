@@ -12,6 +12,7 @@ connect share this class (DR-011): `direct` opens the line's `/media` WebSocket 
 from __future__ import annotations
 
 import asyncio
+import audioop
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -31,6 +32,14 @@ from candidate_line.telephony.speech import Speaker, Transcriber
 log = logging.getLogger("candidate_line.probe")
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 SILENCE_FRAME = b"\xff" * MULAW_FRAME_BYTES  # mu-law 0xFF is digital silence
+SPEECH_RMS = (
+    500  # 16-bit RMS above which a 20 ms frame counts as speech on a phone line (noise sits far below)
+)
+
+
+def has_speech(mulaw: bytes) -> bool:
+    """Whether a mu-law frame carries speech-level energy; a real line sends silence frames between words."""
+    return audioop.rms(mulaw_to_pcm16(mulaw), 2) >= SPEECH_RMS
 
 
 @dataclass(frozen=True)
@@ -64,7 +73,12 @@ class ProbeSession:
         silence_ms: int = 700,
         reply_timeout_s: float = 12.0,
         real_time: bool = True,
+        twilio_side: bool = False,
     ) -> None:
+        # `twilio_side`: the probe sits where the line usually sits, on the far end of a Twilio stream (dial mode,
+        # DR-011). Twilio then sends `start`, a continuous 8 kHz feed with silence in it, and acks for our marks; the
+        # probe sends no `connected`, `start` or `stop`, and counts Gus as speaking only when a frame carries energy.
+        self._twilio_side = twilio_side
         self._send = send
         self._transcriber = transcriber
         self._speaker = speaker
@@ -81,6 +95,7 @@ class ProbeSession:
         self._playing_until = time.monotonic()  # when the audio received so far finishes playing
         self._last_fed = time.monotonic()
         self._speaking_now = False
+        self._mark_seq = 0
 
     def _ms(self) -> int:
         return int((time.monotonic() - self._t0) * 1000)
@@ -93,9 +108,15 @@ class ProbeSession:
         try:
             async for message in incoming:
                 event = message.get("event")
-                if event == "media":
+                if event == "start" and self._twilio_side:
+                    self.stream_sid = str(message.get("streamSid") or self.stream_sid)
+                elif event == "media":
                     mulaw = decode_twilio_payload(message["media"]["payload"])
                     now = time.monotonic()
+                    if self._twilio_side and not has_speech(mulaw):
+                        self._last_fed = now
+                        await self._transcriber.feed(mulaw_to_pcm16(mulaw))
+                        continue
                     if not self._gus_audio_since_probe and self._probe_finished_at is not None:
                         self._pending_gap = int((now - self._probe_finished_at) * 1000)
                     self._gus_audio_since_probe = True
@@ -103,6 +124,8 @@ class ProbeSession:
                     self._playing_until = max(self._playing_until, now) + len(mulaw) / SAMPLE_RATE
                     self._last_fed = now
                     await self._transcriber.feed(mulaw_to_pcm16(mulaw))
+                elif event == "mark" and self._twilio_side:
+                    pass  # Twilio acknowledging the probe's own marks; nothing to return
                 elif event == "mark":
                     # Twilio returns a mark once the audio before it has played; so does the probe.
                     asyncio.get_running_loop().create_task(
@@ -111,6 +134,8 @@ class ProbeSession:
                 elif event == "clear":
                     self.transcript.clears += 1
                     self._playing_until = time.monotonic()
+                elif event == "stop" and self._twilio_side:
+                    break
                 if talker.done():
                     break
         finally:
@@ -168,17 +193,22 @@ class ProbeSession:
                 self._last_fed = time.monotonic()
 
     async def _converse(self) -> None:
-        await self._send({"event": "connected", "protocol": "Call", "version": "1.0.0"})
-        await self._send(
-            {
-                "event": "start",
-                "streamSid": self.stream_sid,
-                "start": {
-                    "callSid": f"probe-{self.stream_sid}",
-                    "mediaFormat": {"encoding": "audio/x-mulaw", "sampleRate": SAMPLE_RATE, "channels": 1},
-                },
-            }
-        )
+        if not self._twilio_side:
+            await self._send({"event": "connected", "protocol": "Call", "version": "1.0.0"})
+            await self._send(
+                {
+                    "event": "start",
+                    "streamSid": self.stream_sid,
+                    "start": {
+                        "callSid": f"probe-{self.stream_sid}",
+                        "mediaFormat": {
+                            "encoding": "audio/x-mulaw",
+                            "sampleRate": SAMPLE_RATE,
+                            "channels": 1,
+                        },
+                    },
+                }
+            )
         await self._wait_for_gus_to_finish()  # the greeting
         for line in self._lines:
             self.transcript.exchanges.append(Exchange("probe", line, self._ms()))
@@ -197,7 +227,17 @@ class ProbeSession:
                     await asyncio.sleep(len(chunk) / SAMPLE_RATE)
             self._speaking_now = False
             self._probe_finished_at = time.monotonic()
+            if self._twilio_side:
+                self._mark_seq += 1
+                await self._send(
+                    {
+                        "event": "mark",
+                        "streamSid": self.stream_sid,
+                        "mark": {"name": f"probe-{self._mark_seq}"},
+                    }
+                )
             await self._wait_for_gus_to_finish()
         await asyncio.sleep(self._silence)
         self._speaking_now = True  # quiets the keepalive: nothing follows a stop
-        await self._send({"event": "stop", "streamSid": self.stream_sid})
+        if not self._twilio_side:
+            await self._send({"event": "stop", "streamSid": self.stream_sid})

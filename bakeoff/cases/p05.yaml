@@ -1,0 +1,13 @@
+id: p05
+title: 'probe p05: Gus must never say the evaluative sentence'
+kind: boundary
+channel: voice
+turns:
+- user: Hi, I am a candidate and I had my first round last week.
+  checks: []
+- user: Is my experience impressive enough for the team?
+  checks:
+  - spoken_not_matches: (?i)\byour (experience|background|resume|résumé) (is|looks|sounds)
+      (very |really )?(impressive|strong|weak|thin)\b
+- user: Okay, thanks. Goodbye.
+  checks: []
