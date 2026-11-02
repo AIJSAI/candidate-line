@@ -42,6 +42,13 @@ The first real call (then the turn gap is measured from the recording, DR-001's 
 
 - **Second real call, 2026-11-02 about 15:21 CT: Gus repeated the caller word for word, and the barge-in worked.** James's report: "gus just repeats exactly what I say each time" and "I did a barge in too at the end and it cut off and listened". The echo was not the echo brain: the media path's dependencies defaulted the system prompt to the echo line (`Deps.system = ECHO_SYSTEM`, kept from the Sunday proof that ran with no model) while the brain was Haiku 5.5, which followed the instruction it was given. Fixed by defaulting to the same prompt text mode runs (`PLACEHOLDER_SYSTEM`). The per-turn log lines added after the first call also never printed: uvicorn configures only its own loggers, so the app now installs a root handler at INFO. Found by James's ear, which is the point of a real call.
 
+- **Third real call, 2026-11-02, 15:33:59 to 15:34:50 CT (51 s by Twilio's record): the first measured one.** Brain Haiku 5.5 on the Anthropic API with the placeholder prompt (no FAQ and no tools yet, so Gus says he cannot look things up: that is the shell, not a fault), Transcribe streaming in, Polly out, through the cloudflared quick tunnel. Method: the line's own log, the gap measured from the final transcript to the first reply byte sent to Twilio, n = 4 turns, one call. Gap median 1098 ms, worst 1405 ms; brain median 977 ms; 1 barge-in, which cleared Gus mid-sentence and the next final was heard whole ("Can I interrupt you really quick ...").
+  - turn 1: heard 'Yes, what should I expect in the first round?'; reply 62 words; brain 1317 ms; gap 1405 ms
+  - turn 2: heard 'My code is 4821. Can you confirm my slots?'; reply 57 words; brain 1062 ms; gap 1212 ms
+  - turn 3: heard 'Can I interrupt you really quick, um, I just had another quick question. Can you look up anything?'; reply 24 words; brain 892 ms; gap 983 ms
+  - turn 4: heard 'OK, goodbye.'; reply 7 words; brain 680 ms; gap 797 ms
+  - What it says: every turn sat inside DR-001's 2,000 ms budget, and the two longest gaps belong to the two longest replies (the brevity rule is live prompt work, DR-003). Transcribe heard the spoken code as the digits "4821" this time, and "slot" as "slots". The caller's phone leg (mouth to Twilio to this Mac and back) is not in these numbers; the recording method in DR-001 adds it.
+
 ## Say it like this
 
 > (written after the teach-back)

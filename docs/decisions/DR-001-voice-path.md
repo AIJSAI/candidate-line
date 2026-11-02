@@ -66,6 +66,8 @@ The method of record stays the recording. The probe caller (DR-011) measures the
 
 Raw rows: `bakeoff/2026-11-01.csv`.
 
+- **First real-call numbers for arm A, 2026-11-02 15:34 CT (DR-006):** gap from final transcript to first reply byte, by the line's own log, n = 4 turns in one call: median 1098 ms, worst 1405 ms, with Haiku 5.5 on the Anthropic API and the placeholder prompt; one barge-in, clean. Inside the 2,000 ms budget. Not yet the recording method, not yet five scripted calls, not yet arm B.
+
 ## Say it like this
 
 > (written after the teach-back)
