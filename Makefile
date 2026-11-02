@@ -7,7 +7,7 @@
 help:
 	@echo "make dev         the webhook on 127.0.0.1:8000, secrets from the login keychain"
 	@echo "make tunnel      a quick cloudflared tunnel to port 8000 (prints the public hostname)"
-	@echo "make webhook URL=https://host   point the Twilio number at URL/voice"
+	@echo "make webhook URL=https://host [PATH_=/incoming-call]   point the Twilio number at URL/voice (arm A) or URL/incoming-call (arm B)"
 	@echo "make cockpit     the recruiter's list of calls on 127.0.0.1:8001 (loopback only)"
 	@echo "make probe CASE=evals/cases/x.yaml [URL=ws://127.0.0.1:8000/media]   a synthetic candidate talks to the line as speech"
 	@echo "make test        pytest"
@@ -24,7 +24,7 @@ tunnel:
 	cloudflared tunnel --url http://127.0.0.1:8000
 
 webhook:
-	. scripts/env.sh && scripts/twilio-webhook.sh "$(URL)"
+	. scripts/env.sh && scripts/twilio-webhook.sh "$(URL)" "$(or $(PATH_),/voice)"
 
 cockpit:
 	uv run uvicorn --factory candidate_line.traces.cockpit:app --host 127.0.0.1 --port 8001
