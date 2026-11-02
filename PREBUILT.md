@@ -17,7 +17,7 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 6 | Synthetic data: eight candidates with codes and PINs, two weeks of slots, a three-page FAQ with section ids, and a labelled baseline of past invites with their invite-to-booked hours for the scorecard; the generating prompt committed | 2026-11-01, e39dde6 | DR-009 | |
 | 7 | `bakeoff/2026-11-01.csv`, its probe list `bakeoff/probes.yaml`, the bake-off's test persona prompt, and the rule written before it | | DR-001 | |
 | 8 | `docs/refs/`: dated saved copies of the Nova 2.5 Sonic and Claude model cards, the pricing pages and the two statute pages | 2026-11-01, b847815 | cited by each record | |
-| 9 | An eval runner with zero cases | | DR-010 | |
+| 9 | An eval runner with zero cases | 2026-11-01, a96ebad | DR-010 | |
 | 10 | The probe caller: a scripted synthetic candidate that dials the line and is scored against the case file; the cases it plays are written live | | DR-011 | |
 | 11 | The trace store and the cockpit's list view; the spans from the turn loop, the kill switch and the override log are written live | | DR-012 | |
 | 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | | DR-013 | |
