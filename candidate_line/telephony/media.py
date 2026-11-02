@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
@@ -60,6 +61,8 @@ class MediaSession:
         self._speak_lock = asyncio.Lock()
         self._utterance_lock = asyncio.Lock()
         self._mark_seq = 0
+        # Set when a final transcript arrives; cleared when the first reply byte goes out, for the turn-gap log line.
+        self._turn_started: float | None = None
 
     async def run(self, incoming: AsyncIterator[dict[str, Any]]) -> None:
         await self._transcriber.start()
@@ -107,7 +110,17 @@ class MediaSession:
     async def handle_utterance(self, text: str) -> None:
         async with self._utterance_lock:
             self.turns += 1
+            self._turn_started = time.perf_counter()
             result = await asyncio.to_thread(run_turn, self._brain, self._hooks, self.ctx, text)
+            reply = getattr(result, "reply", None)
+            log.info(
+                "turn %d %s heard=%r reply=%r brain_ms=%s",
+                self.turns,
+                self.ctx.call_id,
+                text,
+                result.spoken,
+                getattr(reply, "latency_ms", None),
+            )
             if result.spoken:
                 await self.speak(result.spoken)
 
@@ -122,6 +135,10 @@ class MediaSession:
                 if self._interrupted.is_set():
                     break
                 for chunk in frames(mulaw, OUT_CHUNK_BYTES):
+                    if self._turn_started is not None:
+                        gap_ms = int((time.perf_counter() - self._turn_started) * 1000)
+                        log.info("turn %d %s first_audio_gap_ms=%d", self.turns, self.ctx.call_id, gap_ms)
+                        self._turn_started = None
                     await self._send(
                         {
                             "event": "media",
@@ -144,6 +161,7 @@ class MediaSession:
 
     async def barge_in(self) -> None:
         self.barge_ins += 1
+        log.info("barge-in %d %s", self.barge_ins, self.ctx.call_id)
         self._interrupted.set()
         self._pending_marks.clear()
         self.speaking = False
