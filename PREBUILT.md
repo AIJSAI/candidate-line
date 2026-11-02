@@ -21,8 +21,8 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 10 | The probe caller: a scripted synthetic candidate that dials the line and is scored against the case file; the cases it plays are written live | 2026-11-01, b8d9623 | DR-011 | |
 | 11 | The trace store and the cockpit's list view; the spans from the turn loop, the kill switch and the override log are written live | 2026-11-01, 000102a | DR-012 | |
 | 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | 2026-11-01, 93ad659 | DR-013 | |
-| 13 | The coding tool, chosen by Monday's scratch task | | DR-014 | |
-| 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open | | DR-015 | |
+| 13 | The coding tool: Claude Code, with the comparison that could not run (Codex quarantined by Gatekeeper, its reinstall refused to the session) | 2026-11-02, 82928f1 | DR-014 | |
+| 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open | 2026-11-02, 507f3e0 | DR-015 | |
 | 15 | The tag `prebuilt-2026-11-03` | | | |
 
 ## Built live on Wednesday, never before the tag
