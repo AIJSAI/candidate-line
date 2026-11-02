@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 Provider = Literal["bedrock", "anthropic", "echo"]
@@ -27,6 +28,7 @@ class Settings:
     allow_unsigned_webhooks: bool
     voice_mode: VoiceMode
     polly_voice: str
+    system_prompt_file: str | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -50,4 +52,14 @@ class Settings:
             # "stream" answers a call with the media stream (arm A); "say" is item 5's one spoken line.
             voice_mode=voice_mode,  # type: ignore[arg-type]
             polly_voice=e.get("POLLY_VOICE", "Matthew"),
+            # The bake-off runs both arms on one prompt file (DR-001, DR-007); unset means the placeholder persona.
+            system_prompt_file=e.get("SYSTEM_PROMPT_FILE") or None,
         )
+
+    def system_prompt(self) -> str:
+        """The system prompt the line speaks with: the named file's text, or the placeholder until the spec lands."""
+        from candidate_line.persona import PLACEHOLDER_SYSTEM
+
+        if self.system_prompt_file:
+            return Path(self.system_prompt_file).read_text(encoding="utf-8").strip()
+        return PLACEHOLDER_SYSTEM

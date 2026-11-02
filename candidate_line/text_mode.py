@@ -52,7 +52,7 @@ def main() -> int:
     settings = Settings.from_env()
     brain = make_brain(settings)
     try:
-        repl(brain, NoHooks(), sys.stdin, lambda s: print(s, flush=True))
+        repl(brain, NoHooks(), sys.stdin, lambda s: print(s, flush=True), system=settings.system_prompt())
     except Exception as error:  # noqa: BLE001  (a closed quota or a missing key is one line, not a traceback)
         print(f"{brain.name} {brain.model} failed: {error}", file=sys.stderr)
         print(

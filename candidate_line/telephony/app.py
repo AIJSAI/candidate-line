@@ -77,6 +77,7 @@ def default_deps(settings: Settings) -> Deps:
         speaker=lambda: PollySpeaker(settings.aws_region, voice_id=settings.polly_voice),
         brain=lambda: make_brain(settings),
         hooks=NoHooks,
+        system=settings.system_prompt(),
     )
 
 
