@@ -2,7 +2,7 @@
 
 Status: DRAFT
 Built: pre-built (PREBUILT.md row 1)
-Commit: (filled when the item lands)
+Commit: 462381a (the line on the profile; the console and CLI steps are commands, not code)
 
 ## What it is
 
@@ -49,7 +49,7 @@ A second person needs access (Identity Center already has the user model; a shar
   - Console: Users, Add user: username `james`, "Send an email to this user with password setup instructions", no group. The invitation link lives seven days.
   - `aws identitystore list-users --filters AttributePath=UserName,AttributeValue=james` for the user id, then `aws sso-admin create-account-assignment` twice (USER, AWS_ACCOUNT, each permission set); both `describe-account-assignment-creation-status` reads returned SUCCEEDED.
   - `~/.aws/config` gained `[sso-session candidate-line]` (start URL, region us-east-1, scope `sso:account:access`) and the profiles `candidate-line` (CandidateLineBuilder) and `candidate-line-admin` (CandidateLineAdmin); the previous file is kept beside it as a dated backup.
-  - **Still to run, in this order, once James has set his password from the email and added his MFA:** `aws sso login --profile candidate-line` (opens the browser once), `aws sts get-caller-identity --profile candidate-line`, then `aws iam update-access-key --user-name james --access-key-id <the AKIA id> --status Inactive`, and `make text` on the new profile to prove the line still reaches Bedrock. Deletion of the key waits for Tuesday, as above.
+  - **Run 2026-11-02, 15:40 to 15:47 CT, after James accepted the invitation, set his password (kept in 1Password) and registered this Mac's an MFA device as the MFA device (the second device is still to be added as the second device from the access portal):** `aws sso login --profile candidate-line` opened the browser once and returned; `aws sts get-caller-identity --profile candidate-line` answered as the CandidateLineBuilder role assumed by `james`. The role was then proved on the line's own services: `bedrock-runtime converse` on Haiku 4.5 (497 ms model latency), `polly describe-voices`, `transcribe list-transcription-jobs`, and Polly through the line's `PollySpeaker` (7,400 bytes of mu-law in 1,076 ms); `iam create-user` was refused with AccessDenied, as the builder set intends. `aws sts get-caller-identity --profile candidate-line-admin` answered as the CandidateLineAdmin role from the same session. Then, from the admin profile (the visible break-glass moment): `aws iam update-access-key --user-name james --access-key-id <the AKIA id> --status Inactive` at 15:46:12 CT; the default profile's `sts get-caller-identity` afterwards: refused (InvalidClientTokenId). `make dev` now runs the line under `AWS_PROFILE=candidate-line` (Makefile), and the line was restarted on that profile before the key went inactive. Deletion of the key and of `~/.aws/credentials` waits for Tuesday, as above.
 
 ## Say it like this
 

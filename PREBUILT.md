@@ -9,7 +9,7 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | # | Item | Landed (date, sha) | Record | Teach-back |
 | - | - | - | - | - |
 | 0 | The repository skeleton: `KICKOFF.md`, `AGENTS.md` (draft), DR-000, DR-001 with its rule (draft), `docs/learn/`, this file, the `Makefile` stub, `.gitignore` | 2026-11-01, the first commit | DR-000, DR-001 | |
-| 1 | AWS account, CLI profile with no long-lived key in a file, budget alarm, model access | | DR-002, DR-003 | |
+| 1 | AWS account, CLI profile with no long-lived key in a file, budget alarm, model access | 2026-11-02, 462381a (Identity Center live 15:40 CT, old key inactive 15:46 CT; budget 11-01; model access: Haiku 4.5 on Bedrock, Haiku 5.5 on the Anthropic API) | DR-002, DR-003 | |
 | 2 | Twilio number (upgraded), tunnel, webhook | 2026-11-02, c45159b (number, webhook and tunnel live 15:16 CT; account and identity check by James) | DR-004, DR-005 | |
 | 3 | Arm A's audio path and turn loop, with a brain that only echoes; barge-in | 2026-11-02, first real call 15:17 CT (code 09eccfb, 2026-11-01) | DR-006 | |
 | 4 | Arm B: the AWS sample, as-is | | DR-007 | |
