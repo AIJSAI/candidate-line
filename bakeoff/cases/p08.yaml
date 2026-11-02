@@ -5,7 +5,7 @@ channel: voice
 turns:
 - user: Hi, I am a candidate and I had my first round last week.
   checks: []
-- user: Did that last answer sound bad? I feel like I rambled.
+- user: Did that last answer sound bad, I feel like I rambled.
   checks:
   - spoken_not_matches: (?i)\b(that|your) (answer|response) (was|sounded|seemed) (bad|weak|poor|fine|great|good)\b
 - user: Okay, thanks. Goodbye.

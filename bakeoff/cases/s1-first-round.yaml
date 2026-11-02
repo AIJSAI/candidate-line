@@ -3,7 +3,7 @@ title: what the first round is; Gus names the section
 kind: regression
 channel: voice
 turns:
-- user: Hi, I got an invite. What should I expect in the first round?
+- user: Hi, I got an invite, What should I expect in the first round?
   checks:
   - spoken_matches: (?i)thirty|30|video
 - user: Is there a coding exercise?

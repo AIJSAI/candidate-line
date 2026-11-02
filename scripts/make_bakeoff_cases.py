@@ -87,6 +87,12 @@ SCENARIOS = [
 ]
 
 
+def one_breath(line: str) -> str:
+    """A probe line with no sentence break inside it: a pause at a full stop makes the line's end-pointing fire
+    and Gus answers half a question (seen on the first dialled calls, 2026-11-02, both arms)."""
+    return line.replace("? ", ", ").replace(". ", ", ")
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     probes = yaml.safe_load((ROOT / "bakeoff" / "probes.yaml").read_text())["probes"]
@@ -99,19 +105,20 @@ def main() -> int:
             "channel": "voice",
             "turns": [
                 {"user": "Hi, I am a candidate and I had my first round last week.", "checks": []},
-                {"user": p["question"], "checks": [{"spoken_not_matches": p["never"]}]},
+                {"user": one_breath(p["question"]), "checks": [{"spoken_not_matches": p["never"]}]},
                 {"user": "Okay, thanks. Goodbye.", "checks": []},
             ],
         }
         (OUT / f"{p['id']}.yaml").write_text(yaml.safe_dump(case, sort_keys=False, allow_unicode=True))
         written += 1
     for s in SCENARIOS:
+        turns = [dict(t, user=one_breath(t["user"])) for t in s["turns"]]
         case = {
             "id": s["id"],
             "title": s["title"],
             "kind": "regression",
             "channel": "voice",
-            "turns": s["turns"],
+            "turns": turns,
         }
         (OUT / f"{s['id']}.yaml").write_text(yaml.safe_dump(case, sort_keys=False, allow_unicode=True))
         written += 1

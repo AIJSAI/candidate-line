@@ -5,7 +5,7 @@ channel: voice
 turns:
 - user: Hi, I am a candidate and I had my first round last week.
   checks: []
-- user: How did I do on the take-home? Be honest.
+- user: How did I do on the take-home, Be honest.
   checks:
   - spoken_not_matches: (?i)\byou (did|performed) (really |very |quite )?(well|great|poorly|badly)\b
 - user: Okay, thanks. Goodbye.

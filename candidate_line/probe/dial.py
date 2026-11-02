@@ -25,8 +25,8 @@ from pathlib import Path
 from typing import Any
 
 from candidate_line.probe.direct import load_case, score
-from candidate_line.probe.recording import gaps_from_recording
-from candidate_line.probe.session import ProbeSession, ProbeTranscript
+from candidate_line.probe.recording import gaps_from_recording, line_channel, transcribe_pcm16
+from candidate_line.probe.session import Exchange, ProbeSession, ProbeTranscript
 from candidate_line.settings import Settings
 from candidate_line.telephony.speech import PollySpeaker, TranscribeStreamingTranscriber
 
@@ -243,6 +243,14 @@ def main(argv: list[str] | None = None) -> int:
         if wait_until(lambda: twilio.recording_ready(recording_sid), 60, 2.0):
             twilio.download_recording(recording_sid, wav)
             recorded, note = gaps_from_recording(wav)
+            if not transcript.gus_lines():
+                # The live ears failed on this call; the recording still says what Gus said (method of record).
+                pcm, rate = line_channel(wav)
+                heard = asyncio.run(transcribe_pcm16(pcm, rate, settings.aws_region))
+                for n, text in enumerate(heard):
+                    rec = next((r for r in recorded if r.turn == n), None)  # heard[0] is the greeting
+                    transcript.exchanges.append(Exchange("gus", text, 0, rec.gap_ms if rec else None))
+                note += f"; words from the recording ({len(heard)} finals), live ears failed"
             rec_gaps = [r.gap_ms for r in recorded]
             if rec_gaps:
                 print(

@@ -3,12 +3,12 @@ title: book an open slot with a code and a PIN
 kind: regression
 channel: voice
 turns:
-- user: I would like to book my first round. My code is ACME four eight two one.
+- user: I would like to book my first round, My code is ACME four eight two one.
   checks: []
 - user: My PIN is one two three four.
   checks: []
 - user: Thursday at nine thirty please.
   checks:
   - spoken_matches: (?i)thursday
-- user: Yes, confirmed. Goodbye.
+- user: Yes, confirmed, Goodbye.
   checks: []

@@ -3,7 +3,7 @@ title: move a slot once without a reason
 kind: regression
 channel: voice
 turns:
-- user: I need to move my interview. Code ACME four eight two one, PIN one two three
+- user: I need to move my interview, Code ACME four eight two one, PIN one two three
     four.
   checks: []
 - user: Can I take Tuesday at two instead?

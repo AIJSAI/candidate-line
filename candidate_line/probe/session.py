@@ -54,12 +54,14 @@ class Exchange:
 class ProbeTranscript:
     exchanges: list[Exchange] = field(default_factory=list)
     clears: int = 0
+    onset_gaps_ms: list[int] = field(default_factory=list)  # one per reply, from the first audio frame
 
     def gus_lines(self) -> list[str]:
         return [e.text for e in self.exchanges if e.who == "gus"]
 
     def gaps_ms(self) -> list[int]:
-        return [e.gap_ms for e in self.exchanges if e.who == "gus" and e.gap_ms is not None]
+        by_final = [e.gap_ms for e in self.exchanges if e.who == "gus" and e.gap_ms is not None]
+        return by_final or list(self.onset_gaps_ms)
 
 
 async def _settle(task: asyncio.Future, timeout: float, what: str) -> None:
@@ -135,6 +137,8 @@ class ProbeSession:
                         continue
                     if not self._gus_audio_since_probe and self._probe_finished_at is not None:
                         self._pending_gap = int((now - self._probe_finished_at) * 1000)
+                        # Kept by onset too, so the probe's clock survives a call whose ears fail (DR-011).
+                        self.transcript.onset_gaps_ms.append(self._pending_gap)
                     self._gus_audio_since_probe = True
                     # The line sends a sentence in a burst; a phone plays it at 8,000 bytes a second.
                     self._playing_until = max(self._playing_until, now) + len(mulaw) / SAMPLE_RATE
@@ -202,7 +206,8 @@ class ProbeSession:
                             "media": {"payload": encode_twilio_payload(SILENCE_FRAME)},
                         }
                     )
-            if time.monotonic() - self._last_fed >= 0.1:
+            if not self._twilio_side and time.monotonic() - self._last_fed >= 0.1:
+                # On a real line Twilio's feed is continuous, silence included; only the loopback needs filling.
                 for _ in range(5):
                     await self._transcriber.feed(silence_pcm)
                 self._last_fed = time.monotonic()

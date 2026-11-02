@@ -9,10 +9,12 @@ line (the greeting is always first); the other is the caller.
 from __future__ import annotations
 
 import audioop
+import logging
 import wave
 from dataclasses import dataclass
 from pathlib import Path
 
+log = logging.getLogger("candidate_line.probe")
 SPEECH_RMS = 500
 FRAME_MS = 20
 
@@ -95,3 +97,48 @@ def gaps_from_recording(path: Path) -> tuple[list[RecordedGap], str]:
     else:
         line, caller, note = seg_b, seg_a, "channel 2 is the line (it spoke first), channel 1 the caller"
     return turn_gaps(caller, line), note
+
+
+async def transcribe_pcm16(pcm16: bytes, rate: int, region: str) -> list[str]:
+    """What one channel of the recording says, as final transcripts, from Transcribe streaming paced at real time.
+
+    The method of record for words as well as gaps: it reads the same recording the gaps come from, with one
+    feeder and no phone network in the way, so it works even when the probe's live ears did not.
+    """
+    import asyncio
+
+    from candidate_line.telephony.speech import TranscribeStreamingTranscriber
+
+    ears = TranscribeStreamingTranscriber(region)
+    await ears.start()
+    finals: list[str] = []
+
+    async def listen() -> None:
+        async for heard in ears.events():
+            if not heard.is_partial and heard.text.strip():
+                finals.append(heard.text.strip())
+
+    listener = asyncio.create_task(listen())
+    frame = rate * FRAME_MS // 1000 * 2
+    for i in range(0, len(pcm16), frame):
+        await ears.feed(pcm16[i : i + frame])
+        await asyncio.sleep(FRAME_MS / 1000)  # Transcribe wants audio no faster than it was spoken
+    await asyncio.sleep(1.5)  # let the last final land
+    try:
+        await asyncio.wait_for(asyncio.shield(ears.stop()), 5)
+    except (TimeoutError, Exception) as error:  # noqa: BLE001
+        log.debug("stop after the replay: %s", error)
+    try:
+        await asyncio.wait_for(asyncio.shield(listener), 3)
+    except (TimeoutError, Exception):  # noqa: BLE001
+        listener.cancel()
+    return finals
+
+
+def line_channel(path: Path) -> tuple[bytes, int]:
+    """The recording's line channel (the side that spoke first) as 16-bit PCM, with its rate."""
+    a, b, rate = read_dual_wav(path)
+    seg_a, seg_b = speech_segments(a, rate), speech_segments(b, rate)
+    if seg_a and (not seg_b or seg_a[0].start_s <= seg_b[0].start_s):
+        return a, rate
+    return b, rate
