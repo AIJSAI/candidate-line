@@ -35,6 +35,9 @@ Sonic failing DR-001's rule in the bake-off (then arm B is a measured footnote a
 
 - **Built 2026-11-02, about 13:40 CT:** `npm --prefix ~/projects/sample-amazon-nova-sonic-twilio-integration install --ignore-scripts` (exit 0, an audit notice only) and `npm run build` (`tsc`, exit 0); `dist/` holds `server.js`, `nova-client.js`, `mock-tools.js`, `consts.js`, `types.js`. Both commands had been refused to the session the day before and ran after James approved them in permissions. Not yet run: it needs the Twilio values and an AWS profile name in its environment, which land with PREBUILT row 2.
 
+- **The two setting changes, applied 2026-11-02 about 16:10 CT and saved as `bakeoff/arm-b-settings.patch`** (a `git diff` of the sample's `src/`, so the "as-is" claim stays checkable): `SYSTEM_PROMPT` in `src/server.ts` is now the bake-off persona from `bakeoff/persona.md`, word for word, and `modelId` in `src/nova-client.ts` is `amazon.nova-2-5-sonic`, the model DR-003 names for this arm (the sample shipped with `amazon.nova-sonic-v1:0`; this account has both AVAILABLE and AUTHORIZED, and the Nova 2 Sonic concurrency quota is 1, raised from 0 on 2026-11-01). The compiled `dist/` files carry the same two edits so no rebuild was needed. Voice `matthew` and 8 kHz stay as shipped.
+- **First run attempt, 2026-11-02 about 16:05 CT:** `node dist/server.js` on the `candidate-line` profile was refused to the session by its command classifier as external code, as the install had been the day before; it runs once James approves that exact command. The route is `/incoming-call` on port 3000, so the number is pointed at it with `make webhook URL=<tunnel> PATH_=/incoming-call`.
+
 ## Say it like this
 
 > (written after the teach-back)
