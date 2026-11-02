@@ -1,0 +1,117 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockInvoke",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:CountTokens",
+        "bedrock:ApplyGuardrail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockDiscoverModelsAndRequestAccess",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:ListFoundationModels",
+        "bedrock:GetFoundationModel",
+        "bedrock:ListInferenceProfiles",
+        "bedrock:GetInferenceProfile",
+        "bedrock:CreateInferenceProfile",
+        "bedrock:DeleteInferenceProfile",
+        "bedrock:ListFoundationModelAgreementOffers",
+        "bedrock:CreateFoundationModelAgreement",
+        "bedrock:DeleteFoundationModelAgreement",
+        "bedrock:GetFoundationModelAvailability",
+        "bedrock:PutUseCaseForModelAccess",
+        "bedrock:GetUseCaseForModelAccess",
+        "bedrock:ListProvisionedModelThroughputs",
+        "bedrock:GetModelInvocationLoggingConfiguration",
+        "bedrock:ListTagsForResource",
+        "bedrock:TagResource",
+        "bedrock:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockGuardrails",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:CreateGuardrail",
+        "bedrock:CreateGuardrailVersion",
+        "bedrock:UpdateGuardrail",
+        "bedrock:DeleteGuardrail",
+        "bedrock:GetGuardrail",
+        "bedrock:ListGuardrails"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MarketplaceForFirstModelUse",
+      "Effect": "Allow",
+      "Action": [
+        "aws-marketplace:Subscribe",
+        "aws-marketplace:Unsubscribe",
+        "aws-marketplace:ViewSubscriptions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SpeechInAndOut",
+      "Effect": "Allow",
+      "Action": [
+        "transcribe:StartStreamTranscription",
+        "transcribe:StartStreamTranscriptionWebSocket",
+        "polly:SynthesizeSpeech",
+        "polly:DescribeVoices"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SpendVisibilityAndAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:ModifyBudget",
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast",
+        "ce:GetDimensionValues"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "QuotasMetricsLogsAndTrail",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:GetServiceQuota",
+        "servicequotas:ListServiceQuotas",
+        "servicequotas:GetAWSDefaultServiceQuota",
+        "servicequotas:ListAWSDefaultServiceQuotas",
+        "servicequotas:ListServices",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "cloudtrail:LookupEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockServiceLinkedRoleOnly",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "bedrock.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

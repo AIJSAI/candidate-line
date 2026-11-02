@@ -1,0 +1,60 @@
+# DR-003: Models and regions
+
+Status: DRAFT
+Built: pre-built (PREBUILT.md row 1)
+Commit: (filled when the item lands)
+
+## What it is
+
+Which model does which job on the line, in which region, through which id, and what the first call from the CLI showed.
+
+## The decision
+
+- **The live turn: Claude Haiku 5.5**, through the US geo inference profile `us.anthropic.claude-haiku-5-5` from us-east-1, which routes across us-east-1, us-east-2 and us-west-2. The spare for a throttle is `global.anthropic.claude-haiku-5-5`. There is no In-Region endpoint for it (model card, read 2026-11-01; `list-foundation-models` shows `INFERENCE_PROFILE` as its only inference type).
+- **The callback summary nobody waits on: Claude Sonnet 5.5**, `us.anthropic.claude-sonnet-5-5`, same routing. Confirmed present in us-east-1 on 2026-11-01, which closed the open check.
+- **The speech-to-speech arm: Amazon Nova 2.5 Sonic**, `amazon.nova-2-5-sonic`, In-Region only, on demand in us-east-1; us-west-2 is the spare region. Its agreement was already AVAILABLE in this account on 2026-11-01 with nothing to accept.
+- **Speech out for arm A: Polly**, which emits `mulaw` at 8000 Hz directly, the format the Twilio stream wants, so no codec sits between Polly and the phone (Polly API reference, read 2026-11-01).
+- **Thinking on the live turn:** Haiku 5.5 thinks by default with effort medium; the card says thinking can be turned off and effort set from low to max, capped at high when thinking is off. The first call (item 4) decides between thinking off and effort low by measured latency; the result goes in Evidence.
+- **Model access** is enabled on first invoke when the caller holds the three AWS Marketplace actions; the two Claude models also need Anthropic's one-time use-case form and a Marketplace agreement each, submitted from the CLI with `put-use-case-for-model-access` and `create-foundation-model-agreement`. Those two are consent actions and James runs them himself; the form's text is `infra/aws/anthropic-use-case-form.json`.
+
+## The alternative rejected, and why
+
+- **Sonnet 5.5 on the live turn.** The caller is waiting; Haiku 5.5 is the latency model, and the summary is the only job where quality per token beats time.
+- **Opus 5.5 anywhere on the line.** Present in us-east-1, never needed: nothing on the line is a hard reasoning task.
+- **Nova 2 Sonic.** Its end of life is no sooner than Dec 2, 2026 (DR-001), inside a first engagement; the 2.5 model is the one measured.
+- **An In-Region Claude endpoint.** None exists for the 5.5 models; the geo profile is the only path, so "which region" means "which routing set".
+- **Converting Polly PCM to mu-law in Python.** Unnecessary once the API shows `mulaw` as an output format; one fewer place to get audio wrong.
+
+## What would change the decision
+
+**Triggered on 2026-11-01:** the account's Bedrock quotas for every Claude model are zero (see Evidence), so the brain cannot run on Bedrock until AWS acts on the increase requests. The brain therefore sits behind one small provider interface with two implementations, Bedrock Converse and the Anthropic Messages API, selected by one environment variable; Bedrock stays the platform of record and the live-turn model stays Haiku 5.5 either way. Switch rule for this: if the Bedrock quota is still zero at Monday 2026-11-02 18:00 CT, Wednesday runs the brain on the Anthropic API and says why in the first minute; if it opens before, Bedrock runs it and the other implementation is the Tuesday failure drill. [inference] Transcribe, Polly and the phone path are unaffected; Nova 2.5 Sonic's quota is unknown until arm B's first stream, and DR-001 already says what happens if B cannot be measured.
+
+**Open for James, raised 2026-11-01 after the quota cases closed:** Bedrock now runs Haiku 4.5 in this account (first call above) while the 5.5 models stay closed, so the brain has three candidates for Wednesday, not two: (a) Haiku 5.5 on the Anthropic API, the model of record on the other provider; (b) Haiku 4.5 on Bedrock, the platform of record on the previous model, at ten times the token price of Haiku 5.5 (1.00 and 5.00 USD per million against 0.10 and 0.50) and no adaptive thinking to turn off; (c) wait for a Support case on the 5.5 quota, which needs the console. The session's pick is (a) for the live turn with (b) as the Tuesday failure drill, because the model choice is the story the room hears and the provider is one environment variable; James picks first.
+
+A measured turn over the latency budget with thinking off and effort low (then the prompt shrinks before the model changes); Haiku 5.5 gaining an In-Region endpoint in us-east-1 (then data residency can be promised); a throttle on the US geo profile during the bake-off (then the global profile is the fallback, already in the builder policy's reach); Sonic failing DR-001's rule (then arm B is a measured footnote, not a path).
+
+## Evidence
+
+- `aws bedrock list-foundation-models --region us-east-1 --by-provider Anthropic`: `anthropic.claude-haiku-5-5`, `anthropic.claude-sonnet-5-5`, `anthropic.claude-opus-5-5`, all ACTIVE, inference type `INFERENCE_PROFILE` only (2026-11-01).
+- `aws bedrock list-foundation-models --region us-east-1 --by-provider Amazon`: `amazon.nova-2-5-sonic` ACTIVE, ON_DEMAND, input SPEECH and TEXT, output SPEECH and TEXT; `amazon.nova-2-sonic-v1:0` also ACTIVE (2026-11-01).
+- `aws bedrock list-inference-profiles --region us-east-1`: `us.anthropic.claude-haiku-5-5` and `us.anthropic.claude-sonnet-5-5` route to us-east-1, us-east-2, us-west-2; `global.anthropic.claude-haiku-5-5` and `global.anthropic.claude-sonnet-5-5` exist (2026-11-01).
+- `aws bedrock get-foundation-model-availability`: Haiku 5.5 and Sonnet 5.5 agreement NOT_AVAILABLE before the form; Nova 2.5 Sonic AVAILABLE (2026-11-01).
+- `docs/refs/2026-11-01-aws-bedrock-model-card-claude-haiku-5-5.txt`: launch October 7, 2026; adaptive thinking on by default, can be turned off; effort low to max, default medium, capped at high when thinking is off; Marketplace product ID on the card; billed through AWS Marketplace, so charges appear under the provider in Cost Explorer, not under Bedrock.
+- `docs/refs/2026-11-01-aws-bedrock-model-card-claude-sonnet-5-5.txt`: launch September 28, 2026; geo id `us.anthropic.claude-sonnet-5-5`.
+- `docs/refs/2026-11-01-aws-bedrock-model-card-nova-2-5-sonic.txt`: launch Oct 5, 2026; In-Region endpoint; default quota 20 concurrent bidirectional-stream sessions per account per Region.
+- `docs/refs/2026-11-01-aws-polly-api-synthesize-speech.txt`: OutputFormat valid values include `mulaw`; the valid sample rate for mu-law is 8000.
+- Polly from the CLI, 2026-11-01: a 105-character neural clip (voice Matthew) returned in 597 ms wall including CLI start-up; a 29-character 8 kHz PCM clip also returned. Clips live in the session scratchpad, never in the repository.
+- **Rates, read 2026-11-01.** First-party list (`docs/refs/2026-11-01-claude-platform-pricing-docs.txt`): Haiku 5.5 is 0.10 USD per million input tokens and 0.50 per million output tokens for prompts up to 100,000 tokens (cache write 0.125 for five minutes or 0.20 for an hour, cache read 0.01; a prompt over 100,000 tokens pays 0.50 in and 2.50 out); Sonnet 5.5 is 2.00 in and 10.00 out (cache read 0.10); Haiku 4.5 is 1.00 in and 5.00 out. The Bedrock Marketplace offer for Haiku 5.5 carries the same three numbers (0.1, 0.5, 0.01) with the unit unlabeled, so its unit is USD per million tokens, matched against the first-party page rather than assumed. [inference] The Bedrock pricing page's own Claude table renders only in the browser; its underlying numbers are saved when the page's data file is found, and until then the first-party page is the quoted source.
+- **The other rates, from the AWS Price List API, us-east-1, 2026-11-01** (`docs/refs/2026-11-01-aws-price-list-api-us-east-1.json`): Nova 2.5 Sonic 0.003 USD per 1,000 speech input tokens, 0.012 per 1,000 speech output tokens, 0.00033 per 1,000 text input tokens, 0.00275 per 1,000 text output tokens; Transcribe streaming 0.0001667 USD per second, which is 0.01 per minute in the first tier; Polly neural 16 USD per million characters (generative 30, long-form 100).
+- **Quotas for the speech path, read 2026-11-01:** Transcribe 25 concurrent streams per Region (`L-0599F82B`); Polly 8 neural SynthesizeSpeech requests per second (`L-0FE2012E`, 80 for standard voices); Nova 2.5 Sonic 20 concurrent bidirectional-stream sessions per account per Region by its model card, with no Service Quotas row in this account yet.
+- **The first Bedrock call failed on quota, not on code (2026-11-01, about 15:00 CT).** With the Haiku 5.5 agreement AVAILABLE, `aws bedrock-runtime converse` through `us.anthropic.claude-haiku-5-5` and `global.anthropic.claude-haiku-5-5`, from us-east-1 and us-west-2, returned `AccessDeniedException: anthropic.claude-haiku-5-5 is not available for this account`; Sonnet 5.5 the same. Control calls to Haiku 4.5 and Nova 2 Lite, never invoked before in this account, returned `ThrottlingException: Too many tokens per day`. `aws service-quotas list-service-quotas --service-code bedrock` explained both: the applied value is 0 for cross-region tokens per minute on Haiku 5.5, Sonnet 5.5, Haiku 4.5 and Nova 2 Lite (US and global), 0 for Nova 2 Lite tokens per day, and 0 for Nova 2 Sonic concurrent sessions; no quota row exists yet for Nova 2.5 Sonic. The account dates from 2023-05-04 and has spent under 2 USD a month in 2026, which is the profile AWS gives reduced quotas. The service's own defaults, returned when a smaller increase was refused: 10,000,000 tokens per minute for Haiku 5.5, 6,000,000 for Sonnet 5.5, 5,000,000 for Haiku 4.5, 10,000 requests per minute. Six increase requests were filed one unit above each default (`aws service-quotas request-service-quota-increase`, all PENDING at filing). The Bedrock Mantle endpoint (the Messages-API path the model-access page exempts from the Anthropic form) returned 404 "does not exist" for every id tried, so it is closed to this account too. Transcribe streaming quotas are at their defaults (25 concurrent streams, 25 starts per second); Polly answered.
+- **The six quota cases closed within an hour (2026-11-01, 15:40 to 15:41 CT), with a split result.** Haiku 4.5 came back at its defaults for tokens per minute (5,000,000) and at 10 requests per minute; Nova 2 Lite opened too (8,000,000 tokens per minute global, 216,000,000 tokens per day); Nova 2 Sonic concurrent sessions went from 0 to 1. Haiku 5.5 and Sonnet 5.5 stayed at 0, US and global, and the Converse call still returns the same AccessDeniedException ("not available for this account ... contact AWS Sales"). The case text is readable only in the console's Support Center (the Support API needs a paid plan: `SubscriptionRequiredException`), so the written reason is read at the console step and pasted here.
+- **First successful Bedrock call (item 4): Claude Haiku 4.5, 2026-11-01 about 18:05 CT.** `aws bedrock-runtime converse --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 --region us-east-1` with a one-word prompt: output "Ready", 13 input and 4 output tokens, model latency 592 ms by the response's own `metrics.latencyMs`, 1,060 ms wall including CLI start-up. Bedrock works in this account; the 5.5 models specifically are closed to it.
+
+## Say it like this
+
+> (written after the teach-back)
+
+## Teach-back
+
+(not yet)

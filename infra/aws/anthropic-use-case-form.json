@@ -1,0 +1,8 @@
+{
+  "companyName": "James Shehan (individual developer)",
+  "companyWebsite": "https://jamesshehan.dev",
+  "intendedUsers": "2",
+  "industryOption": "Software & Internet",
+  "otherIndustryOption": "",
+  "useCases": "Prototype of an automated phone line for job candidates of a fictional engineering-services firm, built for a live engineering build session. The assistant answers process questions from a short FAQ and cites the section it used, books or moves first-round interview slots from a synthetic calendar, and takes callback requests. It never scores, ranks or evaluates a person. All data is synthetic; a handful of invited testers call it from their phones. Volume is low: a few hundred short calls in total."
+}
