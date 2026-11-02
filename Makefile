@@ -31,10 +31,10 @@ secret:
 	scripts/secret-set.sh "$(NAME)"
 
 eval:
-	@echo "not yet: the eval runner lands Sunday (KICKOFF.md, item 12)"; exit 1
+	. scripts/env.sh && uv run python -m candidate_line.evals.runner
 
-gate:
-	@echo "not yet: make gate lands with the eval runner (KICKOFF.md, item 12)"; exit 1
+gate: test eval
+	@echo "gate: tests and evals green; the cost line is in the eval report above"
 
 trace:
 	@echo "not yet: the trace store lands Sunday (KICKOFF.md, item 14); its spans are written live"; exit 1

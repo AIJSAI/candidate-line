@@ -13,8 +13,8 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 2 | Twilio number (upgraded), tunnel, webhook | | DR-004, DR-005 | |
 | 3 | Arm A's audio path and turn loop, with a brain that only echoes; barge-in | | DR-006 | |
 | 4 | Arm B: the AWS sample, as-is | | DR-007 | |
-| 5 | Text-mode REPL; four empty hooks (`on_turn`, `before_speak`, `on_silence`, `on_tool`) | | DR-008 | |
-| 6 | Synthetic data: eight candidates with codes and PINs, two weeks of slots, a three-page FAQ with section ids, and a labelled baseline of past invites with their invite-to-booked hours for the scorecard; the generating prompt committed | | DR-009 | |
+| 5 | Text-mode REPL; four empty hooks (`on_turn`, `before_speak`, `on_silence`, `on_tool`) | 2026-11-01, 7d236e3 | DR-008 | |
+| 6 | Synthetic data: eight candidates with codes and PINs, two weeks of slots, a three-page FAQ with section ids, and a labelled baseline of past invites with their invite-to-booked hours for the scorecard; the generating prompt committed | 2026-11-01, e39dde6 | DR-009 | |
 | 7 | `bakeoff/2026-11-01.csv`, its probe list `bakeoff/probes.yaml`, the bake-off's test persona prompt, and the rule written before it | | DR-001 | |
 | 8 | `docs/refs/`: dated saved copies of the Nova 2.5 Sonic and Claude model cards, the pricing pages and the two statute pages | 2026-11-01, b847815 | cited by each record | |
 | 9 | An eval runner with zero cases | | DR-010 | |
