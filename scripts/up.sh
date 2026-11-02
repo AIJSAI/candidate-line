@@ -21,4 +21,4 @@ for _ in $(seq 1 20); do code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$
 echo "public: $code at $host"
 [ "$code" = "200" ] || { echo "the tunnel is not answering yet; try again in a minute or run make webhook URL=$host by hand"; exit 1; }
 scripts/twilio-webhook.sh "$host" /voice
-echo "dial:   ${TWILIO_LINE_NUMBER:-the line's number (not in the keychain)}"
+echo "dial:   ${TWILIO_LINE_NUMBER:-the line number is not in the keychain}"
