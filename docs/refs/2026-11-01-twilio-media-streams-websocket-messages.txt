@@ -1,0 +1,512 @@
+Source: https://www.twilio.com/docs/voice/media-streams/websocket-messages
+Read (UTC): 2026-11-02T00:00:07Z
+HTTP: 200
+
+Skip to content
+Skip to navigation
+Skip to topbar
+
+Twilio Docs
+Programmable Voice
+GET STARTED WITH VOICE
+Quickstart
+
+BUILD WITH VOICE GUIDES
+
+By use case
+
+By feature or product
+
+Basic features (<Say>, <Gather>, <Pay>)
+
+Advanced Programmable Voice features
+
+Conversation Relay
+
+Branded Calling
+
+Voice Insights
+
+Media Streams
+Media StreamsMedia Streams WebSocket messagesConsume a real-time Media StreamAll Media Streams guides
+
+Conversation Intelligence (classic)
+
+Configurations
+
+Programmable Voice SIP
+
+Elastic SIP trunking
+
+Bring Your Own Carrier (BYOC) Trunking
+
+SHAKEN/STIR
+
+Voice Integrity
+
+Caller ID Name (CNAM)
+
+Virtual Agent
+
+Event Streams
+All Voice guides by feature or product
+
+DEVELOPER REFERENCE
+
+TwiML
+
+Voice API
+
+More APIs
+
+Voice SDKs
+Search
+
+On this page
+
+Copy as markdown
+
+Media Streams - WebSocket Messages
+
+(information)
+Support for Twilio Regions
+You can use Media Streams in the Ireland (IE1) and Australia (AU1) Regions. To set up Media Streams with these regions, follow the guides for non-US outbound and inbound calls. The default region remains US1.
+Learn to handle real-time audio by processing JSON messages sent between Twilio and your server over a WebSocket connection. To do this, establish a connection and listen for media events to receive audio or send media events to pipe audio back to the call.
+You can use this guide to build inbound contact centers, outbound contact centers, and AI/ML transcription.
+See Related reference documentation to learn more about the <Stream> and Streams subresource used in this guide.
+All Media Streams guides
+
+WebSocket messages from Twilio
+
+Twilio sends the following message types to your WebSocket server during a Stream:
+	•	Connected
+	•	Start
+	•	Media
+	•	DTMF
+	•	Stop
+	•	Mark
+Connected message
+
+Twilio sends the connected event once a WebSocket connection is established. This is the first message your WebSocket server receives, and this message describes the protocol to expect in the following messages.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, connected.
+protocol
+Defines the protocol for the WebSocket connection's lifetime.
+version
+Semantic version of the protocol.
+An example connected message is shown below.
+
+Copy code block
+1
+{
+2
+ "event": "connected",
+3
+ "protocol": "Call",
+4
+ "version": "1.0.0"
+5
+}
+Start message
+
+The start message contains metadata about the Stream and is sent immediately after the connected message. It is only sent once at the start of the Stream.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, start.
+sequenceNumber
+A string containing a number used to keep track of message sending order. The first message has a value of 1 and then is incremented for each subsequent message.
+start
+An object containing Stream metadata
+start.streamSid
+The unique identifier of the Stream
+start.accountSid
+The SID of the Account that created the Stream
+start.callSid
+The SID of the Call that started the Stream
+start.tracks
+An array of strings that indicate which media flows are expected in subsequent messages. Values include inbound, outbound.
+start.customParameters
+An object containing the custom parameters that were set when defining the Stream
+start.mediaFormat
+An object containing the format of the payload in the media messages.
+start.mediaFormat.encoding
+The encoding of the data in the upcoming payload. Value is always audio/x-mulaw.
+start.mediaFormat.sampleRate
+The sample rate in hertz of the upcoming audio data. Value is always 8000
+start.mediaFormat.channels
+The number of channels in the input audio data. Value is always 1
+streamSid
+The unique identifier of the Stream
+The start.customParameters object is populated with the values you provided when starting the stream. See the <Stream> TwiML doc or the Stream resource API reference doc for more info.
+An example start message is shown below.
+
+Copy code block
+1
+{
+2
+  "event": "start",
+3
+  "sequenceNumber": "1",
+4
+  "start": {
+5
+    "accountSid": "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+6
+    "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+7
+    "callSid": "CAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+8
+    "tracks": [ "inbound" ],
+9
+    "mediaFormat": {
+10
+        "encoding": "audio/x-mulaw",
+11
+        "sampleRate": 8000,
+12
+        "channels": 1 },
+13
+    "customParameters": {
+14
+     "FirstName": "Jane",
+15
+     "LastName": "Doe",
+16
+     "RemoteParty": "Bob"
+17
+   }
+18
+  },
+19
+  "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+20
+}
+Media message
+
+This message type encapsulates the raw audio data.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, "media".
+sequenceNumber
+A string containing a number used to keep track of message sending order. The first message has a value of 1 and then is incremented for each subsequent message.
+media
+An object containing media metadata and payload
+media.track
+One of inbound or outbound
+media.chunk
+The chunk for the message. The first message will begin with 1 and increment with each subsequent message.
+media.timestamp
+Presentation Timestamp in Milliseconds from the start of the stream.
+media.payload
+Raw audio encoded in base64
+streamSid
+The unique identifier of the Stream
+An example outbound media message is shown below. The payload value is abbreviated.
+
+Copy code block
+1
+{
+2
+ "event": "media",
+3
+ "sequenceNumber": "3",
+4
+ "media": {
+5
+   "track": "outbound",
+6
+   "chunk": "1",
+7
+   "timestamp": "5",
+8
+   "payload": "no+JhoaJjpz..."
+9
+ } ,
+10
+ "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+11
+}
+An example inbound media message is shown below. The payload value is abbreviated.
+
+Copy code block
+1
+{
+2
+ "event": "media",
+3
+ "sequenceNumber": "4",
+4
+ "media": {
+5
+   "track": "inbound",
+6
+   "chunk": "2",
+7
+   "timestamp": "5",
+8
+   "payload": "no+JhoaJjpzS..."
+9
+ },
+10
+"streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+11
+}
+Stop message
+
+Twilio sends a stop message when the Stream has stopped or the call has ended.
+For unidirectional Streams, a Stream can be stopped with the <Stop> TwiML instruction or by updating the Stream resource's status to stopped.
+For bidirectional Streams, a Stream stops when the call ends or when your WebSocket server closes the connection. If your server closes the connection, Twilio requests the <Connect> action URL if you set one. Otherwise, Twilio continues executing any TwiML that follows <Connect>.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, stop.
+sequenceNumber
+A string containing a number used to keep track of message sending order. The first message has a value of 1 and then is incremented for each subsequent message.
+stop
+An object containing Stream metadata
+stop.accountSid
+The Account identifier that created the Stream
+stop.callSid
+The Call identifier that started the Stream
+streamSid
+The unique identifier of the Stream
+An example stop message is shown below.
+
+Copy code block
+1
+{
+2
+ "event": "stop",
+3
+ "sequenceNumber": "5",
+4
+ "stop": {
+5
+    "accountSid": "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+6
+    "callSid": "CAXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+7
+  },
+8
+  "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+9
+}
+DTMF message
+
+The dtmf message is only supported in bidirectional Streams.
+A dtmf message is sent when someone presses a touch-tone number key in the inbound stream, typically in response to a prompt in the outbound stream.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, dtmf.
+streamSid
+The unique identifier of the Stream
+sequenceNumber
+A string containing a number used to keep track of message sending order. The first message has a value of 1 and then is incremented for each subsequent message.
+dtmf
+An object that contains the dual-tone multi-frequency (DTMF) signal metadata.
+dtmf.track
+The track on which the DTMF key was pressed. Value is always inbound
+dtmf.digit
+The number-key tone detected.
+An example dtmf message is shown below. The dtmf.digit value is 1, indicating that someone pressed the 1 key on their handset.
+
+Copy code block
+1
+{
+2
+  "event": "dtmf",
+3
+  "streamSid":"MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+4
+  "sequenceNumber":"5",
+5
+  "dtmf": {
+6
+      "track":"inbound",
+7
+      "digit": "1"
+8
+  }
+9
+}
+Mark message
+
+Twilio sends the mark event only during bidirectional Streams.
+When your server sends a media message, it should then send a mark message to Twilio. When that media message's playback is complete, Twilio sends a mark message to your server using the same mark.name as the one your server sent. Your application can use this information to keep track of which media has played on the Call.
+If your server sends a clear message, Twilio empties the audio buffer and sends back mark messages matching any remaining mark messages from your server. Your application can use this information to keep track of which media messages have been cleared and will not be played.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, "mark".
+streamSid
+The unique identifier of the Stream
+sequenceNumber
+A string containing a number used to keep track of message sending order. The first message has a value of 1 and then is incremented for each subsequent message.
+mark
+An object containing the mark metadata
+mark.name
+A custom value. Twilio sends back the mark.name you specify when it receives a mark message
+An example mark message is shown below.
+
+Copy code block
+1
+{
+2
+ "event": "mark",
+3
+ "sequenceNumber": "4",
+4
+ "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+5
+ "mark": {
+6
+   "name": "my label"
+7
+ }
+8
+}
+
+Send WebSocket messages to Twilio
+
+If you initiated a Stream using <Connect><Stream>, your Stream is bidirectional. This means you can send WebSocket messages back to Twilio, allowing you to pipe audio back into the Call and control the flow of the Stream.
+The messages that your WebSocket server can send back to Twilio are:
+	•	Media
+	•	Mark
+	•	Clear
+Send a media message
+
+To send media back to Twilio, you must provide a properly formatted media message.
+The payload must be encoded audio/x-mulaw with a sample rate of 8000 and must be base64 encoded. The audio can be of any size.
+The media messages are buffered and played in the order received. If you need to interrupt the buffered audio, send a clear message.
+
+(warning)
+Warning
+The media.payload should not contain audio file type header bytes. Providing header bytes causes the media to be streamed incorrectly.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, "media".
+streamSid
+The SID of the Stream that should play the audio
+media
+An object containing the media payload
+media.payload
+Raw mulaw/8000 audio encoded in base64
+Below is an example media message that your WebSocket server sends back to Twilio. The media.payload is abbreviated.
+
+Copy code block
+1
+{
+2
+  "event": "media",
+3
+  "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+4
+  "media": {
+5
+    "payload": "a3242sa..."
+6
+  }
+7
+}
+Send a mark message
+
+Send a mark event message after sending a media event message to be notified when the audio that you have sent has been completed. Twilio sends back a mark event with a matching name when the audio ends (or if there is no audio buffered).
+Your application also receives an incoming mark event message if the buffer was cleared using the clear event message.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case "mark".
+streamSid
+The SID of the Stream that should receive the mark
+mark
+An object containing mark metadata and payload
+mark.name
+A name specific to your needs that will assist in recognizing future received mark event
+Below is an example mark message that your WebSocket server sends to Twilio.
+
+Copy code block
+1
+{
+2
+ "event": "mark",
+3
+ "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+4
+ "mark": {
+5
+   "name": "my label"
+6
+ }
+7
+}
+Send a clear message
+
+Send a clear message if you want to interrupt the audio that has been sent in various media messages. This empties all buffered audio and causes any mark messages to be sent back to your WebSocket server.
+Property
+Description
+event
+Describes the type of WebSocket message. In this case, "clear".
+streamSid
+The SID of the Stream in which you want to interrupt the audio.
+Below is an example clear message that your WebSocket server sends to Twilio.
+
+Copy code block
+1
+{
+2
+ "event": "clear",
+3
+ "streamSid": "MZXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+4
+}
+
+Use cases for Media Streams with Twilio Programmable Voice
+
+This guide teaches the basics required for the following use cases:
+Create an inbound contact center with Twilio Programmable Voice
+
+You can use this guide to stream audio from inbound calls to your server in real-time. This allows you to integrate with external tools for agent assistance or live call monitoring.
+To learn more advanced features that you can use with inbound contact centers, see Voice inbound contact center.
+Create an outbound call center with Twilio Programmable Voice
+
+You can use this guide to stream audio from outbound calls to your server, enabling real-time analysis of agent-customer interactions for quality assurance or automated coaching.
+To learn more advanced features that you can use with outbound call centers, see Voice outbound contact center.
+Create transcriptions for AI or ML with Twilio Programmable Voice
+
+You can use this guide to capture raw audio chunks by using WebSockets for immediate processing by AI models. This is essential for building real-time transcription services or sentiment analysis engines.
+To learn more advanced features that you can use with AI or ML transcription, see Voice AI/ML transcription.
+
+Result
+
+After following this guide, you can successfully send and receive real-time audio messages between Twilio and your WebSocket server. You can verify this by logging the connected and start messages upon stream initiation and confirming the receipt of media messages containing base64 encoded audio payloads.
+
+Next steps
+
+Explore the following guides to build on what you've learned in this guide:
+	•	Consume a real-time Media Stream using WebSockets, Python, and Flask: A practical walkthrough of building a Media Streams integration using the Flask framework.
+	•	Gather User Input via Keypad (DTMF Tones): Learn how to supplement your audio stream by collecting numeric input from callers.
+	•	Record Phone Calls: Learn how to create a persistent recording of the calls you are streaming.
+
+Related reference documentation
+
+Find reference documentation for the topics on this page.
+	•	Streams subresource
+	•	TwiML™ Voice: <Stream>
+	•	Programmable Voice API Overview
+	•	Call resource
+Need some help?
+We all do sometimes; code is hard. Get help now from our support team
+
+, or lean on the wisdom of the crowd by browsing the Twilio tag
+
+on Stack Overflow.
+Terms of service
+Privacy Policy
+Copyright © 2026 Twilio Inc.
+

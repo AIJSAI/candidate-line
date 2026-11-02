@@ -1,0 +1,424 @@
+Source: https://aws.amazon.com/transcribe/pricing/
+Read (UTC): 2026-11-02T00:00:00Z
+HTTP: 200
+
+Skip to main content
+
+	•	       Filter: All
+	•
+
+	•
+	•	English
+	•	Contact us
+	•	AWS Marketplace
+	•	Support
+	•	My account
+	•
+
+	•
+	•	re:Invent
+	•	Discover AWS
+	•	Products
+	•	Solutions
+	•	Pricing
+	•	Resources
+	•	Search       Filter: All
+	•	Sign in to console
+	•	Create account
+Explore topics
+re:Invent 2026
+The sessions are set and your seat is waiting. Register now
+
+Build & Deploy AI Agents
+88% of agent pilots stall. Learn what the rest do differently
+
+Get started
+Sign up free, connect your coding agent, and start building
+
+Data for agentic AI
+The 7 essential data capabilities to scale agentic AI
+
+Analyst Report
+AWS named a Leader in the 2026 Gartner Magic Quadrant for SCPS
+
+AI for Small Businesses
+Solutions designed for your business. Delivered by AWS Partners
+
+News & announcements
+AWS blog
+About AWS
+
+AWS is the world's most comprehensive cloud, enabling organizations to accelerate innovation, reduce costs, and scale more efficiently
+	•	Why AWS
+	•	Getting Started
+	•	Security
+	•	Compliance
+	•	Trust Center
+	•	Sustainability
+	•	Global Infrastructure
+	•	Careers
+
+	•	Featured Products
+	•	Analytics
+	•	Application Integration
+	•	Artificial Intelligence
+	•	Business Applications
+	•	Compute
+	•	Customer Experience
+	•	Databases
+	•	Developer Tools
+	•	End User Computing
+	•	Game Tech
+	•	Management Tools
+	•	Media Services
+	•	Migration & Modernization
+	•	Multicloud & Hybrid
+	•	Networking & Content Delivery
+	•	Operations
+	•	Security & Identity
+	•	Storage
+	•	Supply Chain
+Browse all products
+
+Transformation Hubs
+Migrate to modernize → Modernize to unlock data → unlock data to run AI
+Migrate & Modernize
+Clear technical debt, modernize infrastructure, and move to the cloud
+
+Data & Analytics
+Future proof your data foundation for agentic AI
+
+Artificial Intelligence
+Get production-ready AI that automates, builds, creates, decides, and engages at scale
+
+Featured Products
+Get started with one of these featured services or browse all
+Browse all products
+Amazon Quick
+AI-powered assistant for work with research, business insights, automation, and no-code app building
+
+Transform
+Eliminate tech debt with agentic AI to modernize legacy systems and code
+
+Aurora
+Serverless relational database service for PostgreSQL, MySQL, and DSQL
+
+Amazon Bedrock
+The end-to-end platform for building generative AI applications and agents
+
+Amazon Connect Customer
+AI-native solution for delivering exceptional experiences across customer interactions
+
+EC2
+Secure and resizable compute capacity for virtually any workload
+
+What’s new
+Explore new capabilities and the latest technologies
+
+Customer success stories
+Learn how customers around the world accelerate their cloud
+
+	•	Featured
+	•	By industry
+	•	By organization type
+	•	Solutions Library
+
+Solutions for any organization
+From startups to enterprises, find AWS solutions scaled to your needs. Access tailored resources, pricing models, and support levels.
+Analytics Solutions
+Discover curated Solutions that address varied analytics use cases
+
+AI Solutions
+Discover curated Solutions that address varied artificial intelligence use cases
+
+Migration & Modernization Solutions
+Discover curated Solutions that address varied migration and modernization use cases
+
+What's new
+Explore new capabilities and the latest technologies
+
+Customer success stories
+Learn how customers around the world accelerate their cloud
+
+Pricing overview & tools
+AWS Pricing
+Learn about pricing and plans in one place
+
+AWS Pricing Calculator
+Estimate the cost for your architecture solution
+
+AWS Free Tier
+Get free, hands-on experience with AWS products and services
+
+AWS Offers
+Explore different offer programs to gain hands-on experience
+
+AWS Savings Plans
+Flexible pricing model offering lower prices
+
+Single-product pricing
+Amazon S3
+
+Amazon Bedrock
+
+Amazon RDS
+
+Amazon EC2
+
+Amazon SageMaker
+
+Browse all product pricing
+
+Learn
+Documentation
+Get detailed technical guides and references for all AWS services and tools
+
+Training & Certification
+Build and validate your AWS cloud skills and technical expertise
+
+Cloud term glossary
+Learn more about key cloud computing concepts
+
+Whitepapers
+Expand your knowledge of the cloud with expert guides and diagrams
+
+Cloud fundamentals
+Step-by-step instructions for common AWS tasks
+
+Tutorials
+Get started with step-by-step instructions
+
+Connect & Support
+Builder Center
+Learn, build, and connect with builders in the AWS community
+
+Events and webinars
+Connect, collaborate, and learn from AWS experts in the cloud computing community
+
+Partner Network
+Collaborate with AWS partners to grow your business
+
+Marketplace
+Find, test, buy, and deploy third-party software
+
+Support
+Access proactive guidance, issue resolution, and helpful tools
+
+Professional services
+Accelerate business transformation with expert guidance and packaged solutions
+
+AI
+	•	Overview
+	•	Products
+	•	Learn
+	•	Our Story
+	•	Customers
+	•	Resources
+	•	AI Transformation
+	•	Artificial Intelligence
+	•	Amazon Transcribe
+	•	Pricing
+Amazon Transcribe Pricing
+Get started for free
+Request a pricing quote
+Overview
+With Amazon Transcribe, you pay-as-you-go based on the seconds of audio transcribed per month. It’s easy to get started with the Amazon Transcribe Free Tier. Upon signup, start analyzing up to 60 audio minutes monthly, free for the first 12 months.
+AWS Pricing Calculator
+Calculate your Amazon Transcribe and architecture cost in a single estimate.
+Create your custom estimate now
+
+Free tier
+
+60 minutes per month for 12 months
+As part of the AWS Free Tier, you can get started with Amazon Transcribe for free. The Amazon Transcribe Free Tier is available to you for 12 months, starting from the date on which you create your first transcription request. Your usage for the Free Tier is calculated each month across all AWS Regions and automatically applied to your bill; unused monthly usage will not roll over. Restrictions apply; see offer terms for more details. When your free usage expires or if your application use exceeds the free usage tier, you simply pay standard, pay-as-you-go service rates.
+Standard pricing
+
+Amazon Transcribe API for both streaming and batch transcriptions is billed monthly based on the tiered pricing shown below. Tiered pricing rates and discounts vary by region and you can see the applicable rates by selecting your region in the drop down below. You can apply the specific discount rate for your region based on the following examples for the US East (N. Virginia) region. Usage is billed in one-second increments, with no minimum applied. This pricing includes features such as custom vocabularies, vocabulary filtering, speaker diarization, and language identification. Additional charges apply for features such as automatic content redaction and custom language models.
+Audio data often has separate channels for each speaker. For instance, a two-person audio conversation may record each speaker individually on two separate channels. The rates below includes pricing for up to two channels per audio stream or audio file. For a two channel conversation, you only pay for the total audio duration and won't be charged separately for each channel.
+Automatic Content Redaction add-on pricing
+
+You can choose to redact sensitive information like personal identifiable information (PII) with Automatic Content Redaction for your transcription needs. The additional charges are billed monthly based on the tier pricing shown below. Tiered pricing rates and discounts vary by region and you can see the applicable rates by selecting your region in the drop down below. Usage is billed in one-second increments, with no minimum applied. Free tier is not applicable for automatic content redaction.
+Custom Language Model add-on pricing
+
+You can build your own Custom Language Models (CLM) by training Amazon Transcribe’s standard models with your domain specific text. Once you have a CLM, you can choose which transcription jobs should utilize your CLM. You will only incur an additional CLM charge for the transcription jobs where a custom language model is applied. Transcription audio using your Custom Language Models is billed monthly based on the tier pricing shown below. Usage is billed in one-second increments, with no minimum applied. Free tier is not applicable for custom language models.
+Toxicity Detection pricing
+
+With Amazon Transcribe, you only pay for what you use based on the seconds of audio transcribed per month. Usage is billed in one-second increments, with no minimum applied. Also, you get billed monthly based on the tiered pricing shown below.
+	•	Standard Batch
+	•	Standard Streaming
+	•	PII Redaction Batch
+	•	PII Redaction Streaming
+	•	CLM Batch
+	•	CLM Streaming
+	•	Toxicity Detection Batch
+	•	Standard Batch
+	•	 Please note: *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. **For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+	•	Standard Streaming
+	•	 Please note: *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. *For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+	•	PII Redaction Batch
+	•
+	•	PII Redaction Streaming
+	•
+	•	CLM Batch
+	•
+	•	CLM Streaming
+	•
+	•	Toxicity Detection Batch
+	•
+Pricing examples
+* Usage is billed in one-second increments, with no minimum applied. These calculations assume that the usage volume excludes the Free Tier.
+
+Call transcription example
+Let's assume that you want to use Amazon Transcribe to process 200,000 live calls per month (with stereo audio having two channels) and the average call is about 10 minutes each. This equals 2 million minutes of audio per month in the US East (N. Virginia) region. Streaming transcription is priced at $0.01 per minute. Your monthly charges will be as follows.
+Calculation of monthly charge:
+Total monthly call minutes transcribed in US East (N. Virginia) = 2 million minutes
+Total cost = Total minutes x Streaming price/min
+Total cost = 2,000,000 minutes x $0.01 = $20,000
+
+Call transcription with automatic content redaction example
+Now let's assume that those 200,000 calls contain personal identifiable information (PII) like Social Security numbers and birth date information that you need to remove. Your monthly charges in US East (N. Virginia) includes the standard streaming transcription cost of $20,000 calculated above plus an additional cost for automatic content redaction. In US East (N. Virginia), Tier 1 (T1) content redaction pricing of $0.0024 applies to the first 250,000 minutes of transcriptions. Tier 2 content redaction pricing of $0.0015 (38% discount to T1 pricing) applies to the next 750,000 minutes. Tier 3 content redaction pricing of $0.00102/minute (58% discount to T1 pricing) applies to the next 4,000,000 minutes. Since your usage volume crosses three different pricing tiers, your monthly charges will be as follows.
+Calculation of monthly charge:
+Total monthly call minutes transcribed with content redaction in US East (N. Virginia) = 2 million minutes
+Content redaction cost = [T1 minutes x T1 content redaction price/min] + [T2 minutes x T2 content redaction price/min] + [T3 minutes x T3 content redaction price/min]
+Content redaction cost = [250,000 minutes x $0.0024] + [750,000 minutes x $0.0015] + [(2,000,000 - 750,000 - 250,000) minutes x $0.00102]
+Content redaction cost = [$600] + [$1,125] + [$1,020] = $2,745
+Total monthly cost = Standard transcription cost + Content redaction cost
+Total monthly cost = $20,000 + $2,745 = $22,745
+Batch transcription example
+Let's assume that you want to use Amazon Transcribe to process 2 million minutes of recorded audio files per month (batch transcription) in the US East (N. Virginia) region. Batch transcription is priced at $0.006 per minute. Your monthly charges will be as follows
+Calculation of monthly charge:
+Total monthly minutes transcribed in US East (N. Virginia) = 2 million minutes
+Total cost = Total minutes x Batch price/min
+Total cost = 2,000,000 minutes x $0.006 = $12,000
+Amazon Transcribe Call Analytics pricing
+
+Amazon Transcribe Call Analytics is an API for producing rich call transcripts, redacting sensitive customer information, and extracting actionable conversation insights. With Amazon Transcribe Call Analytics, you pay-as-you-go and are billed monthly based on the tiered pricing shown below. You can apply the specific discount rate for your region based on the following examples for the US East (N. Virginia) region. Usage is billed in one-second increments, with no minimum applied. This pricing includes features such as custom vocabularies, vocabulary filtering, speaker diarization, and language identification. Additional charges apply for generative call summarization and custom language models.
+Free tier
+60 minutes per month for 12 months
+As part of the AWS Free Tier, you can get started with Amazon Transcribe Call Analytics for free. Upon sign-up, start analyzing up to 60 minutes of call audio monthly, free for the first 12 months. Your usage for the free tier is calculated each month across all AWS Regions except the AWS GovCloud Region and automatically applied to your bill; unused monthly usage will not roll over. Restrictions apply;  see offer terms for more details.
+	•	Post call analytics
+	•	Real-time call analytics
+	•	Generative call summarization (Post call)
+	•	Post call analytics
+	•	 You can choose to pay for post call analytics capabilities only or real-time and (optional) post call analytics capabilities. The price for only real-time, bundled real-time, and post call analytics capabilities will remain the same. *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. **For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+	•	Real-time call analytics
+	•	 For real-time call analytics, some capabilities such as audio redaction of sensitive personal information and conversation characteristics like non-talk time, interruptions, loudness, and talk speed are processed post-call. These capabilities are included in the real-time call analytics pricing. Custom language model is an add-on capability that is charged separately. *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. **For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+	•	Generative call summarization (Post call)
+	•	 Usage is billed in one-second increments, with a minimum per request charge of 15 seconds. You get billed monthly based on the tiered pricing shown above.
+Pricing examples
+Refer to these pricing examples
+
+Example 1: Call analytics example
+Let’s assume that you want to use Amazon Transcribe Call Analytics to process 200,000 calls per month (with stereo audio having two channels) and the average call is about 10 minutes each. This equals 2 million minutes of audio per month in the US East (N. Virginia) region. In US East (N. Virginia), Tier 1 (T1) pricing of $0.0300/minute applies to the first 250,000 minutes of transcriptions. Tier 2 pricing of $0.0186/minute (38% discount to T1 pricing) applies to the next 750,000 minutes. Tier 3 pricing of $0.0138/minute (54% discount to T1 pricing) applies to the next 4,000,000 minutes. Since your usage volume crosses three different pricing tiers, your monthly charges will be as follows.
+Calculation of monthly charge:
+Total monthly call minutes analyzed in US East (N. Virginia) = 2 million minutes
+Total cost = [T1 minutes * T1 price/min] + [T2 minutes * T2 price/min] + [T3 minutes * T3 price/min]
+Total cost = [250,000 minutes * $0.0300] + [750,000 minutes * $0.0186] + [(2,000,000 - 750,000 - 250,000) minutes * $0.0138]
+Total cost = [$7,500] + [$13,950] + [$13,800] = $35,250
+Example 2: Call analytics and generative call summarization example
+Now let's assume that you want to summarize those 200,000 calls. Your monthly charges in US East (N. Virginia) includes the transcription call analytics cost of $35,250 calculated above plus an additional cost for generative call summarization. In US East (N. Virginia), Tier 1 (T1) generative call summarization pricing of $0.0024 applies to the first 250,000 minutes of transcriptions. Tier 2 generative call summarization pricing of $0.0015 (38% discount to T1 pricing) applies to the next 750,000 minutes. Tier 3 generative call summarization pricing of $0.0011/minute (54% discount to T1 pricing) applies to the next 4,000,000 minutes. Since your usage volume crosses three different pricing tiers, your monthly charges will be as follows.
+Calculation of monthly charge:
+Total monthly call minutes analyzed with generative call summarization in US East (N. Virginia) = 2 million minutes
+Generative call summarization cost = [T1 minutes * T1 generative call summarization price/min] + [T2 minutes * T2 generative call summarization price/min] + [T3 minutes * T3 generative call summarization price/min]
+Generative call summarization cost = [250,000 minutes * $0.0024] + [750,000 minutes * $0.0015] + [(2,000,000 - 750,000 – 250,000) minutes * $0.0011]
+Generative call summarization cost = [$600] + [$1,125] + [$1,100] = $2,825
+Total monthly cost = Call analytics cost + Generative call summarization cost
+Total monthly cost = $35,250 + $2,825 = $38,075
+Amazon Transcribe Medical pricing
+
+With Transcribe Medical, you pay-as-you-go based on the seconds of audio transcribed per month. It’s easy to get started with the Transcribe Medical Free Tier. Upon signup, start analyzing up to 60 minutes of audio monthly, free for the first 12 months.
+Free tier
+60 minutes per month for 12 months
+The Transcribe Medical free tier is available to you for 12 months, starting from the date on which you create your first transcription. When your free usage expires, or if your application use exceeds the free usage tier, you simply pay standard, pay-as-you-go service rates.
+Standard pricing
+	•	Standard Batch
+	•	Standard Streaming
+	•	Standard Batch
+	•	 Please note: *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. *For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+	•	Standard Streaming
+	•	 Please note: *For a two-channel conversation, you only pay for the total audio duration and won't be charged separately for each channel. *For larger workloads, additional volume discounts may be available. Please contact AWS pricing specialists or your account manager for pricing.
+Pricing examples
+Example
+Length
+Cost
+Pre-patient visit conversation between physicians, clinic managers, nurses, and others
+15 minutes
+$1.125
+Physician dictated audio note
+30 minutes
+$2.250
+Telemedicine conversational audio
+45 minutes
+$3.375
+Medical consultation over a phone call
+60 minutes
+$4.500
+Clinical trial reporting about medicines
+75 minutes
+$5.625
+Clinician-patient conversation
+90 minutes
+$6.750
+Additional pricing resources
+AWS Pricing Calculator
+Easily calculate your monthly costs with AWS
+Get pricing assistance
+Contact AWS specialists to get a personalized quote
+Next steps
+Resources
+Discover more Amazon Transcribe resources
+Visit the resources page
+Console
+Ready to get started?
+Try the Amazon Transcribe console
+FAQs
+Questions about Amazon Transcribe?
+Visit the FAQs page
+Create an AWS account
+Learn
+	•	What Is AWS?
+	•	What Is Cloud Computing?
+	•	What Is Agentic AI?
+	•	Cloud Computing Concepts Hub
+	•	AWS Cloud Security
+	•	What's New
+	•	Blogs
+	•	Press Releases
+	•	Careers
+Resources
+	•	Getting Started
+	•	Training
+	•	AWS Trust Center
+	•	AWS Solutions Library
+	•	Architecture Center
+	•	Product and Technical FAQs
+	•	Analyst Reports
+	•	AWS Partners
+Developers
+	•	Builder Center
+	•	SDKs & Tools
+	•	.NET on AWS
+	•	Python on AWS
+	•	Java on AWS
+	•	PHP on AWS
+	•	JavaScript on AWS
+Help
+	•	Contact Us
+	•	File a Support Ticket
+	•	AWS re:Post
+	•	Knowledge Center
+	•	AWS Support Overview
+	•	AWS Accessibility
+	•	Legal
+	•	Event Code of Conduct
+	•	Event Terms & Conditions
+English
+Back to top
+Amazon is an equal opportunity employer and does not discriminate on the basis of protected veteran status, disability or other legally protected status. Veterans, military spouses, and people with disabilities are encouraged to apply.
+
+	•	Privacy
+	•	Site terms
+	•	Your Privacy Choices .st0{fill-rule:evenodd;clip-rule:evenodd;fill:#FFFFFF;}.st1{fill-rule:evenodd;clip-rule:evenodd;fill:#0066FF;}.st2{fill:#FFFFFF;}.st3{fill:#0066FF;}
+	•	Cookie Preferences
+© 2026, Amazon Web Services, Inc. or its affiliates. All rights reserved.
+

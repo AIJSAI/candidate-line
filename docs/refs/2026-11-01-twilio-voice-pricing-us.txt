@@ -1,0 +1,794 @@
+Source: https://www.twilio.com/en-us/voice/pricing/us
+Read (UTC): 2026-11-02T00:00:09Z
+HTTP: 200
+
+
+English
+
+	•	English
+	•	French
+	•	German
+	•	Japanese
+	•	Portuguese
+	•	Spanish
+Support
+	•	Help Center
+	•	Support Plans
+	•	Partner Solutions
+Login
+	•	Log in to
+	◦	Twilio Console Conversations, Communications and Authentication
+	•
+	•	Or log in to access:
+	◦	Twilio Segment Customer Data Platform
+	◦	Twilio SendGrid Email and Marketing Campaigns
+
+Products
+	•	Twilio Platform Next gen  Built for engagement in the agentic era. Twilio connects communication channels, customer context, and AI on one flexible platform.
+Conversations
+
+	•	  Conversation Memory New  Build a persistent memory of customer interactions
+	•	  Conversation Orchestrator New  Keep conversations connected across channels
+	•	  Conversation Intelligence  Extract context from real-time conversations
+	•	  Conversation Relay  Build advanced voice AI for natural conversations Try the demo
+	•	Conversations
+Communications
+
+	•	Messaging
+	•	SMS
+	•	WhatsApp
+	•	RCS
+	•	Voice
+	•	SIP Trunking
+	•	Email
+	•	SMTP Service
+	•	Phone Numbers
+	•	Toll-free
+	•	10DLC
+	•	Short Codes
+	•	Video API
+	•	Flex
+	•	Communications
+
+Authentication
+
+	•	Verify
+	•	Lookup
+	•	Authentication
+Customer Data
+
+	•	Connections
+	•	Warehouses
+	•	Protocols
+	•	Unify
+	•	Engage
+	•	Audiences
+	•	Journeys
+	•	Customer Data
+See all products
+See Twilio’s latest innovations and integrations
+Solutions
+Use Cases
+
+	•	Verification and identity
+	•	Fraud prevention
+	•	Alerts and notifications
+	•	Appointment reminders
+	•	Lead alerts
+	•	Mass texting
+	•	Marketing and promotions
+	•	SMS marketing
+	•	Cross-sell and upsell
+	•	Optimize ad spend
+	•	Support and sales
+	•	Voice AI
+	•	AI agent productivity | Try the demo
+	•	IVR
+	•	Contact center
+	•	Customer data management
+Teams
+
+	•	Developers
+	•	Data Engineering
+	•	Marketing
+	•	Product
+	•	Customer Experience
+Industry
+
+	•	Financial services
+	•	Healthcare
+	•	Retail
+	•	Nonprofit
+	•	Hospitality
+	•	Public sector
+	•	Education
+	•	Tech
+
+Company Size
+
+	•	Enterprise
+	•	Startup
+See all solutions
+Why Twilio
+Overview
+
+	•	Why Twilio  We help you build amazing experiences with contextual data, the right communication channels, and AI to scale personalization and increase efficiency.
+	•	Customer stories
+Differentiators
+
+	•	One platform
+	•	Privacy and security
+	•	Built for builders
+	•	Enterprise scale
+	•	Extensible by design
+	•	Real-time customer data
+	•	Artificial intelligence
+	•	Infrastructure
+Company
+
+	•	About us
+	•	Values
+	•	Diversity
+	•	Careers
+	•	Twilio.org
+	•	Investor relations
+	•	Press and media
+	•	Events
+
+Resources
+Developers
+
+	•	Documentation
+	•	Code samples
+	•	Developer Hub
+	•	Champions
+	•	Changelog
+	•	Serverless
+Learn
+
+	•	Blog
+	•	Resource Center
+	•	Guides
+	•	Reports
+	•	Webinars
+	•	Podcasts
+	•	Customer stories
+	•	State of Customer Engagement
+	•	Events
+	•	Customer data recipes
+Support and services
+
+	•	Help Center
+	•	Find a partner
+	•	Become a partner
+	•	Professional services
+	•	Support plans
+	•	Status
+	•	SendGrid status
+	•	Segment status
+
+Pricing
+Overview
+
+	•	All Pricing  Transparent pricing with discounts as you scale. Sign up for a free trial—no credit card required.
+Conversations
+
+	•	Conversations
+	•	Conversation Memory
+	•	Conversation Orchestrator
+	•	Conversation Intelligence
+	•	Conversation Relay
+Communications
+
+	•	Messaging
+	•	SMS
+	•	WhatsApp
+	•	Conversations API
+	•	Voice
+	•	SIP Trunking
+	•	Conferencing
+	•	Email API
+	•	Marketing Campaigns
+	•	Video API
+	•	Flex
+Authentication
+
+	•	Verify
+	•	Lookup
+Customer Data
+
+	•	Customer Data Platform
+	•	Customer Data Pipeline
+
+Data is collected based on search terms. Privacy Policy
+Contact sales Start for free
+
+Data is collected based on search terms. Privacy Policy
+Products
+	•	Twilio Platform Next gen  Built for engagement in the agentic era. Twilio connects communication channels, customer context, and AI on one flexible platform.
+Conversations
+
+	•	  Conversation Memory New  Build a persistent memory of customer interactions
+	•	  Conversation Orchestrator New  Keep conversations connected across channels
+	•	  Conversation Intelligence  Extract context from real-time conversations
+	•	  Conversation Relay  Build advanced voice AI for natural conversations Try the demo
+	•	Conversations
+Communications
+
+	•	Messaging
+	•	SMS
+	•	WhatsApp
+	•	RCS
+	•	Voice
+	•	SIP Trunking
+	•	Email
+	•	SMTP Service
+	•	Phone Numbers
+	•	Toll-free
+	•	10DLC
+	•	Short Codes
+	•	Video API
+	•	Flex
+	•	Communications
+
+Authentication
+
+	•	Verify
+	•	Lookup
+	•	Authentication
+Customer Data
+
+	•	Connections
+	•	Warehouses
+	•	Protocols
+	•	Unify
+	•	Engage
+	•	Audiences
+	•	Journeys
+	•	Customer Data
+See all products
+See Twilio’s latest innovations and integrations
+Solutions
+Use Cases
+
+	•	Verification and identity
+	•	Fraud prevention
+	•	Alerts and notifications
+	•	Appointment reminders
+	•	Lead alerts
+	•	Mass texting
+	•	Marketing and promotions
+	•	SMS marketing
+	•	Cross-sell and upsell
+	•	Optimize ad spend
+	•	Support and sales
+	•	Voice AI
+	•	AI agent productivity | Try the demo
+	•	IVR
+	•	Contact center
+	•	Customer data management
+Teams
+
+	•	Developers
+	•	Data Engineering
+	•	Marketing
+	•	Product
+	•	Customer Experience
+Industry
+
+	•	Financial services
+	•	Healthcare
+	•	Retail
+	•	Nonprofit
+	•	Hospitality
+	•	Public sector
+	•	Education
+	•	Tech
+
+Company Size
+
+	•	Enterprise
+	•	Startup
+See all solutions
+Why Twilio
+Overview
+
+	•	Why Twilio  We help you build amazing experiences with contextual data, the right communication channels, and AI to scale personalization and increase efficiency.
+	•	Customer stories
+Differentiators
+
+	•	One platform
+	•	Privacy and security
+	•	Built for builders
+	•	Enterprise scale
+	•	Extensible by design
+	•	Real-time customer data
+	•	Artificial intelligence
+	•	Infrastructure
+Company
+
+	•	About us
+	•	Values
+	•	Diversity
+	•	Careers
+	•	Twilio.org
+	•	Investor relations
+	•	Press and media
+	•	Events
+
+Resources
+Developers
+
+	•	Documentation
+	•	Code samples
+	•	Developer Hub
+	•	Champions
+	•	Changelog
+	•	Serverless
+Learn
+
+	•	Blog
+	•	Resource Center
+	•	Guides
+	•	Reports
+	•	Webinars
+	•	Podcasts
+	•	Customer stories
+	•	State of Customer Engagement
+	•	Events
+	•	Customer data recipes
+Support and services
+
+	•	Help Center
+	•	Find a partner
+	•	Become a partner
+	•	Professional services
+	•	Support plans
+	•	Status
+	•	SendGrid status
+	•	Segment status
+
+Pricing
+Overview
+
+	•	All Pricing  Transparent pricing with discounts as you scale. Sign up for a free trial—no credit card required.
+Conversations
+
+	•	Conversations
+	•	Conversation Memory
+	•	Conversation Orchestrator
+	•	Conversation Intelligence
+	•	Conversation Relay
+Communications
+
+	•	Messaging
+	•	SMS
+	•	WhatsApp
+	•	Conversations API
+	•	Voice
+	•	SIP Trunking
+	•	Conferencing
+	•	Email API
+	•	Marketing Campaigns
+	•	Video API
+	•	Flex
+Authentication
+
+	•	Verify
+	•	Lookup
+Customer Data
+
+	•	Customer Data Platform
+	•	Customer Data Pipeline
+Contact sales Start for free
+
+Twilio Voice pricing
+Flexible and transparent Voice pricing
+Modernize your voice stack without ripping anything out. Snap on Voice AI, payments, and branded calls alongside your current setup. Pay transparent rates. No hidden fees.
+Start for free
+
+Free trial
+
+No credit card required
+
+Flexible pricing
+
+Calls in
+ United States
+	•
+Twilio Voice pricing summary
+	•	Pay-as-you-go: Pay per minute to make and receive calls
+	•	Charges based on called number type, country, features
+	•	Volume discounts and committed-used discounts available
+	•	Free trial provides you with $15 to buy a phone number, test Voice features
+Start for free
+Pricing current as of August 2026
+Jump to:          Voice pricing          Phone number pricing          CPS pricing          Intelligent service pricing          Network Traversal Service          Volume pricing
+
+United States
+Pay-as-you-go Voice pricing
+No commitments necessary. Build your application with calling for any device and intelligent services that help you ship faster.
+Number type
+
+To make calls
+
+To receive calls
+
+Refer from Twilio
+
+Local calls
+
+$0.0140 / min
+
+$0.0085 / min
+
+Toll-free calls
+
+$0.0140 / min
+
+$0.0220 / min
+
+Browser/app
+
+$0.0040 / min
+
+$0.0040 / min
+
+SIP interface
+
+$0.0040 / min
+
+$0.0040 / min
+
+$0.1000 / refer
+
+Secure media
+
+Included
+
+Included
+
+Application connect
+
+Free
+
+$0.0025 / min
+
+In depth pricing
+
+Make Calls
+Make Calls
+
+United States & Canada
+
+$0.0140 / min
+
+United States & Canada - Toll-Free
+
+$0.0140 / min
+
+United States - Alaska
+
+$0.0945 / min
+
+United States - Hawaii
+
+$0.0140 / min
+
+Receive calls
+Number type
+
+Price
+
+Local numbers
+
+$0.0085/ min + $1.15 / mo
+
+Toll-free numbers
+
+$0.0220/ min + $2.15 / mo
+
+Download Voice Prices (CSV) Download Number Prices (CSV)
+BYOC trunking pricing
+BYOC trunking pricing
+
+To make calls
+
+To receive calls
+
+BYOC trunking
+
+$0.0040 / min
+
+$0.0040 / min
+
+Secure media
+
+Included
+
+Included
+
+Start for free
+United States
+Phone number pricing
+Pick from a deep inventory of phone numbers in over 100 locales.
+Number type
+
+Price
+
+Local numbers
+
+$1.15 / mo
+
+Toll-free numbers
+
+$2.15 / mo
+
+United States
+Calls per second (CPS) pricing
+Calculate global CPS. Available with pay‑as‑you‑go pricing and discounts for committed‑use. Provision up to 30 CPS in the console.
+
+Monthly pricing
+1 51+
+Calls per second
+1
+Pay as you go Pricing
+Free Talk to sales
+Start for free
+United States
+Intelligent service pricing
+Feature
+
+Price
+
+Conference calls
+
+Starting at $0.0018 / participant per min
+View pricing
+
+Branded calling
+
+$0.12 / call
+
+Call recording
+
+Recording $0.0025  / min
+
+Storage $0.0005  / min per mo
+
+Transcription  $0.0500  / min
+
+Answering machine detection
+
+$0.0075 / call
+
+Voice insights advanced features
+
+$0.0024  / min
+
+Emergency calling
+
+$0.75 / mo per number
+
+Conversation Intelligence - Transcription
+
+Batch Transcription $0.024  / min
+
+Streaming (Real-Time) Transcription $0.027  / min
+
+Conversation Intelligence - Language Operator
+
+Standard $0.0040 / min
+
+Text Analysis $0.0035 / min
+
+Conversation Intelligence - Generative Custom Operators
+
+Input characters $0.002 / 1k characters
+
+Output characters $0.018 / 1k characters
+
+Virtual agent with Google Dialogflow CX
+
+$0.095 / sec
+
+Virtual agent generative AI features
+
+$0.00283 / sec
+
+Virtual agent custom prompt voices
+
+$0.032 / sec
+
+Pay Connectors
+
+Starting at $0.150 / transaction
+View pricing
+
+Media Streams
+
+$0.0044  / min
+
+SIPREC
+
+$0.0044  / min
+
+Conversation Relay
+
+$0.07  / min
+
+Gather Speech Recognition
+
+Twilio Picks Provider (Default) $0.02 / use
+
+Deepgram Nova or Google v2 $0.025 / use
+
+Gather Speech Recognition  (Legacy Models)
+
+Standard Google v1 Model $0.035 / use
+
+Enhanced Google v1 Model $0.040 / use
+
+Text-to-Speech (TTS) - Free
+
+Free
+
+Text-to-Speech (TTS) - Premium
+
+Standard $0.0008 / 100 chars
+
+Neural $0.0032 / 100 chars
+
+Generative $0.0130 / 100 chars
+
+Start for free
+United States
+Network Traversal Service
+Network Traversal
+
+Price
+
+STUN
+
+Free
+
+TURN - US East, US West, Europe
+
+$0.4000 / per gigabyte
+
+TURN - Asia
+
+$0.6000 / per gigabyte
+
+TURN - Ocenia
+
+$0.8000 / per gigabyte
+
+United States
+Volume discounts
+When your application reaches volume scale, you’ll automatically get volume pricing. No negotiation necessary.
+Recording storage volume pricing
+Minutes per month
+
+Price
+
+First 5 million minutes
+
+$0.00050 / min
+
+Next 10 million minutes
+
+$0.00025 / min
+
+Above 15 million minutes
+
+$0.00015 / min
+
+Committed-use discounts
+Enterprise pricing is available to customers with use cases that exceed our volume discounts. Commit to annual message volumes and receive a discount beyond standard volume tiers. Contact our sales team to learn more.
+Contact sales
+Voice pricing FAQs
+How does Twilio Voice pricing compare to other vendors?
+
+When you use Twilio for your voice communications, you get what you pay for: best-in-class documentation and SDKs, a gold-standard developer experience, reliable global carrier relationships for exceptional connectivity, and a full platform that brings all your communications together under one roof.
+We’ve invested in foundational elements that make your life easier and future-proof your solutions like compliance certifications (HIPAA, GDPR, PCI, SOC 2, ISO/IEC 27001) to meet high security and compliance standards. As well as AI capabilities to power smart transcription, sentiment analysis, and other data points to capture key data about customers every time you interact with them.
+You can find vendors who charge less upfront, but when you build with Twilio, you get a premium offering that works reliably and delivers lasting ROI over time.
+
+Are there any hidden fees?
+
+No, there are no hidden fees with Twilio. We make our pricing transparent and only charge you for your usage so there are no billing surprises. You can also scale up or down at any time based on your call volumes and budget.
+When do volume discounts kick in?
+
+You automatically unlock volume discounts when you hit a threshold of monthly voice minutes. These discounts apply when you move into the next threshold for voice minutes.  For example:
+	•	First 100,000 minutes: standard rate
+	•	Next 900,000 minutes: lower rate
+	•	Next 9 million minutes: lower rate
+Volume pricing applies to U.S. and Canadian voice minutes, messages and phone numbers.
+
+Are there extra fees for features like call recording, transcription, and Voice AI agents?
+
+Yes, there are fees for additional Twilio Voice features.
+	•	Call recording costs $0.0025 per minute for recording. (Scroll up to the Intelligence service pricing section for more details.)
+	•	Voice AI features have additional charges, such as running virtual agents with Google Dialogflow CX, virtual agent custom prompt voices, and text-to-speech. (Scroll up to the Intelligence service pricing section for more details.)
+
+Let's find the right products for you
+Generating your product picks...
+See your product picks
+Expand Take a look
+For the best recommendations, tell me your use case, goals, requirements, etc.
+
+I need to track which ads drive calls I want to personalize customer support I want to follow up with leads automatically
+
+Get an AI summary:
+	•
+	•
+	•
+
+	•	Twilio careers
+	•	Twilio.org
+	•	Press and media
+	•	Investor relations
+	•	Legal
+	•	Privacy
+	•	Security
+	•	Impressum
+	•	Sitemap
+	•	LLMS
+	•
+	•	Follow us on Twitter
+	•
+	•
+Copyright © 2026 Twilio Inc. All rights reserved.
+Considering Twilio?
+
+	•	About Twilio
+	•	Customer Engagement Platform (CEP)
+	•	Communications
+	•	Conversational AI
+	•	User authentication and identity
+	•	Customer Data Platform (CDP)
+	•	AI
+	•	Customer stories
+	•	Events
+	•	Contact sales
+	•	Why Twilio
+Products and Features
+
+	•	SMTP
+	•	Branded Calling
+	•	Twilio Segment
+	•	Twilio Engage
+	•	Connections
+	•	SendGrid Email API
+	•	RCS messaging
+	•	Latest innovations
+	•	Pre-built solutions
+	•	Support plans
+	•	All products
+Use Cases
+
+	•	AI agent productivity
+	•	Customer data management
+	•	Audience segmentation
+	•	Contact center
+	•	SMS marketing
+	•	Customer acquisition
+	•	Voice response system (IVR)
+	•	Fraud prevention
+	•	Bulk text messaging
+	•	Mass email sender
+	•	All use cases
+Developers
+
+	•	Developer resources
+	•	Twilio Essentials
+	•	SDKs
+	•	CDP integrations
+	•	Serverless
+	•	Conversation
+	•	SMTP Email API
+	•	SMS API
+	•	WhatsApp API
+	•	Voice API
+	•	Connections
+	•	All docs

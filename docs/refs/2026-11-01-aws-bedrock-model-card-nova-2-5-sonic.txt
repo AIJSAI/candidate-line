@@ -1,0 +1,143 @@
+Source: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-2-5-sonic.html
+Read: 2026-11-01 (UTC), saved with curl + textutil, text only
+
+View a markdown version of this page
+
+DocumentationAmazon BedrockUser Guide
+Amazon — Nova 2.5 SonicModel DetailsCapabilities and FeaturesPricingProgrammatic AccessService TiersRegional AvailabilityQuotas and LimitsSample Code
+Nova 2.5 Sonic
+
+ Amazon — Nova 2.5 Sonic
+Model Details
+Nova 2.5 Sonic is Amazon's latest speech-to-speech foundation model for building natural, real-time voice conversation applications. It delivers improved reasoning, instruction following, and tool calling accuracy over Nova 2 Sonic, along with lower latency and more concise responses. These improvements make it well suited for agentic voice applications. For more information about model development and performance, see the model/service card.
+	•	Model launch date: Oct 5, 2026
+	•	EOL no sooner than: Oct 5, 2027
+	•	Legacy period: at least 6 months
+	•	Model lifecycle policy: Model lifecycle
+	•	Model EOL date: N/A
+	•	End User License Agreements and Terms of Use: View
+	•	Model lifecycle: Active
+	•	Context window: 256K tokens
+	•	Max output tokens: 64K
+Input Modalities
+Output Modalities
+APIs supported
+Endpoints supported
+ Audio
+ Embedding
+ Responses
+ bedrock-runtime
+ Image
+ Image
+ Chat Completions
+ bedrock-mantle
+ Speech
+ Speech
+ Invoke
+
+ Text
+ Text
+ Converse
+
+ Video
+ Video
+ InvokeModelWithBidirectionalStream
+
+Tip
+Whenever possible, we recommend using the bedrock-runtime endpoint for new applications. See Inference endpoints supported by Amazon Bedrock for details.
+Capabilities and Features
+Bedrock Features
+Features supported using bedrock-runtime endpoint
+Supported
+Not Supported
+	•	 Response streaming
+	•	 Tool use (function calling)
+	•	 Asynchronous tool calling
+	•	 Intelligent prompt routing
+	•	 Abuse detection
+	•	 Guardrails
+	•	 Prompt optimization
+	•	 Count tokens
+	•	 Knowledge base
+	•	 Model evaluation
+	•	 Prompt management
+	•	 Flows
+	•	 Agents
+Model Capabilities
+	•	 Speech-to-speech — Real-time bidirectional speech understanding and generation in a single model.
+	•	 Enhanced reasoning — Stronger multi-step reasoning during live conversations.
+	•	 Improved instruction following — More reliable adherence to system prompts, persona instructions, and multi-step directives.
+	•	 Tool use (function calling) — Higher-accuracy tool calling for agentic workflows: look up an order, check eligibility, and take action in one session.
+	•	 Asynchronous tool calling — Keeps the conversation going while tools run in the background.
+	•	 Cross-modal input — Mix text and voice in the same session.
+	•	 Polyglot voices — Voices that speak naturally across multiple languages.
+	•	 Natural turn-taking — Graceful handling of user interruptions with configurable turn detection.
+	•	 Code-switching — Switches between languages mid-conversation.
+	•	 Streaming text transcripts — Real-time text transcription of the voice conversation.
+	•	 Lower latency — Reduced response times for more natural conversations.
+Pricing
+For pricing information, see the Amazon Bedrock Pricing page.
+Programmatic Access
+Use the following model IDs and endpoint URLs to access this model programmatically. For more information about the available APIs and endpoints, see APIs supported and Endpoints supported.
+Endpoint
+Model ID
+In-Region endpoint URL
+Geo inference ID
+Global inference ID
+bedrock-runtime
+amazon.nova-2-5-sonic
+https://bedrock-runtime.{region}.amazonaws.com
+Not supported
+Not supported
+For example, if region is us-east-1 (N. Virginia), then the bedrock-runtime endpoint URL will be "https://bedrock-runtime.us-east-1.amazonaws.com" and for bedrock-mantle will be "https://bedrock-mantle.us-east-1.api.aws/v1".
+Service Tiers
+Amazon Bedrock offers multiple service tiers to match your workload requirements. Standard provides pay-per-token access with no commitment (set "service_tier": "default" or omit the field). Priority delivers the fastest response times for a price premium (set "service_tier": "priority"). Flex provides lower-cost access for flexible, non-time-sensitive workloads (set "service_tier": "flex"). Reserved provides dedicated throughput with a term commitment for predictable workloads; it is set at the account level rather than per request (contact your AWS account team to enable). For more information, see service tiers.
+Standard
+Priority
+Flex
+Reserved
+
+
+
+
+Regional Availability
+Regional availability at a glance
+Amazon Bedrock offers three inference options: In-Region keeps requests within a single Region for strict compliance, Geo Cross-Region routes across Regions within a geography (such as US, EU, and APAC) while respecting data residency, and Global Cross-Region routes anywhere worldwide when there are no residency constraints. Refer to the Regional availability by models page for more details.
+Region
+In-Region
+Geo
+Global
+us-east-1 (N. Virginia)
+
+
+
+us-west-2 (Oregon)
+
+
+
+eu-north-1 (Stockholm)
+
+
+
+ap-northeast-1 (Tokyo)
+
+
+
+Quotas and Limits
+The default quota for Nova 2.5 Sonic is 20 concurrent InvokeModelWithBidirectionalStream sessions per AWS account in each supported Region. Contact your AWS account team to request a higher limit.
+Your AWS account has default quotas to maintain the performance of the service and to ensure appropriate usage of Amazon Bedrock. The default quotas assigned to an account might be updated depending on regional factors, payment history, fraudulent usage, and/or approval of a quota increase request. For more information, see Quotas for Amazon Bedrock documentation and see the limits for the model.
+Sample Code
+Step 1 - AWS Account: If you have an AWS account already, skip this step. If you are new to AWS, sign up for an AWS account.
+Step 2 - API key: Go to the Amazon Bedrock console and generate a long-term API key.
+Step 3 - Get the SDK:
+
+pip install boto3
+Step 4 - Set environment variables:
+
+AWS_BEARER_TOKEN_BEDROCK="<provide your Bedrock API key>"
+Step 5 - Run your first inference request: This model uses InvokeModelWithBidirectionalStream. See API reference for details.
+Document Conventions
+Nova 2 Sonic
+Nova Lite
+
+

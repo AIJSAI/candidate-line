@@ -1,0 +1,227 @@
+Source: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html
+Read: 2026-11-01 (UTC), saved with curl + textutil, text only
+
+View a markdown version of this page
+
+DocumentationAWS Command Line InterfaceUser Guide for Version 2
+PrerequisitesConfigure your profile with the aws configure sso wizardConfigure only your sso-session section with aws configure sso-session wizardManual configuration using the config fileSign in to an IAM Identity Center sessionRun a command with your IAM Identity Center profileSign out of your IAM Identity Center sessionsTroubleshootingRelated resources
+Configuring IAM Identity Center authentication with the AWS CLI
+
+This topic provides instructions on how to configure the AWS CLI with AWS IAM Identity Center (IAM Identity Center) to retrieve credentials to run AWS CLI commands. There are primarily two ways to authenticate users with IAM Identity Center to get credentials to run AWS CLI commands through the config file:
+	•	(Recommended) SSO token provider configuration.
+	•	Legacy non-refreshable configuration.
+For information on using bearer auth, which uses no account ID and role, see Setting up to use the AWS CLI with CodeCatalyst in the Amazon CodeCatalyst User Guide.
+Note
+For a guided process of using IAM Identity Center with AWS CLI commands, see Tutorial: Using IAM Identity Center to run Amazon S3 commands in the AWS CLI.
+Topics
+	•	Prerequisites
+	•	Configure your profile with the aws configure sso wizard
+	•	Configure only your sso-session section with aws configure sso-session wizard
+	•	Manual configuration using the config file
+	•	Sign in to an IAM Identity Center session
+	•	Run a command with your IAM Identity Center profile
+	•	Sign out of your IAM Identity Center sessions
+	•	Troubleshooting
+	•	Related resources
+Prerequisites
+	•	Install the AWS CLI. For more information, see Installing or updating to the latest version of the AWS CLI.
+	•	You must first have access to SSO authentication within IAM Identity Center. Choose one of the following methods to access your AWS credentials.
+Follow the instructions in Getting started in the AWS IAM Identity Center User Guide. This process activates IAM Identity Center, creates an administrative user, and adds an appropriate least-privilege permission set.
+Note
+Create a permission set that applies least-privilege permissions. We recommend using the predefined PowerUserAccess permission set, unless your employer has created a custom permission set for this purpose.
+Exit the portal and sign in again to see your AWS accounts, programmatic access details, and options for Administrator or PowerUserAccess. Select PowerUserAccess when working with the SDK.
+Sign in to AWS through your identity provider’s portal. If your Cloud Administrator has granted you PowerUserAccess (developer) permissions, you see the AWS accounts that you have access to and your permission set. Next to the name of your permission set, you see options to access the accounts manually or programmatically using that permission set.
+Custom implementations might result in different experiences, such as different permission set names. If you're not sure which permission set to use, contact your IT team for help.
+Sign in to AWS through your AWS access portal. If your Cloud Administrator has granted you PowerUserAccess (developer) permissions, you see the AWS accounts that you have access to and your permission set. Next to the name of your permission set, you see options to access the accounts manually or programmatically using that permission set.
+Contact your IT team for help.
+After gaining access to IAM Identity Center, gather your IAM Identity Center information by performing the following:
+	1	Gather your SSO Start URL and SSO Region values that you need to run aws configure sso
+	1	In your AWS access portal, select the permission set you use for development, and select the Access keys link.
+	2	In the Get credentials dialog box, choose the tab that matches your operating system. 
+	3	Choose the IAM Identity Center credentials method to get the SSO Start URL and SSO Region values.
+	2	Alternatively, starting with version 2.22.0, you can use the Issuer URL instead of the Start URL. The Issuer URL is located in the AWS IAM Identity Center console in one of the following locations:
+	◦	On the Dashboard page, the Issuer URL is in the settings summary.
+	◦	On the Settings page, the Issuer URL is in the Identity source settings. 
+	3	For information on which scopes value to register, see OAuth 2.0 Access scopes in the IAM Identity Center User Guide.
+Configure your profile with the aws configure sso wizard
+To configure an IAM Identity Center profile for your AWS CLI:
+	1	In your preferred terminal, run the aws configure sso command.
+	2	The AWS CLI attempts to open your default browser for the sign in process of your IAM Identity Center account. This process might prompt you to allow the AWS CLI access to your data. On the approval screen, the client name begins with botocore-client-, named for botocore, a Python library that the AWS CLI uses.
+	◦	If the AWS CLI cannot open the browser, instructions to manually start the sign in process are displayed based on the type of authorization you are using.    Show moreShow less 
+	3	Select the AWS account to use from the displayed list. If you are authorized to use only one account, the AWS CLI automatically selects that account and skips the prompt.   There are 2 AWS accounts available to you.
+	4	> DeveloperAccount, developer-account-admin@example.com (123456789011) 
+	5	  ProductionAccount, production-account-admin@example.com (123456789022)
+	6	Select the IAM role to use from the displayed list. If there is only one role available, the AWS CLI automatically selects that role and skips the prompt.   Using the account ID 123456789011
+	7	There are 2 roles available to you.
+	8	> ReadOnly
+	9	  FullAccess
+	10	Specify the default output format, the default AWS Region to send commands to, and a name for the profile. If you specify default as the profile name, this profile becomes the default profile used. In the following example, the user enters a default Region, default output format, and the name of the profile.  Default client Region [None]: us-west-2<ENTER>
+	11	CLI default output format (json if not specified) [None]: json<ENTER>
+	12	Profile name [123456789011_ReadOnly]: my-dev-profile<ENTER>
+	13	A final message describes the completed profile configuration. You can now use this profile to request credentials. Use the aws sso login command to request and retrieve the credentials needed to run commands. For instructions, see Sign in to an IAM Identity Center session.
+These steps result in creating the sso-session section and named profile in the config file that looks like the following:
+Configure only your sso-session section with aws configure sso-session wizard
+Note
+This configuration is not compatible with the legacy IAM Identity Center.
+The aws configure sso-session command updates the sso-session sections in the ~/.aws/config file. Run the aws configure sso-session command and provide your IAM Identity Center start URL or issuer URL and the AWS Region that hosts the IAM Identity Center directory.
+
+$ aws configure sso-session
+SSO session name: my-sso
+SSO start URL [None]: https://my-sso-portal.awsapps.com/start
+SSO region [None]: us-east-1
+SSO registration scopes [None]: sso:account:access
+For dual-stack support, use the dual-stack SSO start URL:
+
+$ aws configure sso-session
+SSO session name: my-sso
+SSO start URL [None]: https://ssoins-1234567890abcdef.portal.us-east-1.app.aws
+SSO region [None]: us-east-1
+SSO registration scopes [None]: sso:account:access
+Manual configuration using the config file
+IAM Identity Center configuration information is stored in the config file and can be edited using a text editor. To manually add IAM Identity Center support to a named profile, you must add keys and values to the config file.
+The sso-session section of the config file is used to group configuration variables for acquiring SSO access tokens, which can then be used to acquire AWS credentials. The following settings are used:
+	•	(Required) sso_start_url
+	•	(Required) sso_region
+	•	sso_account_id
+	•	sso_role_name
+	•	sso_registration_scopes
+You define an sso-session section and associate it to a profile. The sso_region and sso_start_url settings must be set within the sso-session section. Typically, sso_account_id and sso_role_name must be set in the profile section so that the SDK can request SSO credentials.
+The following example configures the SDK to request SSO credentials and supports automated token refresh:
+
+[profile dev]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://my-sso-portal.awsapps.com/start
+For dual-stack support, use the dual-stack SSO start URL format:
+
+[profile dev]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://ssoins-1234567890abcdef.portal.us-east-1.app.aws
+This also allows sso-session configurations to be reused across multiple profiles:
+
+[profile dev]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole
+
+[profile prod]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole2
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://my-sso-portal.awsapps.com/start
+For dual-stack support, use the dual-stack SSO start URL format:
+
+[profile dev]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole
+
+[profile prod]
+sso_session = my-sso
+sso_account_id = 111122223333
+sso_role_name = SampleRole2
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://ssoins-1234567890abcdef.portal.us-east-1.app.aws
+However, sso_account_id and sso_role_name aren't required for all scenarios of SSO token configuration. If your application only uses AWS services that support bearer authentication, then traditional AWS credentials are not needed. Bearer authentication is an HTTP authentication scheme that uses security tokens called bearer tokens. In this scenario, sso_account_id and sso_role_name aren't required. See the individual guide for your AWS service to determine if it supports bearer token authorization.
+Additionally, registration scopes can be configured as part of a sso-session. Scope is a mechanism in OAuth 2.0 to limit an application's access to a user's account. An application can request one or more scopes, and the access token issued to the application will be limited to the scopes granted. These scopes define the permissions requested to be authorized for the registered OIDC client and access tokens retrieved by the client. The following example sets sso_registration_scopes to provide access for listing accounts/roles:
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://my-sso-portal.awsapps.com/start
+sso_registration_scopes = sso:account:access
+For dual-stack support:
+
+[sso-session my-sso]
+sso_region = us-east-1
+sso_start_url = https://ssoins-1234567890abcdef.portal.us-east-1.app.aws
+sso_registration_scopes = sso:account:access
+The authentication token is cached to disk under the sso/cache directory with a filename based on the session name.
+Note
+Automated token refresh isn't supported using the legacy non-refreshable configuration. We recommend using the SSO token configuration.
+To manually add IAM Identity Center support to a named profile, you must add the following keys and values to the profile definition in the config file.
+	•	sso_start_url
+	•	sso_region
+	•	sso_account_id
+	•	sso_role_name
+You can include any other keys and values that are valid in the .aws/config file. The following example is an IAM Identity Center profile:
+
+[profile my-sso-profile]
+sso_start_url = https://my-sso-portal.awsapps.com/start
+sso_region = us-west-2
+sso_account_id = 111122223333
+sso_role_name = SSOReadOnlyRole
+region = us-west-2
+output = json
+For dual-stack support:
+
+[profile my-sso-profile]
+sso_start_url = https://ssoins-1234567890abcdef.portal.us-east-1.app.aws
+sso_region = us-west-2
+sso_account_id = 111122223333
+sso_role_name = SSOReadOnlyRole
+region = us-west-2
+output = json
+To run commands, you must first Sign in to an IAM Identity Center session to request and retrieve your temporary credentials.
+For more information on the config and credentials files, see Configuration and credential file settings in the AWS CLI.
+Sign in to an IAM Identity Center session
+Note
+The sign in process might prompt you to allow the AWS CLI access to your data. On the approval screen, the client name begins with botocore-client-, named for botocore, a Python library that the AWS CLI uses.
+To retrieve and cache a set of IAM Identity Center credentials, run the following command for the AWS CLI to open your default browser and verify your IAM Identity Center log in.
+
+$ aws sso login --profile my-dev-profile
+SSO authorization page has automatically been opened in your default browser. 
+Follow the instructions in the browser to complete this authorization request.
+Successfully logged into Start URL: https://my-sso-portal.awsapps.com/start
+Your IAM Identity Center session credentials are cached and the AWS CLI uses them to securely retrieve AWS credentials for the IAM role specified in the profile.
+If the AWS CLI cannot automatically open your browser, instructions to manually start the sign in process are displayed based on the type of authorization you are using.
+You can also specify which sso-session profile to use when logging in using the --sso-session parameter of the aws sso login command. The sso-session option is not available for legacy IAM Identity Center.
+
+$ aws sso login --sso-session my-dev-session
+Starting with version 2.22.0, PKCE authorization is the default. To use device authorization for signing in, add the --use-device-code option.
+
+$ aws sso login --profile my-dev-profile --use-device-code
+The authentication token is cached to disk under the ~/.aws/sso/cache directory with a filename based on the sso_start_url.
+Run a command with your IAM Identity Center profile
+Once logged in, you can use your credentials to invoke AWS CLI commands with the associated named profile. The following example shows a command using a profile:
+
+$ aws sts get-caller-identity --profile my-dev-profile
+As long as you are signed in to IAM Identity Center and those cached credentials are not expired, the AWS CLI automatically renews expired AWS credentials when needed. However, if your IAM Identity Center credentials expire, you must explicitly renew them by logging in to your IAM Identity Center account again.
+Sign out of your IAM Identity Center sessions
+When you are done using your IAM Identity Center profile, you can let your credentials expire or run the following command to delete your cached credentials.
+
+$ aws sso logout
+Successfully signed out of all SSO profiles.
+Troubleshooting
+If you come across issues using the AWS CLI, see Troubleshooting errors for the AWS CLI for troubleshooting steps.
+Related resources
+Additional resources are as follows.
+	•	AWS IAM Identity Center concepts for the AWS CLI
+	•	Tutorial: Using IAM Identity Center to run Amazon S3 commands in the AWS CLI
+	•	Installing or updating to the latest version of the AWS CLI
+	•	Configuration and credential file settings in the AWS CLI
+	•	aws configure sso in the AWS CLI version 2 Reference
+	•	aws configure sso-session in the AWS CLI version 2 Reference
+	•	aws sso login in the AWS CLI version 2 Reference
+	•	aws sso logout in the AWS CLI version 2 Reference
+	•	Setting up to use the AWS CLI with CodeCatalyst in the Amazon CodeCatalyst User Guide
+	•	OAuth 2.0 Access scopes in the IAM Identity Center User Guide
+	•	Getting started tutorials in the IAM Identity Center User Guide
+Document Conventions
+Troubleshoot console credentials
+IAM Identity Center concepts
+
+

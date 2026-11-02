@@ -1,0 +1,558 @@
+Source: https://www.twilio.com/docs/usage/security
+Read (UTC): 2026-11-02T00:07:25Z
+HTTP: 200
+
+Skip to content
+Skip to navigation
+Skip to topbar
+
+Twilio Docs
+General Usage
+
+Get started
+
+Trials
+
+Twilio APIs
+
+API Security
+
+Webhooks
+
+Preventing Fraud
+
+Troubleshooting and Security
+Twilio DebuggerDebug events webhooksAlarmsAvailability and ReliabilitySecurityISO/IEC CertificationReporting security vulnerabilitiesStore Your Twilio Credentials Securely
+
+Secure your app by validating incoming Twilio requests
+
+Billing
+
+Maintenance
+
+Twilio products: API docs, quickstarts, and tutorials
+Twilio Workbench
+Search
+
+On this page
+
+Copy as markdown
+
+Security
+
+Encrypted communication
+
+Twilio supports encryption to protect communications between Twilio and your web application. Specify an HTTPS URL. Twilio will not connect to an HTTPS URL with a self-signed certificate, so use a certificate from a provider such as Let's Encrypt
+
+.
+
+(warning)
+Warning
+Do not pin Twilio certificates. Twilio rotates certificates without notice.
+Twilio can use the HTTP protocol for callbacks—for instance, if you're working on a development environment that doesn't have SSL certificates installed. On your Twilio project's Settings page in the Console, the SSL Certificate Validation setting enforces validation on webhooks.
+Here is the list of supported TLS ciphers for callbacks
+
+.
+
+HTTP authentication
+
+Twilio supports HTTP Basic and Digest Authentication. This lets you password-protect the TwiML URLs on your web server so that only you and Twilio can access them.
+Provide a username and password using the following URL format:
+
+Copy code block
+https://username:password@www.myserver.com/my_secure_document
+
+(warning)
+Warning
+Twilio supports the TLS cryptographic protocol. Twilio can't handle self-signed certificates, and support for SSLv3 is officially deprecated.
+
+(warning)
+Warning
+Be careful to not include any special characters, such as &,``:, etc., in your username or password.
+Twilio will authenticate to your web server using the provided username and password and will remain logged in for the duration of the call. We highly recommend that you use HTTP Authentication in conjunction with encryption. To learn more about Basic and Digest Authentication, refer to your web server documentation.
+If you specify a password-protected URL, Twilio will first send a request with no Authorization header. After your server responds with a 401 Unauthorized status code, a WWW-Authenticate header and a realm in the response, Twilio will make the same request with an Authorization header.
+The following example shows a response from your server:
+
+Copy code block
+1
+HTTP/1.1 401 UNAUTHORIZED
+2
+WWW-Authenticate: Basic realm="My Realm"
+3
+Date: Wed, 21 Jun 2017 01:14:36 GMT
+4
+Content-Type: application/xml
+5
+Content-Length: 327
+Although Twilio continues to support passing credentials in a webhook URL, we recommend using OAuth 2.0, Basic, or Digest authentication.
+To configure authentication outside your webhook URLs, see Authenticate webhooks with OAuth 2.0, Basic, or Digest.
+
+Protect media access with HTTP basic authentication
+
+Media files, such as call recordings in Programmable Voice or an image associated with any Programmable Messaging channel (for example, MMS, WhatsApp, or Facebook), can be stored in our Services.
+Requiring HTTP Basic Authentication for stored media is considered industry best practice. Twilio implements this for all applicable Services. Some of our products such as Programmable Voice and Programmable Messaging support HTTP Basic Authentication. However, they aren't turned on by default. This opt-in setting applies to your Twilio account and any subaccounts.
+To protect media access, you can enforce authentication by turning on HTTP Basic Authentication in your Twilio Account. Authenticate requests to media files with an API key SID and API key secret.
+Twilio highly recommends turning on HTTP Basic Authentication for your media, especially if it contains sensitive data.
+Turn on HTTP Basic Authentication for media access in the following Services and functionalities:
+	•	Programmable Messaging (for example, MMS, WhatsApp Facebook Business Messenger)
+	•	Programmable Voice (for example, call recordings)
+
+HTTPS and TLS
+
+To secure your web application, ensure that you're using HTTPS for your web application's endpoint. Twilio won't connect to an HTTPS URL with a self-signed certificate, so use a certificate from a provider such as Let's Encrypt
+
+.
+Twilio can use the HTTP protocol for callbacks. For instance, if you're working on a development environment that doesn't have SSL certificates installed. On your Twilio project's Settings page in the Console, the SSL Certificate Validation setting enforces validation on webhooks.
+Here is the list of supported TLS ciphers for callbacks
+
+.
+
+Validating requests are coming from Twilio
+
+If your application exposes sensitive data or modifies your data, you may want to verify that HTTP requests to your web application come from Twilio. This ensures they're not from a malicious third party. To provide this level of security, Twilio cryptographically signs its requests.
+Here's how it works:
+	1	Turn on TLS on your server and configure your Twilio account to use HTTPS URLs.
+	2	Twilio assembles its request to your application, including the final URL and any POST fields. * If your request is a POST, Twilio takes all the POST fields, sorts them alphabetically by their name, and concatenates the parameter name and value to the end of the URL (with no delimiter). Only query parameters get parsed to generate a security token, not the POST body. * If the request is a GET, the final URL includes all of the Twilio request parameters appended in the query string of your original URL using the standard delimiter & between the name and value pairs.
+	3	Twilio takes the resulting string (the full URL with the scheme, port, query string and any POST parameters) and signs it using HMAC-SHA1 and your AuthToken as the key.
+	4	Twilio sends this signature in an HTTP header called X-Twilio-Signature
+To verify the authenticity of the request, use the built-in request validation method provided by all of our SDKs:
+Validate Signature of Request (x-www-form-urlencoded body)
+
+Node.jsPythonC#JavaGoPHPRuby
+
+Report code block
+
+Copy code block
+1
+// Get twilio-node from twilio.com/docs/libraries/node
+2
+const client = require('twilio');
+3
+
+4
+// Your Auth Token from twilio.com/console
+5
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+6
+
+7
+// Store Twilio's request URL (the url of your webhook) as a variable
+8
+const url = 'https://mycompany.com/myapp';
+9
+
+10
+// Store the application/x-www-form-urlencoded parameters from Twilio's request as a variable
+11
+// In practice, this MUST include all received parameters, not a
+12
+// hardcoded list of parameters that you receive today. New parameters
+13
+// may be added without notice.
+14
+const params = {
+15
+  CallSid: 'CA1234567890ABCDE',
+16
+  Caller: '+12349013030',
+17
+  Digits: '1234',
+18
+  From: '+12349013030',
+19
+  To: '+18005551212',
+20
+};
+21
+
+22
+// Store the X-Twilio-Signature header attached to the request as a variable
+23
+const twilioSignature = 'Np1nax6uFoY6qpfT5l9jWwJeit0=';
+24
+
+25
+// Check if the incoming signature is valid for your application URL and the incoming parameters
+26
+console.log(client.validateRequest(authToken, twilioSignature, url, params));
+Validate Signature of Request (application/json body)
+
+Node.jsPythonC#JavaGoPHPRuby
+
+Report code block
+
+Copy code block
+1
+// Get twilio-node from twilio.com/docs/libraries/node
+2
+const client = require('twilio');
+3
+
+4
+// Your Auth Token from twilio.com/console
+5
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+6
+
+7
+// Store Twilio's request URL (the url of your webhook) as a variable
+8
+// including all query parameters
+9
+const url =
+10
+  'https://example.com/myapp?bodySHA256=5ccde7145dfb8f56479710896586cb9d5911809d83afbe34627818790db0aec9';
+11
+
+12
+// Store the application/json body from Twilio's request as a variable
+13
+// In practice, this MUST include all received parameters, not a
+14
+// hardcoded list of parameters that you receive today. New parameters
+15
+// may be added without notice.
+16
+const body = '{"CallSid":"CA1234567890ABCDE","Caller":"+12349013030"}';
+17
+
+18
+// Store the X-Twilio-Signature header attached to the request as a variable
+19
+const twilioSignature = 'hqeF3G9Hrnv6/R0jOhoYDD2PPUs=';
+20
+
+21
+// Check if the incoming signature is valid for your application URL and the incoming body
+22
+console.log(
+23
+  client.validateRequestWithBody(authToken, twilioSignature, url, body)
+24
+);
+If the method call returns true, then the request can be considered valid and it is safe to proceed with your application logic.
+
+(information)
+Info
+We highly recommend you use the SDKs to do signature validation.
+Explore the algorithm yourself
+
+Follow these steps to perform the validation on your end:
+	1	Take the full URL of the request URL you specify for your phone number or app, from the protocol (https...) through the end of the query string (everything after the ?).
+	2	If the request is a POST, sort all the POST parameters alphabetically (using Unix-style case-sensitive sorting order).
+	3	Iterate through the sorted list of POST parameters, and append the variable name and value (with no delimiters) to the end of the URL string.
+	4	Sign the resulting string with HMAC-SHA1 using your AuthToken as the key (remember, your AuthToken's case matters!).
+	5	Base64-encode the resulting hash value.
+	6	Compare your hash to ours, submitted in the X-Twilio-Signature header. If they match, then you're good to go.
+The following example shows a POST request from Twilio to your application as part of an incoming call webhook:
+
+Copy code block
+https://example.com/myapp.php?foo=1&bar=2
+In this example, Twilio posted some digits from a Gather to that URL, in addition to all the usual POST fields:
+	•	Digits: 1234
+	•	To: +18005551212
+	•	From: +14158675310
+	•	Caller: +14158675310
+	•	CallSid: CA1234567890ABCDE
+Create a string that is your URL with the full query string:
+
+Copy code block
+https://example.com/myapp.php?foo=1&bar=2
+Then, sort the list of POST variables by the parameter name (using Unix-style case-sensitive sorting order):
+	•	CallSid: CA1234567890ABCDE
+	•	Caller: +14158675310
+	•	Digits: 1234
+	•	From: +14158675310
+	•	To: +18005551212
+Next, append each POST variable, name, and value to the string with no delimiters:
+
+Copy code block
+https://example.com/myapp.php?foo=1&bar=2CallSidCA1234567890ABCDECaller+14158675310Digits1234From+14158675310To+18005551212
+Hash the resulting string using HMAC-SHA1, using your AuthToken Primary as the key.
+Suppose your AuthToken is 12345. Take the hash value returned from the following function call (or its equivalent in your language of choice):
+
+Copy code block
+hmac_sha1(https://example.com/myapp.php?foo=1&bar=2CallSidCA1234567890ABCDECaller+14158675310Digits1234From+14158675310To+18005551212, 12345)
+Take the Base64 encoding of the hash value (so it's only ASCII characters):
+
+Copy code block
+L/OH5YylLD5NRKLltdqwSvS0BnU=
+Finally, compare that to the hash Twilio sent in the X-Twilio-Signature HTTP header. If they match, the request is valid.
+
+(warning)
+Warning
+This example is for illustrative purposes only. When validating requests in your application, only use the provided helper methods.
+A few notes
+
+	•	If the Content-Type is application-json, don't use the JSON body to fill in the validator's parameter for POST parameters.
+	◦	The query parameter bodySHA256 will be included in the request.
+	◦	Its value is calculated as the hexadecimal representation of the SHA-256 hash of the request body.
+	•	Some frameworks may trim whitespace from POST body fields. A notable example is Laravel, which has the TrimStrings middleware turned on by default. You must turn off these behaviors to successfully match signatures generated from fields that have leading or trailing whitespace. Certain Node.js middleware may also trim whitespace from requests.
+	◦	When constructing the request body to be sent (as can be done in the Studio HTTP Request widget) ensure that no hidden whitespaces are in the body.
+	•	When creating the hash, make sure you are using your primary AuthToken as the key. If you have recently created a secondary AuthToken, you still need to use your previous AuthToken until the secondary one has been promoted to your primary AuthToken .
+	•	The HMAC-SHA1 secure hashing algorithm should be available in all major languages, either in the core or through an extension or package.
+	•	If your URL uses an "index" page, such as index.php or index.html to handle the request, such as: https://example.com/twilio where the real page is served from https://example.com/twilio/index.php, then Apache or PHP may rewrite that URL so it has a trailing slash, for example https://example.com/twilio/. Using the code above, or similar code in another language, you could end up with an incorrect hash, because Twilio built the hash using https://example.com/twilio and you may have built the hash using https://example.com/twilio/.
+	•	For SMS and voice callbacks over HTTP:
+	◦	Twilio will drop the username and password (if any) from the URL before computing the signature.
+	◦	Twilio will keep the port (if any) in the URL when computing the signature.
+	•	For SMS callbacks over HTTPS:
+	◦	Twilio will drop the username and password (if any) from the URL before computing the signature.
+	◦	Twilio will keep the port (if any) in the URL when computing the signature.
+	•	For voice callbacks over HTTPS:
+	◦	Twilio will drop the username and password (if any) from the URL before computing the signature.
+	◦	Twilio will also drop the port (if any) from the URL before computing the signature.
+	•	For voice WSS handshake requests:
+	◦	If you are having trouble verifying a WebSocket handshake request (for example, for Programmable Voice Media Streams), try appending a trailing / character to the URL that you pass to the signature validation method.
+
+(information)
+A note on HMAC-SHA1
+Concerned about SHA1 security issues? Twilio does not use SHA-1 alone.
+The critical component of HMAC-SHA1 that distinguishes it from SHA-1 alone is the use of your Twilio AuthToken as a complex secret key. While there are possible collision-based attacks on SHA-1
+
+, HMACs
+
+aren't affected by those same attacks. The combination of the underlying hashing algorithm (SHA-1) and the strength of the secret key (AuthToken) protects you in this case.
+
+Test the validity of your webhook signature
+
+(information)
+Info
+It's a great idea to test your webhooks and ensure that their signatures are secure. The following sample code can test your unique endpoint against both valid and invalid signatures.
+Complete the following steps to make this test work for you:
+	1	Set your Auth Token as an environment variable
+	2	Set the URL to the endpoint you want to test
+	3	If testing BasicAuth, change HTTPDigestAuth to HTTPBasicAuth
+Test the validity of your webhook signature (x-www-form-urlencoded body)
+
+Node.jsPythonC#JavaPHPRuby
+
+Report code block
+
+Copy code block
+1
+// Get twilio-node from twilio.com/docs/libraries/node
+2
+const webhooks = require('twilio/lib/webhooks/webhooks');
+3
+const request = require('request');
+4
+
+5
+// Your Auth Token from twilio.com/console
+6
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+7
+
+8
+// The Twilio request URL
+9
+const url = 'https://mycompany.com/myapp';
+10
+
+11
+// The post variables in Twilio's request
+12
+const params = {
+13
+  CallSid: 'CA1234567890ABCDE',
+14
+  Caller: '+12349013030',
+15
+  Digits: '1234',
+16
+  From: '+12349013030',
+17
+  To: '+18005551212',
+18
+};
+19
+
+20
+function testUrl(method, url, params, valid) {
+21
+  if (method === 'GET') {
+22
+    url +=
+23
+      '?' +
+24
+      Object.keys(params)
+25
+        .map((key) => key + '=' + params[key])
+26
+        .join('&');
+27
+    params = {};
+28
+  }
+29
+  const signatureUrl = valid ? url : 'http://invalid.com';
+30
+  const signature = webhooks.getExpectedTwilioSignature(
+31
+    authToken,
+32
+    signatureUrl,
+33
+    params
+34
+  );
+35
+  const options = {
+36
+    method: method,
+37
+    url: url,
+38
+    form: params,
+39
+    headers: {
+40
+      'X-Twilio-Signature': signature,
+41
+    },
+42
+  };
+43
+
+44
+  request(options, function (error, response, body) {
+45
+    const validStr = valid ? 'valid' : 'invalid';
+46
+    console.log(
+47
+      `HTTP ${method} with ${validStr} signature returned ${response.statusCode}`
+48
+    );
+49
+  });
+50
+}
+51
+
+52
+testUrl('GET', url, params, true);
+53
+testUrl('GET', url, params, false);
+54
+testUrl('POST', url, params, true);
+55
+testUrl('POST', url, params, false);
+Test the validity of your webhook signature (application/json body)
+
+Node.jsPythonC#JavaPHPRuby
+
+Report code block
+
+Copy code block
+1
+// Get twilio-node from twilio.com/docs/libraries/node
+2
+const webhooks = require('twilio/lib/webhooks/webhooks');
+3
+const request = require('request');
+4
+
+5
+// Your Auth Token from twilio.com/console
+6
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+7
+
+8
+// The Twilio request URL
+9
+const url =
+10
+  'https://example.com/myapp?bodySHA256=5ccde7145dfb8f56479710896586cb9d5911809d83afbe34627818790db0aec9';
+11
+
+12
+// The post variables in Twilio's request
+13
+const params = {};
+14
+const body = '{"CallSid":"CA1234567890ABCDE","Caller":"+12349013030"}';
+15
+
+16
+function testUrl(method, url, params, valid) {
+17
+  const signatureUrl = valid ? url : 'http://invalid.com';
+18
+  const signature = webhooks.getExpectedTwilioSignature(
+19
+    authToken,
+20
+    signatureUrl,
+21
+    params
+22
+  );
+23
+  const options = {
+24
+    method: method,
+25
+    url: url,
+26
+    body: body,
+27
+    headers: {
+28
+      'X-Twilio-Signature': signature,
+29
+      'Content-Type': 'application/json',
+30
+    },
+31
+  };
+32
+
+33
+  request(options, function (error, response, body) {
+34
+    const validStr = valid ? 'valid' : 'invalid';
+35
+    console.log(
+36
+      `HTTP ${method} with ${validStr} signature returned ${response.statusCode}`
+37
+    );
+38
+  });
+39
+}
+40
+
+41
+testUrl('GET', url, params, true);
+42
+testUrl('GET', url, params, false);
+43
+testUrl('POST', url, params, true);
+44
+testUrl('POST', url, params, false);
+Validation using the Twilio SDKs
+
+All the official Twilio SDKs ship with a Utilities class which facilitates request validation. Head over to the libraries page to download the library for your language of choice.
+Your Auth Token
+
+Keep your AuthToken secure. It provides access to the REST API and to request signatures. Learn how to secure this token using environment variables.
+
+What's next?
+
+	•	See Secure your credentials to learn best practices for storing and managing your Twilio credentials.
+	•	See Twilio Helper Libraries to download SDKs with built-in security features for your programming language.
+	•	See API security best practices to learn how to interact securely with the Twilio API.
+Need some help?
+We all do sometimes; code is hard. Get help now from our support team
+
+, or lean on the wisdom of the crowd by browsing the Twilio tag
+
+on Stack Overflow.
+Terms of service
+Privacy Policy
+Copyright © 2026 Twilio Inc.
+

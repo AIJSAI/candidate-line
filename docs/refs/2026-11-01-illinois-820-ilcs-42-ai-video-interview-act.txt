@@ -1,0 +1,139 @@
+Source: https://www.ilga.gov/legislation/ilcs/ilcs3.asp?ActID=4015&ChapterID=68
+Read (UTC): 2026-11-02T00:00:04Z
+HTTP: 200
+
+
+Select Language
+×
+The Illinois General Assembly offers the Google Translate™ service for visitor convenience. In no way should it be considered accurate as to the translation of any content herein.
+Visitors of the Illinois General Assembly website are encouraged to use other translation services available on the internet.
+The English language version is always the official and authoritative version of this website.
+NOTE: To return to the original English language version, select the "Show Original" button on the Google Translate™ menu bar at the top of the window.
+Choose Language
+English Afrikaans Albanian Arabic Armenian Azerbaijani Basque Bengali Bosnian Catalan Croatian Czech Danish Dutch Esperanto Estonian Filipino Finnish French Galician Georgian German Greek Gujarati Haitian Creole Hausa Hawaiian Hebrew Hindi Hungarian Icelandic Indonesian Interlingua Interlingue Inuktitut Irish Italian Japanese Javanese Kannada Khmer Korean Latin Latvian Lithuanian Luxembourgish Macedonian Malagasy Malayalam Maltese Maori Marathi Myanmar Nepali Norwegian Odia Pashto Punjabi Romanian Russian Samoan Sango Sanskrit Sardinian Sindhi Sinhala Slovak Slovenian Somali Southern Sotho Spanish Sundanese Swahili Swedish Tamil Telugu Thai Tigrinya Tonga Turkish Ukrainian Urdu Vietnamese Welsh Xhosa Yiddish Yoruba Zulu
+Powered by Translate
+Close
+Illinois General Assembly
+Top Navigation Bar
+Translate Learn
+Select General Assembly
+
+Search the 104th General Assembly
+
+Enter search terms for legislation, members, committees, or schedules.
+ILGA.GOV
+
+	•
+	•
+	•	LEGISLATION & LAWS
+	◦	Bills & Resolutions
+	◦	Public Acts
+	◦	Illinois Compiled Statutes
+	◦	Illinois Constitution
+	◦	Search Legislation
+	◦	Glossary
+	◦	Guide
+	•	Reports & Inquiry
+	◦	Legislative Reports
+	◦	Special Reports
+	◦	FTP Site
+	◦	Legislator Lookup
+	◦	Capitol Complex Phone Numbers
+	•	Rules & Regulations
+	◦	Illinois Register
+	◦	Administrative Rules
+	•	Senate
+	◦	Members
+	◦	Schedules
+	◦	Committees
+	◦	Request for Remote Testimony
+	◦	Journals
+	◦	Transcripts
+	◦	Rules
+	◦	Audio/Video
+	◦	FOIA Information
+	◦	Senate Employment Opportunities
+	◦	Media Guidelines
+	•	House
+	◦	Members
+	◦	Schedules
+	◦	Committees
+	◦	Submit testimony for House Committees
+	◦	Journals
+	◦	Transcripts
+	◦	Rules
+	◦	Audio/Video
+	◦	FOIA Information
+	◦	House Employment Opportunities
+	•	 Log In
+Mobile Top Bar
+Search the 104th General Assembly
+
+Enter keywords to search the Illinois General Assembly website.
+-
+	1	Home
+	2	Legislation
+	3	Illinois Compiled Statutes
+	4	-
+EMPLOYMENT (820 ILCS 42/) Artificial Intelligence Video Interview Act.
+Back to Act Listing By Act Name
+Printer Friendly
+Illinois Compiled Statutes (ILCS)
+Updating the database of the Illinois Compiled Statutes (ILCS) is an ongoing process. Recent laws may not yet be included in the ILCS database, but they are found on this site as Public Acts soon after they become law. For information concerning the relationship between statutes and Public Acts, refer to the Guide.
+Because the statute database is maintained primarily for legislative drafting purposes, statutory changes are sometimes included in the statute database before they take effect. If the source note at the end of a Section of the statutes includes a Public Act that has not yet taken effect, the version of the law that is currently in effect may have already been removed from the database and you should refer to that Public Act to see the changes made to the current law.
+
+    (820 ILCS 42/1)
+    Sec. 1. Short title. This Act may be cited as the Artificial Intelligence Video Interview Act.
+(Source: P.A. 101-260, eff. 1-1-20.)
+
+    (820 ILCS 42/5)
+    Sec. 5. Disclosure of the use of artificial intelligence analysis. An employer that asks applicants to record video interviews and uses an artificial intelligence analysis of the applicant-submitted videos shall do all of the following when considering applicants for positions based in Illinois before asking applicants to submit video interviews:
+        (1) Notify each applicant before the interview that
+
+artificial intelligence may be used to analyze the applicant's video interview and consider the applicant's fitness for the position.
+        (2) Provide each applicant with information before
+
+the interview explaining how the artificial intelligence works and what general types of characteristics it uses to evaluate applicants.
+        (3) Obtain, before the interview, consent from the
+
+applicant to be evaluated by the artificial intelligence program as described in the information provided.
+    An employer may not use artificial intelligence to evaluate applicants who have not consented to the use of artificial intelligence analysis.
+(Source: P.A. 101-260, eff. 1-1-20.)
+
+    (820 ILCS 42/10)
+    Sec. 10. Sharing videos limited. An employer may not share applicant videos, except with persons whose expertise or technology is necessary in order to evaluate an applicant's fitness for a position.
+(Source: P.A. 101-260, eff. 1-1-20.)
+
+    (820 ILCS 42/15)
+    Sec. 15. Destruction of videos. Upon request from the applicant, employers, within 30 days after receipt of the request, must delete an applicant's interviews and instruct any other persons who received copies of the applicant video interviews to also delete the videos, including all electronically generated backup copies. Any other such person shall comply with the employer's instructions.
+(Source: P.A. 101-260, eff. 1-1-20.)
+
+    (820 ILCS 42/20)
+    Sec. 20. Report of demographic data.
+    (a) An employer that relies solely upon an artificial intelligence analysis of a video interview to determine whether an applicant will be selected for an in-person interview must collect and report the following demographic data:
+        (1) the race and ethnicity of applicants who are
+
+and are not afforded the opportunity for an in-person interview after the use of artificial intelligence analysis; and
+        (2) the race and ethnicity of applicants who are
+
+hired.
+    (b) The demographic data collected under subsection (a) must be reported to the Department of Commerce and Economic Opportunity annually by December 31. The report shall include the data collected in the 12-month period ending on November 30 preceding the filing of the report.
+    (c) The Department must analyze the data reported and report to the Governor and General Assembly by July 1 of each year whether the data discloses a racial bias in the use of artificial intelligence.
+(Source: P.A. 102-47, eff. 1-1-22.)
+
+Footer
+Disclaimer
+
+This site is maintained for the Illinois General Assembly by the Legislative Information System, 705 Stratton Building, Springfield, Illinois 62706. Contact ILGA Webmaster
+
+  ILGA.gov uses cookies to ensure you get the best experience on our website. By continuing to browse ILGA.gov you consent to our use of cookies. Read About Cookies
+ILGA.GOV
+2026 ILGA.gov | All Rights Reserved | ADA | Disclaimers | Learn
+
+This site is maintained for the Illinois General Assembly by the Legislative Information System, 705 Stratton Building, Springfield, Illinois 62706. Contact ILGA Webmaster
+
+  ILGA.gov uses cookies to ensure you get the best experience on our website. By continuing to browse ILGA.gov you consent to our use of cookies. Read About Cookies
+
+ILGA.GOV
+
+2026 ILGA.gov | All Rights Reserved | ADA | Disclaimers | Learn
