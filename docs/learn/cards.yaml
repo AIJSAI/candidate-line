@@ -27,3 +27,12 @@
   box: 0
   next_due: 2026-11-02
   history: []
+- id: candidate-line-0004
+  question: "Why is thinking turned off on the live turn, and what did the measurement show?"
+  answer: "Haiku 5.5 thinks by default. With adaptive thinking on and a 120-token cap, three of five Gus-sized replies came back with no text because the thinking spent the output budget; on a phone line that is a silent Gus. Thinking off with effort low gave a reply every time, and the turn's latency tracked output tokens, not the model: a 60-token cap gave a 901 ms median."
+  say_it: "I turned thinking off because the caller is waiting and the measurement showed thinking eating the reply budget; the latency lever on a phone line is how many tokens Gus speaks."
+  ref: "candidate_line/brain/provider.py:100"
+  source: "DR-003 evidence 2026-11-02"
+  box: 0
+  next_due: 2026-11-02
+  history: []
