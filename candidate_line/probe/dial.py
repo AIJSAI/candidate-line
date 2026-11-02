@@ -122,8 +122,18 @@ async def serve_one_call(port: int, make_session) -> tuple[ProbeTranscript, dict
         if not done.done():
             done.set_result(transcript)
 
-    async with websockets.serve(handler, "127.0.0.1", port, max_size=None, ping_interval=20, ping_timeout=60):
+    server = await websockets.serve(
+        handler, "127.0.0.1", port, max_size=None, ping_interval=20, ping_timeout=60
+    )
+    try:
         transcript = await asyncio.wait_for(done, timeout=240)
+    finally:
+        # Never wait on a handler that is stuck in a close: shut the server down with a bound.
+        server.close(close_connections=True)
+        try:
+            await asyncio.wait_for(server.wait_closed(), timeout=5)
+        except TimeoutError:
+            log.warning("the probe server did not close within 5 s; continuing")
     return transcript, counts
 
 
@@ -187,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
             PollySpeaker(settings.aws_region, voice_id=args.voice),
             lines,
             stream_sid=f"probe-{case.id}",
+            # Nova Sonic pauses longer between sentences than arm A's burst; 700 ms made the probe talk over it.
+            silence_ms=1200,
             twilio_side=True,
         )
 

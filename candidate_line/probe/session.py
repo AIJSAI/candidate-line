@@ -141,7 +141,11 @@ class ProbeSession:
         finally:
             if keepalive is not None:
                 keepalive.cancel()
-            await self._transcriber.stop()
+            try:
+                # The CRT transport can hang a close after the far side has gone (seen 2026-11-02 in dial mode).
+                await asyncio.wait_for(self._transcriber.stop(), timeout=5.0)
+            except (TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
+                log.warning("the transcriber did not stop cleanly; moving on")
             for task in (listener, talker):
                 try:
                     await asyncio.wait_for(task, timeout=3.0)

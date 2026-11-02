@@ -82,7 +82,10 @@ class MediaSession:
         finally:
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
-            await self._transcriber.stop()
+            try:
+                await asyncio.wait_for(self._transcriber.stop(), timeout=5.0)
+            except (TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
+                log.warning("the transcriber did not stop cleanly for %s; moving on", self.ctx.call_id)
             for task in (listener, greeter):
                 if task is None:
                     continue
