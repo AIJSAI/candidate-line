@@ -18,7 +18,7 @@ help:
 	@echo "make text        the line in text mode (BRAIN_PROVIDER / BEDROCK_MODEL_ID from the environment)"
 
 dev:
-	. scripts/env.sh && uv run uvicorn candidate_line.telephony.app:app --host 127.0.0.1 --port 8000 --reload
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run uvicorn candidate_line.telephony.app:app --host 127.0.0.1 --port 8000 --reload
 
 tunnel:
 	cloudflared tunnel --url http://127.0.0.1:8000
