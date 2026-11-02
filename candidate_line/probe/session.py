@@ -121,6 +121,8 @@ class ProbeSession:
         keepalive = asyncio.create_task(self._keep_streams_alive()) if self._real_time else None
         try:
             async for message in incoming:
+                if talker.done():
+                    break  # checked first: on a real line most messages are silence frames that `continue` below
                 event = message.get("event")
                 if event == "start" and self._twilio_side:
                     self.stream_sid = str(message.get("streamSid") or self.stream_sid)
