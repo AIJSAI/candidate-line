@@ -12,7 +12,7 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 1 | AWS account, CLI profile with no long-lived key in a file, budget alarm, model access | 2026-11-02, 462381a (Identity Center live 15:40 CT, old key inactive 15:46 CT; budget 11-01; model access: Haiku 4.5 on Bedrock, Haiku 5.5 on the Anthropic API) | DR-002, DR-003 | |
 | 2 | Twilio number (upgraded), tunnel, webhook | 2026-11-02, c45159b (number, webhook and tunnel live 15:16 CT; account and identity check by James) | DR-004, DR-005 | |
 | 3 | Arm A's audio path and turn loop, with a brain that only echoes; barge-in | 2026-11-02, first real call 15:17 CT (code 09eccfb, 2026-11-01) | DR-006 | |
-| 4 | Arm B: the AWS sample, as-is | | DR-007 | |
+| 4 | Arm B: the AWS sample, as-is | 2026-11-02 (built 13:40 CT, first call 16:05 CT; settings patch `bakeoff/arm-b-settings.patch`) | DR-007 | |
 | 5 | Text-mode REPL; four empty hooks (`on_turn`, `before_speak`, `on_silence`, `on_tool`) | 2026-11-01, 7d236e3 | DR-008 | |
 | 6 | Synthetic data: eight candidates with codes and PINs, two weeks of slots, a three-page FAQ with section ids, and a labelled baseline of past invites with their invite-to-booked hours for the scorecard; the generating prompt committed | 2026-11-01, e39dde6 | DR-009 | |
 | 7 | `bakeoff/2026-11-01.csv`, its probe list `bakeoff/probes.yaml`, the bake-off's test persona prompt, and the rule written before it | 2026-11-01, 2704a73 | DR-001 | |

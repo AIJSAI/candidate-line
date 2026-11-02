@@ -12,7 +12,7 @@ index b84fcb5..063b3d1 100644
            })
          );
 diff --git a/src/server.ts b/src/server.ts
-index 8c73cc8..ac55c71 100644
+index 8c73cc8..f1da211 100644
 --- a/src/server.ts
 +++ b/src/server.ts
 @@ -25,16 +25,7 @@ const toNumber = process.env.TWILIO_VERIFIED_CALLER_ID;
@@ -33,3 +33,19 @@ index 8c73cc8..ac55c71 100644
  
  // Configure AWS credentials
  const AWS_PROFILE_NAME = process.env.AWS_PROFILE ?? 'bedrock-test';
+@@ -80,7 +71,6 @@ fastify.all('/outbound-call', async (request, reply) => {
+ 
+     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+                           <Response>
+-                              <Say language="en-US" voice="Polly.Matthew-Generative">Please wait while we connect your call to Amazon Nova Sonic A.I. speech to speech system </Say>
+                               <Pause length="1"/>
+                               <Say>O.K. you can start talking!</Say>
+                               <Connect>
+@@ -106,7 +96,6 @@ fastify.all('/incoming-call', async (request, reply) => {
+ 
+     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+                           <Response>
+-                              <Say language="en-US" voice="Polly.Matthew-Generative">Please wait while we connect your call to Amazon Nova Sonic A.I. speech to speech system </Say>
+                               <Connect>
+                                 <Stream url="wss://${request.headers.host}/media-stream" />
+                               </Connect>
