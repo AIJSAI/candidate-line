@@ -8,11 +8,14 @@ deprecated and points here (read 2026-11-01, DR-006).
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from candidate_line.telephony.audio import SAMPLE_RATE
+
+log = logging.getLogger("candidate_line.speech")
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,7 @@ class TranscribeStreamingTranscriber:
         self._language = language
         self._stream: Any = None
         self._client: Any = None
+        self._dead = False
 
     async def start(self) -> None:
         from aws_sdk_transcribe_streaming.client import AsyncTranscribeStreamingClient
@@ -87,7 +91,18 @@ class TranscribeStreamingTranscriber:
     async def feed(self, pcm16: bytes) -> None:
         from aws_sdk_transcribe_streaming.models import AudioEvent, AudioStreamAudioEvent
 
-        await self._stream.input_stream.send(AudioStreamAudioEvent(value=AudioEvent(audio_chunk=pcm16)))
+        if self._dead or self._stream is None:
+            return
+        try:
+            # A send to a stream AWS has already completed never returns on the CRT transport (2026-11-02, the
+            # probe's call); two seconds is far longer than any live send, so a timeout means the stream is gone.
+            await asyncio.wait_for(
+                self._stream.input_stream.send(AudioStreamAudioEvent(value=AudioEvent(audio_chunk=pcm16))),
+                2.0,
+            )
+        except (TimeoutError, Exception) as error:  # noqa: BLE001
+            self._dead = True
+            log.warning("Transcribe stream is gone; no more audio is fed (%s)", type(error).__name__)
 
     async def events(self) -> AsyncIterator[Heard]:
         from aws_sdk_transcribe_streaming.models import TranscriptResultStreamTranscriptEvent
@@ -102,7 +117,7 @@ class TranscribeStreamingTranscriber:
                     yield Heard(text=text, is_partial=bool(result.is_partial))
 
     async def stop(self) -> None:
-        if self._stream is not None:
+        if self._stream is not None and not self._dead:
             await self._stream.input_stream.close()
 
 

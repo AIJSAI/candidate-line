@@ -32,6 +32,20 @@ Send = Callable[[dict[str, Any]], Awaitable[None]]
 OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 
 
+async def _settle(task: asyncio.Future, timeout: float, what: str) -> None:
+    """Awaits a task with a bound and never awaits it past that: a shield keeps the timeout from cancelling into
+    the CRT transport, which can hang a cancel after the far side has gone (2026-11-02)."""
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    except TimeoutError:
+        task.cancel()
+        log.warning("%s did not finish in %.0f s; left cancelled", what, timeout)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("%s failed", what)
+
+
 class MediaSession:
     def __init__(
         self,
@@ -84,15 +98,12 @@ class MediaSession:
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
             # Same rule as the probe: the CRT transport can hang a close or a cancel after Twilio has gone, so wait
             # with a bound, cancel what is left, and never await a task that may be stuck (2026-11-02).
-            stopper = asyncio.ensure_future(self._transcriber.stop())
-            tasks = {stopper, listener} | ({greeter} if greeter is not None else set())
-            done, pending = await asyncio.wait(tasks, timeout=5.0)
-            for task in pending:
-                task.cancel()
-                log.warning("media task did not finish in 5 s for %s; left cancelled", self.ctx.call_id)
-            for task in done:
-                if task is not stopper and not task.cancelled() and task.exception() is not None:
-                    log.error("media session task failed for %s: %r", self.ctx.call_id, task.exception())
+            await _settle(
+                asyncio.ensure_future(self._transcriber.stop()), 5.0, f"transcriber stop {self.ctx.call_id}"
+            )
+            for task, what in ((listener, "listener"), (greeter, "greeter")):
+                if task is not None:
+                    await _settle(task, 3.0, f"{what} {self.ctx.call_id}")
 
     async def _listen(self) -> None:
         try:

@@ -110,7 +110,11 @@ async def serve_one_call(port: int, make_session) -> tuple[ProbeTranscript, dict
 
         session = make_session(send)
         try:
-            transcript = await session.run(incoming())
+            # The transcript lives on the session, so a slow cleanup cannot take the measurements with it.
+            transcript = await asyncio.wait_for(session.run(incoming()), timeout=180)
+        except TimeoutError:
+            log.warning("the probe session did not finish in 180 s; keeping what it heard")
+            transcript = session.transcript
         except Exception as error:
             if not done.done():
                 done.set_exception(error)

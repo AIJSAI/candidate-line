@@ -62,6 +62,20 @@ class ProbeTranscript:
         return [e.gap_ms for e in self.exchanges if e.who == "gus" and e.gap_ms is not None]
 
 
+async def _settle(task: asyncio.Future, timeout: float, what: str) -> None:
+    """Awaits a task with a bound and never awaits it past that: a shield keeps the timeout from cancelling into
+    the CRT transport, which can hang a cancel after the far side has gone (2026-11-02)."""
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    except TimeoutError:
+        task.cancel()
+        log.warning("%s did not finish in %.0f s; left cancelled", what, timeout)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("%s failed", what)
+
+
 class ProbeSession:
     def __init__(
         self,
@@ -143,14 +157,11 @@ class ProbeSession:
                 keepalive.cancel()
             # The CRT transport can hang a close or a cancel after the far side has gone (2026-11-02, dial mode),
             # so nothing here awaits a task that may be stuck: wait with a bound, cancel the rest, move on.
-            stopper = asyncio.ensure_future(self._transcriber.stop())
-            done, pending = await asyncio.wait({stopper, listener, talker}, timeout=5.0)
-            for task in pending:
-                task.cancel()
-                log.warning("probe task %s did not finish in 5 s; left cancelled", task.get_name())
-            for task in done:
-                if task is not stopper and not task.cancelled() and task.exception() is not None:
-                    log.error("probe task failed: %r", task.exception())
+            await _settle(
+                asyncio.ensure_future(self._transcriber.stop()), 5.0, "the probe's transcriber stop"
+            )
+            for task, what in ((listener, "the probe's listener"), (talker, "the probe's talker")):
+                await _settle(task, 3.0, what)
         return self.transcript
 
     async def _listen(self) -> None:
