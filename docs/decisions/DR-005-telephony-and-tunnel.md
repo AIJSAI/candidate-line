@@ -38,6 +38,8 @@ A hostname churn that costs more than the one command (then a named tunnel, whic
 - Local run, 2026-11-01: `ALLOW_UNSIGNED_WEBHOOKS=1 BRAIN_PROVIDER=echo uv run uvicorn candidate_line.telephony.app:app` answered `GET /health` with `{"status":"ok","brain":"echo"}` and `POST /voice` with the TwiML `<Say voice="Polly.Matthew-Neural">` hello line, `text/xml`, 200, in 0.5 ms on the loopback. Without the flag the same request returns 503; with a token and a wrong signature, 403 (`tests/test_webhook.py`).
 - Tunnel proof, 2026-11-01: not yet. The build session's command runner refused `cloudflared tunnel --url http://127.0.0.1:8000` as an external ingress tunnel, so `make tunnel` is run from James's own shell the first time (`! make tunnel`), and the public `/health` and `/voice` results are pasted here with the hostname redacted.
 
+- **Tunnel started by the session, 2026-11-02 about 13:45 CT:** `cloudflared tunnel --url http://127.0.0.1:8000` as a background process, after James approved the command in permissions (it had been refused as an external ingress tunnel on 2026-11-01). The hostname is a random `trycloudflare.com` name that changes on every start, so it is set on the Twilio number by `make webhook URL=...` each build day and never written into this repository.
+
 ## Say it like this
 
 > (written after the teach-back)
