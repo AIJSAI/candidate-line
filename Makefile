@@ -2,9 +2,11 @@
 # exits non-zero, so no tool can read a stub as a pass, until its Sunday item replaces it.
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval gate trace text last
+.PHONY: help up down dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval gate trace text last
 
 help:
+	@echo "make up          a build day in one command: tunnel, line on the Identity Center profile, number re-pointed, health"
+	@echo "make down        stops what make up started"
 	@echo "make dev         the webhook on 127.0.0.1:8000, secrets from the login keychain"
 	@echo "make tunnel      a quick cloudflared tunnel to port 8000 (prints the public hostname)"
 	@echo "make webhook URL=https://host [PATH_=/incoming-call]   point the Twilio number at URL/voice (arm A) or URL/incoming-call (arm B)"
@@ -18,6 +20,12 @@ help:
 	@echo "make gate        the tests, the evals and the cost line; required before done"
 	@echo "make trace last  the latest call's spans, in the terminal"
 	@echo "make text        the line in text mode (BRAIN_PROVIDER / BEDROCK_MODEL_ID from the environment)"
+
+up:
+	scripts/up.sh
+
+down:
+	scripts/down.sh
 
 dev:
 	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run uvicorn candidate_line.telephony.app:app --host 127.0.0.1 --port 8000 --reload
