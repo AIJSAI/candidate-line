@@ -1,3 +1,29 @@
 # Candidate Line cards. Format, grading and spacing: docs/learn/README.md (the tutor skill's card format).
 # Ids are candidate-line-NNNN and never reused. Each teach-back's misses land here at box 1, due the next day.
-[]
+- id: candidate-line-0001
+  question: "Why does the brain sit behind one protocol chosen by an environment variable, and what triggered it?"
+  answer: "This account's Bedrock quota for Haiku 5.5 and Sonnet 5.5 was zero on 2026-11-01 and stayed zero after the increase cases closed, while Haiku 4.5 opened. Bedrock Converse and the Anthropic Messages API both return the same Reply, so the turn loop, the evals and the traces never know which ran. The switch rule in DR-003 is therefore one variable, decided Monday 18:00 CT."
+  say_it: "I put the model behind one interface so the provider is a config value, because the platform decision held but the account's quota did not."
+  ref: "candidate_line/brain/provider.py:139"
+  source: "receipt 2026-11-01"
+  box: 0
+  next_due: 2026-11-02
+  history: []
+- id: candidate-line-0002
+  question: "Where does barge-in happen, and what counts as barge-in today?"
+  answer: "In the media session's listener: a partial transcript with words while Gus is speaking sends a clear message, which empties Twilio's buffer, and sets a flag that drops the remaining sentences. Gus counts as speaking from the first media chunk until Twilio returns the last mark. Energy on the inbound audio was rejected because breath and line noise would fire it."
+  say_it: "Barge-in is a transcript event, not a volume event: words from the caller while Gus is talking clear Twilio's buffer and stop the rest of the reply."
+  ref: "candidate_line/telephony/media.py:97"
+  source: "receipt 2026-11-01"
+  box: 0
+  next_due: 2026-11-02
+  history: []
+- id: candidate-line-0003
+  question: "Why is the caller's number masked inside the trace store rather than at the webhook?"
+  answer: "The store is the only writer. start_call is the one function that accepts a number and it keeps the last four digits before the row is written, so no span can carry a number by accident. A span handed bytes is refused, so audio never lands in the store either."
+  say_it: "I mask at the single chokepoint that writes, because two writers each have to remember and one cannot forget."
+  ref: "candidate_line/traces/store.py:110"
+  source: "receipt 2026-11-01"
+  box: 0
+  next_due: 2026-11-02
+  history: []
