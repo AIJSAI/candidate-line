@@ -206,6 +206,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "smithy-http", extra = ["awscrt"] },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -225,6 +226,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "smithy-http", extras = ["awscrt"], specifier = ">=0.6.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "websockets", specifier = ">=17.4" },
 ]
 
 [package.metadata.requires-dev]

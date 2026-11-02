@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import logging
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +25,8 @@ from candidate_line.persona import ECHO_SYSTEM, GREETING
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
+
+log = logging.getLogger("candidate_line.app")
 
 HELLO_LINE = (
     "Thanks for calling the ACME candidate line. This is Gus. "
@@ -146,7 +149,17 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             stream_sid=stream_sid,
             greeting=deps.greeting,
         )
-        await session.run(incoming())
+        try:
+            await session.run(incoming())
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            log.exception("media session failed for %s", call_id)
+            raise
+        try:
+            await ws.close()  # a close frame after `stop`, so the other side sees an orderly end, not a reset
+        except (WebSocketDisconnect, RuntimeError):
+            pass
 
     return app
 

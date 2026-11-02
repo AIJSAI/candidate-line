@@ -10,6 +10,7 @@ here yet; they are added live, before the first tool (PREBUILT.md).
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
@@ -25,6 +26,7 @@ from candidate_line.telephony.audio import (
 from candidate_line.telephony.speech import Speaker, Transcriber
 from candidate_line.turn import TurnContext, run_turn
 
+log = logging.getLogger("candidate_line.media")
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 
@@ -75,19 +77,32 @@ class MediaSession:
                 elif event == "stop":
                     break
         finally:
+            # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
+            # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
             await self._transcriber.stop()
             for task in (listener, greeter):
-                if task is not None and not task.done():
+                if task is None:
+                    continue
+                try:
+                    await asyncio.wait_for(task, timeout=3.0)
+                except (TimeoutError, asyncio.CancelledError):
                     task.cancel()
-            await asyncio.gather(*(t for t in (listener, greeter) if t is not None), return_exceptions=True)
+                except Exception:
+                    log.exception("media session task failed for %s", self.ctx.call_id)
 
     async def _listen(self) -> None:
-        async for heard in self._transcriber.events():
-            if heard.is_partial:
-                if self.speaking and heard.text.strip():
-                    await self.barge_in()
-                continue
-            await self.handle_utterance(heard.text)
+        try:
+            async for heard in self._transcriber.events():
+                if heard.is_partial:
+                    if self.speaking and heard.text.strip():
+                        await self.barge_in()
+                    continue
+                await self.handle_utterance(heard.text)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("listening failed for %s", self.ctx.call_id)
+            raise
 
     async def handle_utterance(self, text: str) -> None:
         async with self._utterance_lock:

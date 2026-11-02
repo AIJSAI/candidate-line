@@ -2,13 +2,14 @@
 # exits non-zero, so no tool can read a stub as a pass, until its Sunday item replaces it.
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help dev tunnel webhook cockpit test secret eval gate trace text last
+.PHONY: help dev tunnel webhook cockpit probe test secret eval gate trace text last
 
 help:
 	@echo "make dev         the webhook on 127.0.0.1:8000, secrets from the login keychain"
 	@echo "make tunnel      a quick cloudflared tunnel to port 8000 (prints the public hostname)"
 	@echo "make webhook URL=https://host   point the Twilio number at URL/voice"
 	@echo "make cockpit     the recruiter's list of calls on 127.0.0.1:8001 (loopback only)"
+	@echo "make probe CASE=evals/cases/x.yaml [URL=ws://127.0.0.1:8000/media]   a synthetic candidate talks to the line as speech"
 	@echo "make test        pytest"
 	@echo "make secret NAME=VAR   store the clipboard as VAR in the login keychain, then clear it"
 	@echo "make eval        run the eval cases"
@@ -27,6 +28,9 @@ webhook:
 
 cockpit:
 	uv run uvicorn --factory candidate_line.traces.cockpit:app --host 127.0.0.1 --port 8001
+
+probe:
+	. scripts/env.sh && uv run python -m candidate_line.probe.direct --case "$(CASE)" --url "$(or $(URL),ws://127.0.0.1:8000/media)"
 
 test:
 	uv run pytest -q

@@ -145,7 +145,9 @@ class ScriptedTranscriber:
             yield item
 
     async def stop(self) -> None:
+        # Like the real stream: closing our side ends the events, so a listener drains instead of hanging.
         self.stopped = True
+        self._put(None)
 
 
 class FakeSpeaker:
