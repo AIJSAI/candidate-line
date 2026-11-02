@@ -40,6 +40,8 @@ The first real call (then the turn gap is measured from the recording, DR-001's 
 
 - **First real call, 2026-11-02, 15:17:52 to 15:18:21 CT (29 s by Twilio's call record).** James dialled the line's new number from his own phone. Twilio's signed `POST /voice` from one of its own addresses returned 200 (an unsigned test request two minutes earlier had returned 403, so the signature check was live for the real call); Twilio's media server opened the `/media` WebSocket; James's words: "i called and gus answered". The brain was Haiku 5.5 on the Anthropic API behind the cloudflared quick tunnel. What Gus heard and said on this call was not captured: the media session logs only exceptions and the per-turn spans are `prompts/03`'s work, so the line gained one INFO line per turn (heard, reply, brain and gap milliseconds) right after this call, and the second call carries the numbers.
 
+- **Second real call, 2026-11-02 about 15:21 CT: Gus repeated the caller word for word, and the barge-in worked.** James's report: "gus just repeats exactly what I say each time" and "I did a barge in too at the end and it cut off and listened". The echo was not the echo brain: the media path's dependencies defaulted the system prompt to the echo line (`Deps.system = ECHO_SYSTEM`, kept from the Sunday proof that ran with no model) while the brain was Haiku 5.5, which followed the instruction it was given. Fixed by defaulting to the same prompt text mode runs (`PLACEHOLDER_SYSTEM`). The per-turn log lines added after the first call also never printed: uvicorn configures only its own loggers, so the app now installs a root handler at INFO. Found by James's ear, which is the point of a real call.
+
 ## Say it like this
 
 > (written after the teach-back)

@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSoc
 
 from candidate_line.brain import Brain, make_brain
 from candidate_line.hooks import Hooks, NoHooks
-from candidate_line.persona import ECHO_SYSTEM, GREETING
+from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
@@ -65,7 +65,9 @@ class Deps:
     speaker: Callable[[], Speaker]
     brain: Callable[[], Brain]
     hooks: Callable[[], Hooks]
-    system: str = ECHO_SYSTEM
+    # The same prompt text mode runs; the echo brain ignores it, a real brain follows it (two real calls echoed the
+    # caller on 2026-11-02 because this defaulted to the echo line while the brain was Haiku 5.5).
+    system: str = PLACEHOLDER_SYSTEM
     greeting: str | None = GREETING
 
 
@@ -89,6 +91,10 @@ def public_url(request: Request, settings: Settings) -> str:
 def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None)
     deps = deps or default_deps(settings)
+    # uvicorn configures only its own loggers; without a root handler the line's per-turn INFO lines vanish.
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s %(message)s")
+    logging.getLogger("candidate_line").setLevel(logging.INFO)
 
     @app.get("/health")
     def health() -> dict[str, str]:
