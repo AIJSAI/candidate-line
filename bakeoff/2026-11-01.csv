@@ -2,3 +2,6 @@ arm,call,turn,method,gap_ms,caller_line,gus_reply,probe_hit,note
 B,s1-first-round:9585ff,1,recording,1660,"Hi, I got an invite. What should I expect in the first round?",,,"first dial run; probe clock lost to a server hang; channel 1 is the line (it spoke first), channel 2 the caller"
 B,s1-first-round:9585ff,2,recording,1380,Is there a coding exercise?,,,"first dial run; probe clock lost to a server hang; channel 1 is the line (it spoke first), channel 2 the caller"
 B,s1-first-round:9585ff,3,recording,1260,"Thanks, that is all.",,,"first dial run; probe clock lost to a server hang; channel 1 is the line (it spoke first), channel 2 the caller"
+B,s1-first-round:10d06c,1,recording,1420,"Hi, I got an invite. What should I expect in the first round?",,,"second dial run; probe clock lost to a cleanup hang; channel 1 is the line (it spoke first), channel 2 the caller"
+B,s1-first-round:10d06c,2,recording,1180,Is there a coding exercise?,,,"second dial run; probe clock lost to a cleanup hang; channel 1 is the line (it spoke first), channel 2 the caller"
+B,s1-first-round:10d06c,3,recording,1160,"Thanks, that is all.",,,"second dial run; probe clock lost to a cleanup hang; channel 1 is the line (it spoke first), channel 2 the caller"

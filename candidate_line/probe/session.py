@@ -141,18 +141,16 @@ class ProbeSession:
         finally:
             if keepalive is not None:
                 keepalive.cancel()
-            try:
-                # The CRT transport can hang a close after the far side has gone (seen 2026-11-02 in dial mode).
-                await asyncio.wait_for(self._transcriber.stop(), timeout=5.0)
-            except (TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
-                log.warning("the transcriber did not stop cleanly; moving on")
-            for task in (listener, talker):
-                try:
-                    await asyncio.wait_for(task, timeout=3.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    task.cancel()
-                except Exception:
-                    log.exception("probe task failed")
+            # The CRT transport can hang a close or a cancel after the far side has gone (2026-11-02, dial mode),
+            # so nothing here awaits a task that may be stuck: wait with a bound, cancel the rest, move on.
+            stopper = asyncio.ensure_future(self._transcriber.stop())
+            done, pending = await asyncio.wait({stopper, listener, talker}, timeout=5.0)
+            for task in pending:
+                task.cancel()
+                log.warning("probe task %s did not finish in 5 s; left cancelled", task.get_name())
+            for task in done:
+                if task is not stopper and not task.cancelled() and task.exception() is not None:
+                    log.error("probe task failed: %r", task.exception())
         return self.transcript
 
     async def _listen(self) -> None:

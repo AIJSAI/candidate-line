@@ -82,19 +82,17 @@ class MediaSession:
         finally:
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
-            try:
-                await asyncio.wait_for(self._transcriber.stop(), timeout=5.0)
-            except (TimeoutError, asyncio.CancelledError, Exception):  # noqa: BLE001
-                log.warning("the transcriber did not stop cleanly for %s; moving on", self.ctx.call_id)
-            for task in (listener, greeter):
-                if task is None:
-                    continue
-                try:
-                    await asyncio.wait_for(task, timeout=3.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    task.cancel()
-                except Exception:
-                    log.exception("media session task failed for %s", self.ctx.call_id)
+            # Same rule as the probe: the CRT transport can hang a close or a cancel after Twilio has gone, so wait
+            # with a bound, cancel what is left, and never await a task that may be stuck (2026-11-02).
+            stopper = asyncio.ensure_future(self._transcriber.stop())
+            tasks = {stopper, listener} | ({greeter} if greeter is not None else set())
+            done, pending = await asyncio.wait(tasks, timeout=5.0)
+            for task in pending:
+                task.cancel()
+                log.warning("media task did not finish in 5 s for %s; left cancelled", self.ctx.call_id)
+            for task in done:
+                if task is not stopper and not task.cancelled() and task.exception() is not None:
+                    log.error("media session task failed for %s: %r", self.ctx.call_id, task.exception())
 
     async def _listen(self) -> None:
         try:
