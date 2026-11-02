@@ -49,7 +49,11 @@ Facts read on 2026-10-31 by the plan's writers. Re-read each one, save a dated c
 | Nova 2 Sonic: end of life no sooner than Dec 2, 2026 | its model card |
 | Sonic sends its planned speech as `SPECULATIVE` text before the audio, then a `FINAL` transcript of what was actually spoken; an 8-minute session limit is documented for Nova 2 Sonic only | docs.aws.amazon.com/nova/latest/nova2-userguide/sonic-output-events.html; the Nova 2 Sonic guide |
 | Claude Haiku 5.5: launched Oct 7, 2026; no In-Region endpoint in us-east-1 or us-west-2, so it is reached through `us.anthropic.claude-haiku-5-5` or `global.anthropic.claude-haiku-5-5`; Messages, Converse and Invoke APIs; Guardrails, structured outputs and explicit prompt caching supported | docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-5-5.html |
-| Bedrock's Claude rates, Transcribe's per-minute rate, Polly's per-character rate and the Sonic rate | unread; read Sunday, dated, into `docs/refs/` |
+| Bedrock's Claude rates, Transcribe's per-minute rate, Polly's per-character rate and the Sonic rate | read 2026-11-01 into `docs/refs/` and quoted in DR-003's Evidence (first-party Claude rates, the AWS Price List API for Sonic, Transcribe and Polly) |
+
+## How the turn is measured, added 2026-11-01
+
+The method of record stays the recording. The probe caller (DR-011) measures the same gap in-process, from its last audio frame to Gus's first media byte, and three runs against the echo line put arm A's floor with no model at 740 to 780 ms median (two replies each). Both numbers go in the table, each with its method, and a disagreement between them is a finding.
 
 ## The measurement, Sunday 2026-11-01
 
