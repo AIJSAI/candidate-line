@@ -31,6 +31,8 @@ The tiers landing live (then the rule names which crossing calls `submit`, and t
 - `uv run pytest -q tests/test_escalation.py`, 2026-11-01: the message carries tier, reason, action and trace link; `submit` returns in under 50 ms and the worker posts and marks the row; a failing poster's error is recorded and not raised; a queue of one drops under four quick submits and counts; a missing `SLACK_WEBHOOK_URL` is refused at construction.
 - No live post yet: the webhook URL is James's to mint in his Slack workspace and store with `make secret NAME=SLACK_WEBHOOK_URL`; the first real post is pasted here with the channel name.
 
+- **The channel stayed open on 2026-11-02 (about 14:50 CT).** The session tried to stand up the Slack webhook under James's go-ahead: his Google sign-in to Slack with the work account lands only in another workspace, which is not a place for this line's hand-offs, and the one Slack login in his 1Password has no workspace URL and is due a review. No app and no webhook were created. The log poster carries the Tuesday drill; `prompts/06` asks James for the channel (Slack in a workspace he names, or a text through the line's own number once Twilio is live) before the tier code is written.
+
 ## Say it like this
 
 > (written after the teach-back)
