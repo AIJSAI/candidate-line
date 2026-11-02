@@ -24,7 +24,9 @@ class FakeBedrock:
     def converse(self, **kwargs: object) -> dict:
         self.calls.append(kwargs)
         return {
-            "output": {"message": {"role": "assistant", "content": [{"text": "Yes, "}, {"text": "Tuesday at ten."}]}},
+            "output": {
+                "message": {"role": "assistant", "content": [{"text": "Yes, "}, {"text": "Tuesday at ten."}]}
+            },
             "usage": {"inputTokens": 13, "outputTokens": 4},
         }
 

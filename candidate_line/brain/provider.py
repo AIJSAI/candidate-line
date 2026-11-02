@@ -52,7 +52,14 @@ class EchoBrain:
 
     def reply(self, system: str, messages: Sequence[Message], max_tokens: int = 200) -> Reply:
         last_user = next((m.text for m in reversed(messages) if m.role == "user"), "")
-        return Reply(text=last_user, input_tokens=0, output_tokens=0, latency_ms=0, provider=self.name, model=self.model)
+        return Reply(
+            text=last_user,
+            input_tokens=0,
+            output_tokens=0,
+            latency_ms=0,
+            provider=self.name,
+            model=self.model,
+        )
 
 
 class BedrockConverseBrain:
@@ -98,7 +105,9 @@ class AnthropicMessagesBrain:
 
     name = "anthropic"
 
-    def __init__(self, model_id: str, client: Any | None = None, request_overrides: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, model_id: str, client: Any | None = None, request_overrides: dict[str, Any] | None = None
+    ) -> None:
         self.model = model_id
         if client is None:
             import anthropic
