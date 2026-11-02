@@ -59,12 +59,20 @@ The method of record stays the recording. The probe caller (DR-011) measures the
 
 | Measure | Arm A | Arm B | Rule |
 | - | - | - | - |
-| Probe lines spoken, in ten probe calls | | | (a): B must be zero |
-| Median turn in ms (n turns, from five scripted calls) | | | (b): B at least 500 ms faster |
-| Cost per five-minute call, with each rate's read date | | | (c): B within 2x |
-| Verdict | | | |
+| Probe lines spoken, in ten probe calls | 0, checked over everything Gus said (36 lines across the ten calls) | 0, checked the same way (41 lines) | (a): B must be zero: **holds** |
+| Median turn in ms, recording method (n turns, calls) | 2,060 (worst 2,640; n = 23 turns, 16 calls) | 1,360 (worst 1,660; n = 41 turns, 19 calls) | (b): B at least 500 ms faster: **holds, by 700 ms** |
+| Median turn in ms, the probe's own clock (both phone legs included) | 1,905 (n = 25; 21 turns unanswered inside 6 s, the probe's ears failed on arm A) | 1,236 (n = 44) | the second clock agrees: 669 ms |
+| Cost per five-minute call, with each rate's read date | about 0.18 USD: Transcribe 0.05 (0.01/min, read 11-01), Polly 0.08 (5,200 characters at 16 USD/M, 192 characters a reply and 27 turns scaled from today's 3.7 turns per 40 s call), Haiku 5.5 0.003 (900 in and 60 out a turn at 0.10/0.50 per M), Twilio 0.04 (0.0085/min) | **not yet measurable**: 21 Nova 2.5 Sonic invocations show in CloudWatch today with no token counts, the sample logs none, and the rate is per speech token (0.003 in, 0.012 out per 1,000, read 11-01); the token count comes from Cost Explorer on 11-03 | (c): B within 2x: **pending** |
+| Scenario checks passed (five scenarios, regex on the recording's words) | 2 of 5 (s3, s4, s5 failed on reply-to-turn alignment of the recording's finals, not on wrong answers; read in DR-011) | 4 of 5 (s4: offered a callback instead of naming the coordinator, a real persona miss) | not a rule; context |
+| Verdict | | | **(a) and (b) hold for B on 2026-11-02; (c) is open until the token count lands. The rule has not fully fired. James decides on 11-03, with (c) in hand, whether the pre-written consequence (Sonic in front, every action and answer behind a tool, the boundary held in code) replaces the Wednesday build; the session's pick is below.** |
 
-Raw rows: `bakeoff/2026-11-01.csv`.
+Raw rows: `bakeoff/2026-11-01.csv` (the earlier test calls are in it too, under their own call ids).
+
+**How the numbers were made, 2026-11-02, 17:35 to 17:56 CT.** The probe caller (DR-011) dialled the line's number from its own number for each of the fifteen cases in `bakeoff/cases/`, first with the number pointed at arm A, then at arm B; both arms ran `bakeoff/persona.md` (arm A through `SYSTEM_PROMPT_FILE`, arm B as the sample's `SYSTEM_PROMPT`), the same Polly voice spoke the same lines through the phone network, every call was recorded dual-channel on Twilio, the gap was read from the recording by energy (`candidate_line/probe/recording.py`, speech above an RMS of 500, a 300 ms hangover), the words were read from the recording's line channel when the probe's ears failed, and each recording was deleted from Twilio once its rows were in the CSV. Twilio's balance went from 20.00 to 18.62 USD over 42 inbound calls (28 minutes) and two numbers.
+
+**What the numbers do not say.** One evening, one persona, one voice. Arm A's replies ran long (192 characters a reply against the persona's one or two sentences), and its median moves with reply length (DR-003); a brevity rule in the live persona is the first thing to try before conceding 700 ms. Arm B's median is also the median of a model that cannot be checked before it speaks: on s4 it answered with a callback where the persona says the coordinator, and nothing in B could have caught a worse sentence. The ten probes were clean on both arms tonight; the guard exists for the eleventh.
+
+**The session's pick, for James to take or refuse:** keep arm A as the Wednesday build. The rule's consequence was written for a Sunday result with two days to rebuild; it is now Monday night, the seven cards are written for A's hooks, and the room's thesis is the sentence check. Say B's result aloud in the first five minutes as the measured finding it is (700 ms faster by the recording, clean on the ten probes), run B as the second phone on the table, and let the room hear both. If James takes the rule's letter instead, Tuesday becomes the Sonic-in-front build and this record is superseded.
 
 - **First real-call numbers for arm A, 2026-11-02 15:34 CT (DR-006):** gap from final transcript to first reply byte, by the line's own log, n = 4 turns in one call: median 1098 ms, worst 1405 ms, with Haiku 5.5 on the Anthropic API and the placeholder prompt; one barge-in, clean. Inside the 2,000 ms budget. Not yet the recording method, not yet five scripted calls, not yet arm B.
 
