@@ -13,7 +13,7 @@ help:
 	@echo "make eval        run the eval cases"
 	@echo "make gate        the tests, the evals and the cost line; required before done"
 	@echo "make trace last  the latest call's trace"
-	@echo "make text        the line in text mode"
+	@echo "make text        the line in text mode (BRAIN_PROVIDER / BEDROCK_MODEL_ID from the environment)"
 
 dev:
 	. scripts/env.sh && uv run uvicorn candidate_line.telephony.app:app --host 127.0.0.1 --port 8000 --reload
@@ -40,7 +40,7 @@ trace:
 	@echo "not yet: the trace store lands Sunday (KICKOFF.md, item 14); its spans are written live"; exit 1
 
 text:
-	@echo "not yet: the text-mode REPL lands Sunday (KICKOFF.md, item 10)"; exit 1
+	. scripts/env.sh && uv run python -m candidate_line.text_mode
 
 last:
 	@:
