@@ -16,7 +16,8 @@ DOC_SIGNATURE = "L/OH5YylLD5NRKLltdqwSvS0BnU="
 
 
 def client(**env: str) -> TestClient:
-    return TestClient(create_app(Settings.from_env(env)))
+    # An in-memory store, so make test never writes a call into the room's var/traces.sqlite (the dry run of card 07).
+    return TestClient(create_app(Settings.from_env({"TRACE_STORE_PATH": ":memory:", **env})))
 
 
 def test_signature_matches_twilios_documented_example() -> None:

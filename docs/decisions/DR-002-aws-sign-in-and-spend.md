@@ -19,7 +19,7 @@ IAM Identity Center, as an organization instance in us-east-1. The account was s
 
 The IAM user's access key in the local credentials file (details removed) is deactivated the moment the new profile passes `aws sts get-caller-identity`, and deleted on Tuesday 2026-11-03 if nothing on this Mac has asked for it. Deactivation is reversible; deletion is not.
 
-The budget alarm: (item 2, pending) an AWS Budgets monthly cost budget with notifications on actual and forecast spend to an email alert channel. The cap is James's money call and is recorded here once set, never the address.
+The budget alarm: an AWS Budgets monthly cost budget, `candidate-line-monthly-50usd`, 50 USD a month (read back with `aws budgets describe-budgets` from the builder profile on 2026-11-02 evening, after the dry run of card 07 found this line still said "pending"), with notifications on actual and forecast spend to an email alert channel; never the address here. The same figure caps the Anthropic workspace (DR-003), so the scorecard quotes 50 and 50.
 
 ## The alternative rejected, and why
 

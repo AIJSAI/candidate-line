@@ -22,6 +22,14 @@ def rate_for(model: str) -> tuple[float, float] | None:
     return None
 
 
+# The speech path and the phone, USD, as DR-001's cost row recorded them from the pages saved 2026-11-01: Transcribe
+# streaming per minute of audio, Polly neural per million characters, Twilio inbound per minute. The scorecard
+# (card 07) prices the speech spans with these; the brain's turns are priced above.
+SPEECH_RATES_USD: dict[str, float] = {
+    "transcribe_per_minute": 0.01,
+    "polly_neural_per_million_chars": 16.00,
+    "twilio_inbound_per_minute": 0.0085,
+}
 CACHE_READ_FACTOR = 0.10
 CACHE_WRITE_FACTOR = 1.25
 

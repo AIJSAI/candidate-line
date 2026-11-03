@@ -154,9 +154,17 @@ def test_voice_answers_the_stream_verb_in_stream_mode_and_fails_closed_without_a
         )
     )
     assert "<Connect><Stream" in streaming.post("/voice", data={"CallSid": "CA1"}).text
-    no_host = TestClient(create_app(Settings.from_env({"ALLOW_UNSIGNED_WEBHOOKS": "1"})))
+    no_host = TestClient(
+        create_app(Settings.from_env({"ALLOW_UNSIGNED_WEBHOOKS": "1", "TRACE_STORE_PATH": ":memory:"}))
+    )
     assert no_host.post("/voice", data={"CallSid": "CA1"}).status_code == 503
-    saying = TestClient(create_app(Settings.from_env({"ALLOW_UNSIGNED_WEBHOOKS": "1", "VOICE_MODE": "say"})))
+    saying = TestClient(
+        create_app(
+            Settings.from_env(
+                {"ALLOW_UNSIGNED_WEBHOOKS": "1", "VOICE_MODE": "say", "TRACE_STORE_PATH": ":memory:"}
+            )
+        )
+    )
     assert "<Say" in saying.post("/voice", data={"CallSid": "CA1"}).text
 
 
