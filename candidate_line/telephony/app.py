@@ -8,11 +8,13 @@ in the environment the webhook answers 503 unless ALLOW_UNSIGNED_WEBHOOKS=1, whi
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import logging
 from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 from xml.sax.saxutils import escape
@@ -98,8 +100,17 @@ def public_url(request: Request, settings: Settings) -> str:
 
 
 def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
-    app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None)
     deps = deps or default_deps(settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        # A hand-off still queued when the process stops would die with the daemon worker (DR-013). Text mode
+        # and the eval runner drain before they exit; the phone, which `make restart` stops mid-day, does too.
+        if deps.escalations is not None:
+            await asyncio.to_thread(deps.escalations.drain, 5.0)
+
+    app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     # uvicorn configures only its own loggers; without a root handler the line's per-turn INFO lines vanish.
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:     %(name)s %(message)s")

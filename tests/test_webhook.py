@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
+from candidate_line.hooks import default_hooks
 from candidate_line.settings import Settings
-from candidate_line.telephony.app import HELLO_LINE, create_app, twilio_signature
+from candidate_line.telephony.app import HELLO_LINE, Deps, create_app, twilio_signature
 
 # Twilio's documented example (security page, read 2026-11-01): auth token 12345, this URL and these fields.
 DOC_URL = "https://example.com/myapp.php?foo=1&bar=2"
@@ -52,3 +53,24 @@ def test_voice_refuses_a_wrong_signature() -> None:
     assert c.post("/voice", data=DOC_FORM, headers={"X-Twilio-Signature": DOC_SIGNATURE}).status_code == 403
     assert c.post("/voice", data=DOC_FORM).status_code == 403
     assert HELLO_LINE not in c.post("/voice", data=DOC_FORM).text
+
+
+def test_the_phone_drains_its_hand_off_queue_when_it_stops() -> None:
+    class Drained:
+        def __init__(self) -> None:
+            self.timeouts: list[float] = []
+
+        def drain(self, timeout: float = 5.0) -> None:
+            self.timeouts.append(timeout)
+
+    queue = Drained()
+    deps = Deps(
+        transcriber=lambda: None,  # type: ignore[return-value]
+        speaker=lambda: None,  # type: ignore[return-value]
+        brain=lambda: None,  # type: ignore[return-value]
+        hooks=default_hooks,
+        escalations=queue,  # type: ignore[arg-type]
+    )
+    with TestClient(create_app(Settings.from_env({"TRACE_STORE_PATH": ":memory:"}), deps)):
+        pass
+    assert queue.timeouts == [5.0]
