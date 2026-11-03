@@ -33,6 +33,10 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 2. How Gus names a cited section aloud: by its id ("F3.2") or by its title.
 3. Whether a booking tool writes to `data/slots.yaml` on disk or to an in-memory copy reset per run.
 
+## Notes from the bake-off, 2026-11-02 (DR-001, DR-003)
+
+- The bake-off persona already says "one or two short sentences"; arm A's replies still ran 192 characters a reply (about 45 tokens) and the recording's median turn was 2,060 ms. DR-003 measured 901 ms at a 60-token cap. The brevity rule is a latency decision: set the reply cap beside the persona (`run_turn`'s `max_tokens`, 200 today) and read `make eval`'s latency column before and after.
+
 ## Files this card may touch
 
 `candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the `on_tool` body only), `candidate_line/turn.py` (the tool loop only), `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
