@@ -196,4 +196,9 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     return app
 
 
-app = create_app(Settings.from_env())
+def __getattr__(name: str) -> Any:
+    # `uvicorn candidate_line.telephony.app:app` asks for `app` once. Building it here and not at import keeps a
+    # test or a tool that merely imports this module from opening the room's store (card 03's dry run, 2026-11-03).
+    if name == "app":
+        return create_app(Settings.from_env())
+    raise AttributeError(name)
