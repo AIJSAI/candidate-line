@@ -5,6 +5,9 @@ from candidate_line.brain.provider import (
     EchoBrain,
     Message,
     Reply,
+    ToolCall,
+    ToolResult,
+    ToolSpec,
     make_brain,
 )
 
@@ -15,5 +18,8 @@ __all__ = [
     "EchoBrain",
     "Message",
     "Reply",
+    "ToolCall",
+    "ToolResult",
+    "ToolSpec",
     "make_brain",
 ]

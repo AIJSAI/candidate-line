@@ -5,7 +5,7 @@ Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md`, `candidate_line/hooks.py`, `candidate_line/turn.py`, `candidate_line/brain/provider.py`, `candidate_line/persona.py` and `data/`. Implement one tool per May and Must-ask-first line in `spec.md`, each a typed Python function over the files in `data/`, observed through `LineHooks.on_tool`, with the Must-ask-first tools returning a "needs a person" result instead of acting. The tool loop in `turn.py` fills `TurnResult.tools_called`, `cited` and `state`, which the eval checks read. Write the persona's system prompt as `SYSTEM_PROMPT` in `candidate_line/persona.py` from the brief below, with the cite-or-refuse rule inside it. Run `make eval` and show me the cases that moved. Touch only the files named below.
+> Read `AGENTS.md`, `spec.md`, `candidate_line/hooks.py`, `candidate_line/turn.py`, `candidate_line/brain/provider.py`, `candidate_line/persona.py` and `data/`. Implement one tool per May and Must-ask-first line in `spec.md`, each a typed Python function over the files in `data/` with a `ToolSpec` (name, one line, JSON Schema) the model reads, observed through `LineHooks.on_tool`, with the Must-ask-first tools returning a "needs a person" result instead of acting. The brain already speaks the tool channel natively on both providers (`Brain.reply(..., tools=...)` returns `Reply.tool_calls`; an assistant `Message` carries its `tool_calls`, a `tool` message carries their `ToolResult`s; DR-003): write the loop in `run_turn` (while the reply carries tool calls, run them, append the assistant message and the tool-results message, call the brain again), never a text protocol. The loop fills `TurnResult.tools_called`, `cited` and `state`, which the eval checks read; `ctx.data` is the per-call scratch (the verified candidate, the in-memory slots). Write the persona's system prompt as `SYSTEM_PROMPT` in `candidate_line/persona.py` from the brief below, with the cite-or-refuse rule inside it. Run `make eval` and show me the cases that moved. Touch only the files named below.
 
 ## The persona brief (Gus)
 
@@ -13,7 +13,7 @@ Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and
 - Never evaluates a person, a take-home, an interview or a chance. The refusal line comes from `spec.md`.
 - Answers process questions only from the FAQ sections the retrieval step hands it, and says the section it used in plain words ("that is in the scheduling section"); otherwise the refusal line. Never from memory.
 - Confirms a code by reading it back as digits, because the transcriber hears digits as numbers with commas and "code" as "coat" (DR-006); never reads a PIN back (it says the PIN was received), since a spoken PIN on a phone is a Never line in most specs.
-- Says what it is doing before a tool runs when the tool takes a moment, and says what it did after.
+- Says what it did after a tool ran. A holding line before a slow tool is voice-path work for a later card, because `run_turn` returns one reply after the tools have run.
 
 ## The tools (shape, not function)
 
@@ -23,7 +23,7 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 
 - Every May line has a tool; every Must-ask-first line has a tool that returns a hand-off, never an action.
 - The persona prompt is under 300 words, holds the Never list verbatim from `spec.md`, and the brevity rule.
-- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, measured with `make eval`'s latency column.
+- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, measured with `make eval`'s brain-latency line (text mode: the brain only; the phone adds the speech hops). A tool turn is two model calls; the reply cap and the prompt's size are the levers.
 - The `cites` checks in `evals/` pass for the cases where the answer exists, and the refusal cases pass where it does not.
 - `make gate` passes.
 
@@ -31,11 +31,13 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 
 1. Retrieval: whole FAQ in the prompt (1,100 words, cheap and simple) or a section lookup by keyword first (smaller prompt, one more place to be wrong). Ask him; the default is whole FAQ until a measurement says otherwise.
 2. How Gus names a cited section aloud: by its id ("F3.2") or by its title.
-3. Whether a booking tool writes to `data/slots.yaml` on disk or to an in-memory copy reset per run.
+3. Whether a booking tool writes to `data/slots.yaml` on disk or to an in-memory copy reset per call.
+4. Whether a booking is written when the tool runs or only after the caller confirms it out loud. A turn can be superseded before Gus speaks (DR-006) and its tools have already run by then; the default is after the confirmation, so a superseded turn books nothing.
 
 ## Notes from the bake-off, 2026-11-02 (DR-001, DR-003)
 
-- The bake-off persona already says "one or two short sentences"; arm A's replies still ran 192 characters a reply (about 45 tokens) and the recording's median turn was 2,060 ms. DR-003 measured 901 ms at a 60-token cap. The brevity rule is a latency decision: set the reply cap beside the persona (`run_turn`'s `max_tokens`, 200 today) and read `make eval`'s latency column before and after.
+- The bake-off persona already says "one or two short sentences"; arm A's replies still ran 192 characters a reply (about 45 tokens) and the recording's median turn was 2,060 ms. DR-003 measured 901 ms at a 60-token cap. The brevity rule is a latency decision: set the reply cap beside the persona (`REPLY_MAX_TOKENS` in `persona.py`, 200 today) and read `make eval`'s brain-latency line before and after.
+- The dry run of this card (2026-11-02) on a text protocol took 23 minutes, made two to four model calls a tool turn at about 3,000 input tokens each with the whole FAQ in the prompt (cost per eval run up 13 times), measured a 2,316 ms median brain time on the happy paths, and once spoke a caller's PIN when its parser missed. The native channel removes the parser; the Anthropic brain marks the system prompt for the prompt cache (`cache_control`), and the cost line shows cached input tokens once the prompt is past the model's minimum cacheable size; the FAQ's size and the reply cap are the levers that remain.
 
 ## Files this card may touch
 

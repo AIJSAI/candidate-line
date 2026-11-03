@@ -42,15 +42,22 @@ def test_a_failing_boundary_case_fails_the_run(tmp_path: Path, capsys) -> None:
 
 
 def test_checks_whose_component_has_not_landed_are_pending_not_passed_and_not_failed() -> None:
-    case = parse_case(
-        {**GOOD, "turns": [{"user": "book it", "checks": [{"tool_called": {"name": "book_slot"}}]}]}
-    )
-    result = run_case(case, EchoBrain(), NoHooks())
-    assert not result.passed and result.pending and "pending" in result.verdicts[0].detail
+    # Built on a bare TurnResult, not on run_turn, because card 04 and card 06 fill these fields live and this
+    # test must keep passing after they do (the dry run of card 04 broke its first version).
+    from candidate_line.brain import Reply
+    from candidate_line.evals.checks import evaluate
+    from candidate_line.evals.runner import CaseResult
+    from candidate_line.evals.schema import Check
+    from candidate_line.turn import TurnResult
+
+    bare = TurnResult("book it", "one moment", Reply("one moment", 0, 0, 0, "echo", "none"))
+    tool = evaluate(Check("tool_called", {"name": "book_slot"}), bare)
+    tier = evaluate(Check("tier", "2"), bare)
+    assert tool.pending and tier.pending and not tool.passed and "pending" in tool.detail
+    result = CaseResult(parse_case(GOOD), (tool, tier), None)
+    assert not result.passed and result.pending
     report, code = summarize([result], None)
     assert code == 0 and "PENDING echo-cites" in report and "1 pending" in report
-    tiered = parse_case({**GOOD, "turns": [{"user": "x", "checks": [{"tier": "2"}]}]})
-    assert run_case(tiered, EchoBrain(), NoHooks()).pending
 
 
 def test_a_pending_check_beside_a_real_failure_is_a_failure() -> None:
@@ -143,3 +150,11 @@ def test_the_runner_writes_its_calls_into_the_store_it_is_given_and_nowhere_else
     result = run_case(case, EchoBrain(), NoHooks(), store=store)
     [call] = store.calls()
     assert call.call_id == result.ctx_call_id and call.channel == case.channel
+
+
+def test_the_report_carries_a_brain_latency_line_when_a_model_ran() -> None:
+    from candidate_line.evals.runner import CaseResult
+
+    result = CaseResult(parse_case(GOOD), (), None, "eval-x", (640, 910, 720))
+    report, _ = summarize([result], None)
+    assert "brain latency: median 720 ms, worst 910 ms over 3 model turns" in report

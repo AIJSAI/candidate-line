@@ -205,6 +205,7 @@ class MediaSession:
             if self._turn_started is None:
                 self._turn_started = time.perf_counter()
             self._thinking, self._superseded = True, False
+            history_before = len(self.ctx.history)  # a turn may append more than two messages once tools run
             try:
                 result = await asyncio.to_thread(run_turn, self._brain, self._hooks, self.ctx, text)
             finally:
@@ -213,7 +214,7 @@ class MediaSession:
                 # The caller kept talking while this reply was being made: the reply is never spoken, the turn's
                 # two messages come off the history, and its words lead the next turn, so one whole question is
                 # answered once. The turn's clock keeps running from the first final.
-                del self.ctx.history[-2:]
+                del self.ctx.history[history_before:]
                 self._carry = text
                 self.superseded += 1
                 log.info("turn superseded %s heard=%r (the caller kept talking)", self.ctx.call_id, text)

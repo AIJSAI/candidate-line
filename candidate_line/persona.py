@@ -11,6 +11,10 @@ PLACEHOLDER_SYSTEM = (
 # through Settings.system_prompt(), which prefers SYSTEM_PROMPT_FILE when that is set (the bake-off, DR-001).
 SYSTEM_PROMPT = PLACEHOLDER_SYSTEM
 
+# The reply cap the turn loop uses. Output tokens set the turn's latency (DR-003: 901 ms median at 60 tokens, over
+# a second at 120); card 04 lowers this beside the persona it writes, and the eval run's latency line shows it.
+REPLY_MAX_TOKENS = 200
+
 GREETING = "ACME candidate line, this is Gus."
 
 # Arm A before Wednesday: the model repeats the caller, so the audio path is proven with nothing deciding anything.

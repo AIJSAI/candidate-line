@@ -14,13 +14,45 @@ from typing import Any, Literal, Protocol
 
 from candidate_line.settings import Settings
 
-Role = Literal["user", "assistant"]
+Role = Literal["user", "assistant", "tool"]
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """What the model is told about one tool: its name, the one line it reads, and the JSON Schema of its input.
+    Card 04 declares one per May and Must-ask-first line; the providers render it in their own shape."""
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """The model asked for a tool. The id goes back with the result so the model can match them."""
+
+    id: str
+    name: str
+    args: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    call_id: str
+    content: str  # what the model reads back: JSON or a sentence, never audio, never a secret
+    is_error: bool = False
 
 
 @dataclass(frozen=True)
 class Message:
+    """One turn of the conversation. An assistant message may carry the tool calls it made; a "tool" message
+    carries their results (rendered as a user turn by both APIs). Tool calls never travel as text, so a parser
+    can never mistake one for speech (the dry run of card 04 on a text protocol read a caller's PIN aloud)."""
+
     role: Role
-    text: str
+    text: str = ""
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_results: tuple[ToolResult, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -31,13 +63,18 @@ class Reply:
     latency_ms: int
     provider: str
     model: str
+    tool_calls: tuple[ToolCall, ...] = ()  # non-empty means the turn is not over: run them and call again
+    stop_reason: str = "end_turn"
+    cached_input_tokens: int = 0  # input tokens served from the prompt cache (the Anthropic API reports them)
 
 
 class Brain(Protocol):
     name: str
     model: str
 
-    def reply(self, system: str, messages: Sequence[Message], max_tokens: int = 200) -> Reply: ...
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply: ...
 
 
 def _elapsed_ms(start: float) -> int:
@@ -50,7 +87,9 @@ class EchoBrain:
     name = "echo"
     model = "echo"
 
-    def reply(self, system: str, messages: Sequence[Message], max_tokens: int = 200) -> Reply:
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply:
         last_user = next((m.text for m in reversed(messages) if m.role == "user"), "")
         return Reply(
             text=last_user,
@@ -75,15 +114,41 @@ class BedrockConverseBrain:
             client = boto3.client("bedrock-runtime", region_name=region)
         self._client = client
 
-    def reply(self, system: str, messages: Sequence[Message], max_tokens: int = 200) -> Reply:
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply:
         start = time.perf_counter()
-        response = self._client.converse(
-            modelId=self.model,
-            system=[{"text": system}],
-            messages=[{"role": m.role, "content": [{"text": m.text}]} for m in messages],
-            inferenceConfig={"maxTokens": max_tokens},
+        request: dict[str, Any] = {
+            "modelId": self.model,
+            "system": [{"text": system}],
+            "messages": _converse_messages(messages),
+            "inferenceConfig": {"maxTokens": max_tokens},
+        }
+        if tools:
+            request["toolConfig"] = {
+                "tools": [
+                    {
+                        "toolSpec": {
+                            "name": t.name,
+                            "description": t.description,
+                            "inputSchema": {"json": t.input_schema},
+                        }
+                    }
+                    for t in tools
+                ]
+            }
+        response = self._client.converse(**request)
+        blocks = response["output"]["message"]["content"]
+        text = "".join(block.get("text", "") for block in blocks)
+        calls = tuple(
+            ToolCall(
+                id=str(b["toolUse"]["toolUseId"]),
+                name=str(b["toolUse"]["name"]),
+                args=dict(b["toolUse"].get("input") or {}),
+            )
+            for b in blocks
+            if "toolUse" in b
         )
-        text = "".join(block.get("text", "") for block in response["output"]["message"]["content"])
         usage = response["usage"]
         return Reply(
             text=text,
@@ -92,7 +157,36 @@ class BedrockConverseBrain:
             latency_ms=_elapsed_ms(start),
             provider=self.name,
             model=self.model,
+            tool_calls=calls,
+            stop_reason=str(response.get("stopReason", "end_turn")),
         )
+
+
+def _converse_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    """The Converse API's shape: a tool result is a user turn of toolResult blocks; a call is a toolUse block."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if m.role == "tool":
+            out.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "toolResult": {
+                                "toolUseId": r.call_id,
+                                "content": [{"text": r.content}],
+                                **({"status": "error"} if r.is_error else {}),
+                            }
+                        }
+                        for r in m.tool_results
+                    ],
+                }
+            )
+            continue
+        content: list[dict[str, Any]] = [{"text": m.text}] if m.text else []
+        content += [{"toolUse": {"toolUseId": c.id, "name": c.name, "input": c.args}} for c in m.tool_calls]
+        out.append({"role": m.role, "content": content})
+    return out
 
 
 # Haiku 5.5 thinks by default (its model card). A caller is waiting, so the live turn asks for no thinking and
@@ -116,16 +210,33 @@ class AnthropicMessagesBrain:
         self._client = client
         self._overrides = LOW_LATENCY_REQUEST if request_overrides is None else request_overrides
 
-    def reply(self, system: str, messages: Sequence[Message], max_tokens: int = 200) -> Reply:
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply:
         start = time.perf_counter()
-        response = self._client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": m.role, "content": m.text} for m in messages],
+        request: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            # The system prompt is marked for the prompt cache: the persona and the FAQ are the same on every turn
+            # of every call, and a tool turn resends them. Below the model's minimum cacheable size the mark is a
+            # no-op; above it the usage reports cached input tokens, which the cost line carries.
+            "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            "messages": _anthropic_messages(messages),
             **self._overrides,
+        }
+        if tools:
+            request["tools"] = [
+                {"name": t.name, "description": t.description, "input_schema": t.input_schema} for t in tools
+            ]
+        response = self._client.messages.create(**request)
+        text = "".join(
+            getattr(block, "text", "") for block in response.content if _block_type(block) == "text"
         )
-        text = "".join(getattr(block, "text", "") for block in response.content)
+        calls = tuple(
+            ToolCall(id=str(block.id), name=str(block.name), args=dict(block.input or {}))
+            for block in response.content
+            if _block_type(block) == "tool_use"
+        )
         return Reply(
             text=text,
             input_tokens=int(response.usage.input_tokens),
@@ -133,7 +244,44 @@ class AnthropicMessagesBrain:
             latency_ms=_elapsed_ms(start),
             provider=self.name,
             model=self.model,
+            tool_calls=calls,
+            stop_reason=str(getattr(response, "stop_reason", None) or "end_turn"),
+            cached_input_tokens=int(getattr(response.usage, "cache_read_input_tokens", None) or 0),
         )
+
+
+def _block_type(block: Any) -> str:
+    return str(getattr(block, "type", "text"))
+
+
+def _anthropic_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    """The Messages API's shape: a tool result is a user turn of tool_result blocks; a call is a tool_use block."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if m.role == "tool":
+            out.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": r.call_id,
+                            "content": r.content,
+                            **({"is_error": True} if r.is_error else {}),
+                        }
+                        for r in m.tool_results
+                    ],
+                }
+            )
+        elif m.tool_calls:
+            content: list[dict[str, Any]] = [{"type": "text", "text": m.text}] if m.text else []
+            content += [
+                {"type": "tool_use", "id": c.id, "name": c.name, "input": c.args} for c in m.tool_calls
+            ]
+            out.append({"role": "assistant", "content": content})
+        else:
+            out.append({"role": m.role, "content": m.text})
+    return out
 
 
 def make_brain(settings: Settings) -> Brain:

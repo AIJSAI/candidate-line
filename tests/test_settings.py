@@ -22,14 +22,14 @@ def test_empty_secret_reads_as_absent() -> None:
     assert Settings.from_env({"TWILIO_AUTH_TOKEN": ""}).twilio_auth_token is None
 
 
-def test_system_prompt_comes_from_the_named_file_or_the_placeholder(tmp_path) -> None:
-    from candidate_line.persona import PLACEHOLDER_SYSTEM
+def test_system_prompt_comes_from_the_named_file_or_the_persona(tmp_path) -> None:
+    from candidate_line import persona
 
-    persona = tmp_path / "persona.md"
-    persona.write_text("You are Gus. One sentence.\n", encoding="utf-8")
-    with_file = Settings.from_env({"SYSTEM_PROMPT_FILE": str(persona)})
-    assert with_file.system_prompt() == "You are Gus. One sentence."
-    assert Settings.from_env({}).system_prompt() == PLACEHOLDER_SYSTEM
+    f = tmp_path / "p.md"
+    f.write_text("You are a test persona.\n")
+    assert Settings.from_env({"SYSTEM_PROMPT_FILE": str(f)}).system_prompt() == "You are a test persona."
+    # The fallback is whatever persona.py holds (the placeholder until card 04 writes Gus), never a fixed text.
+    assert Settings.from_env({}).system_prompt() == persona.SYSTEM_PROMPT
 
 
 def test_log_level_defaults_to_info_and_refuses_nonsense() -> None:

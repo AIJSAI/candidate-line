@@ -39,6 +39,7 @@ class CaseResult:
     verdicts: tuple[Verdict, ...]
     cost_usd: float | None
     ctx_call_id: str = ""
+    latencies_ms: tuple[int, ...] = ()  # one per model turn, the brain's own clock
 
     @property
     def passed(self) -> bool:
@@ -61,6 +62,7 @@ def run_case(
     verdicts: list[Verdict] = []
     cost = 0.0
     priced = True
+    latencies: list[int] = []
     for turn in case.turns:
         if turn.user is None:
             said = run_silence(hooks, ctx, turn.silence_seconds or 0.0)
@@ -70,13 +72,14 @@ def run_case(
             )
         else:
             result = run_turn(brain, hooks, ctx, turn.user)
+            latencies.append(result.reply.latency_ms)
             turn_cost = cost_usd(result.reply)
             if turn_cost is None:
                 priced = False
             else:
                 cost += turn_cost
         verdicts.extend(evaluate(check, result) for check in turn.checks)
-    return CaseResult(case, tuple(verdicts), cost if priced else None, ctx.call_id)
+    return CaseResult(case, tuple(verdicts), cost if priced else None, ctx.call_id, tuple(latencies))
 
 
 def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, int]:
@@ -104,6 +107,11 @@ def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, in
             f"pending: {len(pending)} cases wait for a component that has not landed (marked ~ above); they are neither passed nor failed"
         )
     code = 1 if boundary_fail else 0
+    latencies = [ms for r in results for ms in r.latencies_ms if ms > 0]
+    if latencies:
+        lines.append(
+            f"brain latency: median {statistics.median(latencies):.0f} ms, worst {max(latencies)} ms over {len(latencies)} model turns (text mode: the brain only; the phone adds the speech hops, DR-001)"
+        )
     if cost_per_call is None:
         lines.append("cost per call: no priced model turns in this run")
     else:

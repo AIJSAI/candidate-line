@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from candidate_line.brain import Brain, Message, Reply
 from candidate_line.hooks import Hooks
+from candidate_line.persona import REPLY_MAX_TOKENS
 from candidate_line.traces.store import TraceStore
 
 Channel = Literal["voice", "text"]
@@ -29,6 +30,9 @@ class TurnContext:
     # starts and ends the call: the phone and text mode on the room's store, the eval runner on its own file, a
     # unit test on ":memory:" or None. None means no tracing.
     store: TraceStore | None = field(default=None, repr=False, compare=False)
+    # Per-call scratch for the components the room builds: the verified candidate, the in-memory slots, the
+    # tier so far. Nothing here outlives the call.
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -46,12 +50,16 @@ class TurnResult:
 
 
 def run_turn(
-    brain: Brain, hooks: Hooks, ctx: TurnContext, user_text: str, max_tokens: int = 200
+    brain: Brain, hooks: Hooks, ctx: TurnContext, user_text: str, max_tokens: int | None = None
 ) -> TurnResult:
+    cap = REPLY_MAX_TOKENS if max_tokens is None else max_tokens
     heard = hooks.on_turn(ctx, user_text)
     heard = user_text if heard is None else heard
     ctx.history.append(Message("user", heard))
-    reply = brain.reply(ctx.system, ctx.history, max_tokens=max_tokens)
+    # Card 04 writes the tool loop here: declare the tools, pass them to the brain, and while the reply carries
+    # tool calls, run them, append the assistant message with its calls and a "tool" message with the results,
+    # and call the brain again (DR-003). The brain speaks that channel natively on both providers.
+    reply = brain.reply(ctx.system, ctx.history, max_tokens=cap)
     spoken = hooks.before_speak(ctx, reply.text)
     spoken = reply.text if spoken is None else spoken
     # The history keeps what was said to the caller, not what the model wrote, so a guard's replacement
