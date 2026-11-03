@@ -19,11 +19,13 @@ Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and
 
 Each tool: a name, a one-line description the model reads, a typed signature, a pure function over `data/`, a trace span through card 03's `tool` field, and an eval case from card 02 that exercises it. A Must-ask-first tool never mutates; it returns the request for the human, and card 06 decides where it goes.
 
+Three things the second dry run settled (2026-11-03): when the FAQ tool finds no section, the loop says the spec's refusal line itself and does not call the model again (asked to say it, Haiku reworded it on five runs of seven and the gate went red); the tool span's meta holds the arguments with any PIN masked (the store masks a meta key named pin as well, DR-012); and a caller who names one open slot by day and time has confirmed it, while a vague pick gets a read-back and books on the yes (the spec's May line, card 01 decision 3).
+
 ## Acceptance criteria
 
 - Every May line has a tool; every Must-ask-first line has a tool that returns a hand-off, never an action.
 - The persona prompt is under 300 words (the FAQ text it carries is not counted), holds the Never list verbatim from `spec.md` (the rule sentences, without their case references), and the brevity rule.
-- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, measured with `make eval`'s brain-latency line (text mode: the brain only; the phone adds the speech hops). A tool turn is two model calls; the reply cap and the prompt's size are the levers.
+- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, read from `make eval`'s per-case brain figure (the summary's brain-latency line covers every turn; text mode measures the brain only, and the phone adds the speech hops). A tool turn is several model calls: fold their latency, tokens and cache counts into the one `Reply` the turn returns, so the latency and cost lines count the whole turn. A tool turn is two model calls; the reply cap and the prompt's size are the levers.
 - The `cites` checks in `evals/` pass for the cases where the answer exists, and the refusal cases pass where it does not.
 - `make gate` passes.
 
@@ -41,7 +43,7 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 
 ## Files this card may touch
 
-`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the body of `LineHooks.on_tool` only), `candidate_line/turn.py` (the tool loop only), each plus the imports it needs, `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
+`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the bodies of `LineHooks.on_tool` and, for the transcript normaliser only, `LineHooks.on_turn`), `candidate_line/turn.py` (the tool loop only), each plus the imports it needs, `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
 
 ## Teach-back, after
 
