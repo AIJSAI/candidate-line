@@ -119,3 +119,14 @@ def test_later_hooks_see_earlier_replacements() -> None:
     first, second = Guard(), Upper()
     run_turn(EchoBrain(), HookChain([first, second]), ctx(), "you look strong")
     assert second.seen == ["I don't evaluate people."]
+
+
+def test_a_turn_hook_that_asks_for_the_hang_up_gets_it_on_the_result_once() -> None:
+    class KillSwitch(NoHooks):
+        def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
+            ctx.data["hang_up"] = True
+            return user_text
+
+    c = ctx()
+    assert run_turn(EchoBrain(), KillSwitch(), c, "hello").hang_up is True
+    assert "hang_up" not in c.data and run_turn(EchoBrain(), NoHooks(), c, "again").hang_up is False

@@ -72,7 +72,9 @@ def run_turn(
     # The history keeps what was said to the caller, not what the model wrote, so a guard's replacement
     # is what the next turn builds on.
     ctx.history.append(Message("assistant", spoken))
-    return TurnResult(heard=heard, spoken=spoken, reply=reply)
+    # A turn-path hook (the kill switch in on_turn, card 06) asks for the hang-up the way the silence hook does,
+    # through ctx.data, so the phone and text mode read one field on the result (DR-008).
+    return TurnResult(heard=heard, spoken=spoken, reply=reply, hang_up=bool(ctx.data.pop("hang_up", False)))
 
 
 @dataclass(frozen=True)
