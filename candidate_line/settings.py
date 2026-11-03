@@ -61,7 +61,7 @@ class Settings:
             # provider; Bedrock carries Haiku 4.5, the drill and the on-stage fallback, because this account's
             # Bedrock quota for Haiku 5.5 is zero. A bare `make eval` or `make text` therefore speaks with the
             # brain the room hears (found by the dry run of card 02).
-            bedrock_model_id=e.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5"),
+            bedrock_model_id=e.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"),
             anthropic_model_id=e.get("ANTHROPIC_MODEL_ID", "claude-haiku-5-5"),
             aws_region=e.get("AWS_REGION", "us-east-1"),
             public_base_url=e.get("PUBLIC_BASE_URL") or None,
