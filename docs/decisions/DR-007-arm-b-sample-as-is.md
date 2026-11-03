@@ -42,6 +42,8 @@ Sonic failing DR-001's rule in the bake-off (then arm B is a measured footnote a
 - **One more setting change, made right after that call and folded into `bakeoff/arm-b-settings.patch`:** the sample's `/incoming-call` TwiML began with a `<Say>` line, "Please wait while we connect your call to Amazon Nova Sonic", spoken by Polly before the stream opened. It names the vendor to the caller and adds seconds before the first turn that arm A does not pay (arm A's greeting travels through the stream), so it is removed from `src/server.ts` and `dist/server.js`; the stream opens at once, as in arm A. Voice, sample rate and everything else stay as shipped.
 - **Two arms, one prompt, still to do:** today arm A ran the placeholder prompt and arm B the bake-off persona, so the two calls do not compare. DR-001 needs both arms on `bakeoff/persona.md`; arm A gets it through a `SYSTEM_PROMPT_FILE` setting (DR-008's hooks and the media dependencies read it), added the same evening.
 
+- **A third change on 2026-11-02 evening, for DR-001's rule (c):** the sample prints the keys of every Nova event but not the body, so the token counts in `usageEvent` (the only place Sonic reports them; CloudWatch shows invocations without tokens) were never logged. One line was added after its "Handling other events" log in `src/nova-client.ts` and `dist/nova-client.js`: `console.log('USAGE ' + JSON.stringify(jsonResponse.event.usageEvent))`. `bakeoff/arm-b-settings.patch` is regenerated from the sample's working tree and carries all three changes (the persona, the model id and the removed preamble, and this log line). Nothing else in the sample is touched.
+
 ## Say it like this
 
 > (written after the teach-back)
