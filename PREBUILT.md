@@ -22,8 +22,8 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 11 | The trace store and the cockpit's list view; the spans from the turn loop, the kill switch and the override log are written live | 2026-11-01, 000102a | DR-012 | |
 | 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | 2026-11-01, 93ad659 | DR-013 | |
 | 13 | The coding tool: Claude Code, with the comparison that could not run (Codex quarantined by Gatekeeper, its reinstall refused to the session) | 2026-11-02, 82928f1 | DR-014 | |
-| 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open; the five-line problem card drafted in `prompts/01`; `docs/room.md` | 2026-11-02, 507f3e0; the draft, the room notes and the dry-run amendments the same evening (c872d82, bc4fb79); the hour sized to sixty minutes on 2026-11-03 (`docs/room.md`, the 60-minute line in cards 01 and 06) | DR-015 | |
-| 15 | The tag `prebuilt-2026-11-03` | 2026-11-02, 8ad137b (22:00 CT); the commits after it are records and the room's hour, declared in row 14 | | |
+| 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open; the five-line problem card drafted in `prompts/01`; `docs/room.md` | 2026-11-02, 507f3e0; the draft, the room notes and the dry-run amendments the same evening (c872d82, bc4fb79); the hour sized to sixty minutes on 2026-11-03 (`docs/room.md`, the 60-minute line in cards 01 and 06) and `make restart` the same day, so a card's code reaches the phone without touching the tunnel or the webhook | DR-015 | |
+| 15 | The tag `prebuilt-2026-11-03` | 2026-11-02, 8ad137b (22:00 CT); the commits after it are records, the room's hour and `make restart`, declared in row 14 | | |
 
 ## A dry run of the cards, and what came of it
 
