@@ -36,6 +36,7 @@ The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of 
 - the phone drains its hand-off queue when it stops (d2ec46f);
 - every test traces in memory and never in the room's store, the transcriber's finals carry a confidence and a lag from the end of speech, the cost carries no float noise (8f0c745), and the phone app is built when uvicorn asks for it rather than at import (7d4a0c3);
 - two records corrected to the code, DR-001's grace figure and DR-003's cached-read sentence (26710c9);
+- no module but settings reads the environment, as DR-004 says: the store's default path is a constant, the Slack poster takes its URL from settings, the probe caller's Twilio identifiers are typed settings (299fa06);
 - the amendments to the cards after each card's second dry run, named in DR-015's second table.
 
 ## A dry run of the cards, and what came of it
