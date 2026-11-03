@@ -135,11 +135,16 @@ class ProbeSession:
                         self._last_fed = now
                         await self._transcriber.feed(mulaw_to_pcm16(mulaw))
                         continue
-                    if not self._gus_audio_since_probe and self._probe_finished_at is not None:
-                        self._pending_gap = int((now - self._probe_finished_at) * 1000)
-                        # Kept by onset too, so the probe's clock survives a call whose ears fail (DR-011).
-                        self.transcript.onset_gaps_ms.append(self._pending_gap)
-                    self._gus_audio_since_probe = True
+                    # Audio that arrives while the probe is speaking is the tail of Gus's last reply running into
+                    # the probe's line, never an answer to it. It still plays and is still heard, but only audio
+                    # after the probe's last frame counts as a reply, and the gap runs to that audio. Counting the
+                    # tail let the cleared line pass for a finished answer (DR-011, 2026-11-02).
+                    if not self._speaking_now:
+                        if not self._gus_audio_since_probe and self._probe_finished_at is not None:
+                            self._pending_gap = int((now - self._probe_finished_at) * 1000)
+                            # Kept by onset too, so the probe's clock survives a call whose ears fail (DR-011).
+                            self.transcript.onset_gaps_ms.append(self._pending_gap)
+                        self._gus_audio_since_probe = True
                     # The line sends a sentence in a burst; a phone plays it at 8,000 bytes a second.
                     self._playing_until = max(self._playing_until, now) + len(mulaw) / SAMPLE_RATE
                     self._last_fed = now

@@ -1,10 +1,12 @@
 import asyncio
+import time
 
 from candidate_line.brain import EchoBrain
 from candidate_line.evals.schema import parse_case
 from candidate_line.hooks import NoHooks
 from candidate_line.probe.direct import score
 from candidate_line.probe.session import Exchange, ProbeSession, ProbeTranscript
+from candidate_line.telephony.audio import MULAW_FRAME_BYTES, encode_twilio_payload
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import FakeSpeaker, ScriptedTranscriber
 
@@ -89,6 +91,96 @@ def test_probe_drives_a_media_session_end_to_end_and_measures_the_gap() -> None:
     gaps = transcript.gaps_ms()
     assert len(gaps) == 2 and all(0 <= g < 2000 for g in gaps)
     assert transcript.clears == 0
+
+
+def test_probe_waits_for_an_answer_after_a_barge_in_clears_the_line() -> None:
+    """DR-011, 2026-11-02: Gus's long reply runs into the probe's next line and the line clears. The audio that
+    arrived while the probe spoke is not an answer, so the probe waits for one before it says its next line."""
+    line_frames, quiet_s = 30, 0.3
+    sent: list[dict] = []
+    frames_at: dict[int, list[float]] = {}  # probe line number -> when each of its frames went out
+    at: dict[str, float] = {}
+
+    class LongLines(FakeSpeaker):
+        # Every line is 30 frames and each takes 5 ms to go out, so the probe's speech spans time off real time.
+        def say(self, text: str) -> bytes:
+            super().say(text)
+            return b"\xff" * MULAW_FRAME_BYTES * line_frames
+
+    ears, mouth = ScriptedTranscriber(), LongLines()
+
+    async def send(m):
+        sent.append(m)
+        if m["event"] == "media":
+            frames_at.setdefault(len(mouth.said), []).append(time.monotonic())
+            await asyncio.sleep(0.005)
+
+    def spoken(n: int) -> bool:
+        return len(frames_at.get(n, [])) == line_frames
+
+    async def until(done) -> None:
+        while not done():
+            await asyncio.sleep(0.005)
+
+    gus = {"event": "media", "media": {"payload": encode_twilio_payload(b"\x00" * MULAW_FRAME_BYTES)}}
+
+    async def line():
+        yield gus
+        ears.hear("Hello.", is_partial=False)
+        await until(lambda: spoken(1))
+        await asyncio.sleep(0.05)
+        yield gus
+        ears.hear("Code 4821, got it.", is_partial=False)
+        # The reply runs long: its next sentence lands while the probe is saying line 2, and the line clears.
+        await until(lambda: len(frames_at.get(2, [])) >= 5)
+        for _ in range(5):
+            yield gus
+            await asyncio.sleep(0.01)
+        ears.hear("Your interview is on Tuesday.", is_partial=False)
+        at["clear"] = time.monotonic()
+        yield {"event": "clear", "streamSid": "probe"}
+        # Line 2 ends, the line stays quiet well past silence_ms, and only then does Gus answer line 2.
+        await until(lambda: spoken(2))
+        await asyncio.sleep(quiet_s)
+        at["answer"] = time.monotonic()
+        yield gus
+        ears.hear("Thursday at ten is open.", is_partial=False)
+        await until(lambda: spoken(3))
+        await asyncio.sleep(0.05)
+        yield gus
+        ears.hear("Booked.", is_partial=False)
+        await until(lambda: any(m["event"] == "stop" for m in sent))
+        yield {"event": "stop"}
+
+    probe = ProbeSession(
+        send,
+        ears,
+        mouth,
+        ["My code is 4821.", "Thursday please.", "Ten works."],
+        silence_ms=60,
+        reply_timeout_s=3,
+        real_time=False,
+    )
+    transcript = asyncio.run(asyncio.wait_for(probe.run(line()), 5))
+    assert at["clear"] < frames_at[2][-1]  # the barge-in landed while the probe was still saying line 2
+    assert [(e.who, e.text) for e in transcript.exchanges] == [
+        ("gus", "Hello."),
+        ("probe", "My code is 4821."),
+        ("gus", "Code 4821, got it."),
+        ("probe", "Thursday please."),
+        ("gus", "Your interview is on Tuesday."),
+        ("gus", "Thursday at ten is open."),
+        ("probe", "Ten works."),
+        ("gus", "Booked."),
+    ]
+    assert frames_at[3][0] > at["answer"]  # line 3 went out only after Gus answered line 2
+    tail, answer = transcript.exchanges[4], transcript.exchanges[5]
+    assert tail.gap_ms is None  # the tail is not an answer, so it carries no gap
+    # The answer's gap runs from the probe's last frame of line 2 to Gus's first frame after it: the quiet.
+    expected_ms = (at["answer"] - frames_at[2][-1]) * 1000
+    assert answer.gap_ms is not None and abs(answer.gap_ms - expected_ms) <= 25
+    assert len(transcript.onset_gaps_ms) == 3 and transcript.onset_gaps_ms[1] == answer.gap_ms
+    assert transcript.clears == 1
 
 
 def test_score_checks_each_probe_turn_against_what_gus_said_next() -> None:
