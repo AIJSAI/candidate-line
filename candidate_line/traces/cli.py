@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import sys
 
-from candidate_line.traces.store import TraceStore
+from candidate_line.settings import Settings
+from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    store = TraceStore()
+    store = TraceStore(Settings.from_env().trace_store_path or DEFAULT_PATH)
     calls = store.calls(limit=1)
     if not calls:
         print("no calls in the trace store yet (the spans are written live from the turn loop, DR-012)")

@@ -37,3 +37,10 @@ def test_log_level_defaults_to_info_and_refuses_nonsense() -> None:
     assert Settings.from_env({"LOG_LEVEL": "debug"}).log_level == "DEBUG"
     with pytest.raises(ValueError):
         Settings.from_env({"LOG_LEVEL": "LOUD"})
+
+
+def test_the_probe_callers_twilio_identifiers_come_through_settings() -> None:
+    s = Settings.from_env(
+        {"TWILIO_ACCOUNT_SID": "ACx", "TWILIO_LINE_NUMBER": "+15550001", "TWILIO_PROBE_NUMBER": ""}
+    )
+    assert (s.twilio_account_sid, s.twilio_line_number, s.twilio_probe_number) == ("ACx", "+15550001", None)

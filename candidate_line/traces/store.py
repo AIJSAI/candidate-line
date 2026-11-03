@@ -9,7 +9,6 @@ on Wednesday from the turn loop; today the store, its schema and its page exist.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
 import threading
@@ -19,7 +18,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_PATH = Path(os.environ.get("TRACE_STORE_PATH", ROOT / "var" / "traces.sqlite"))
+DEFAULT_PATH = (
+    ROOT / "var" / "traces.sqlite"
+)  # Settings.trace_store_path overrides it; no os.environ here (DR-004)
 EVAL_DEFAULT_PATH = DEFAULT_PATH.with_name(
     "eval-traces.sqlite"
 )  # the eval runner's own store, never the room's

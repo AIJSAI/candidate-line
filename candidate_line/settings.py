@@ -34,6 +34,10 @@ class Settings:
     trace_store_path: str | None
     eval_trace_store_path: str | None
     slack_webhook_url: str | None
+    # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above.
+    twilio_account_sid: str | None
+    twilio_line_number: str | None
+    twilio_probe_number: str | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -58,6 +62,9 @@ class Settings:
             aws_region=e.get("AWS_REGION", "us-east-1"),
             public_base_url=e.get("PUBLIC_BASE_URL") or None,
             twilio_auth_token=e.get("TWILIO_AUTH_TOKEN") or None,
+            twilio_account_sid=e.get("TWILIO_ACCOUNT_SID") or None,
+            twilio_line_number=e.get("TWILIO_LINE_NUMBER") or None,
+            twilio_probe_number=e.get("TWILIO_PROBE_NUMBER") or None,
             # Local curl tests only. Twilio's signature is checked whenever this is off (the default).
             allow_unsigned_webhooks=e.get("ALLOW_UNSIGNED_WEBHOOKS", "") == "1",
             # "stream" answers a call with the media stream (arm A); "say" is item 5's one spoken line.

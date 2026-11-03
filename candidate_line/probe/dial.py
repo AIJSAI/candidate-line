@@ -15,7 +15,6 @@ import base64
 import csv
 import json
 import logging
-import os
 import statistics
 import sys
 import time
@@ -183,13 +182,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
-    env = os.environ
-    for name in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_LINE_NUMBER", "TWILIO_PROBE_NUMBER"):
-        if not env.get(name):
+    settings = Settings.from_env()
+    wanted = {
+        "TWILIO_ACCOUNT_SID": settings.twilio_account_sid,
+        "TWILIO_AUTH_TOKEN": settings.twilio_auth_token,
+        "TWILIO_LINE_NUMBER": settings.twilio_line_number,
+        "TWILIO_PROBE_NUMBER": settings.twilio_probe_number,
+    }
+    for name, value in wanted.items():
+        if not value:
             print(f"{name} is not set; store it with make secret NAME={name}", file=sys.stderr)
             return 2
-    twilio = Twilio(env["TWILIO_ACCOUNT_SID"], env["TWILIO_AUTH_TOKEN"])
-    settings = Settings.from_env()
+    twilio = Twilio(str(settings.twilio_account_sid), str(settings.twilio_auth_token))
     case = load_case(args.case)
     lines = [t.user for t in case.turns if t.user is not None]
     wss = args.public_url.rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
@@ -210,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         server = asyncio.create_task(serve_one_call(args.port, make_session))
         await asyncio.sleep(0.5)  # the server is listening before Twilio is asked to connect
         call_sid = await asyncio.to_thread(
-            twilio.place_call, env["TWILIO_LINE_NUMBER"], env["TWILIO_PROBE_NUMBER"], wss
+            twilio.place_call, str(settings.twilio_line_number), str(settings.twilio_probe_number), wss
         )
         log.info("call placed: %s", call_sid)
         recording_sid: str | None = None

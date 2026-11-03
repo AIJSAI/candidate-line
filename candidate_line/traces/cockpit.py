@@ -12,7 +12,8 @@ from html import escape
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from candidate_line.traces.store import TraceStore
+from candidate_line.settings import Settings
+from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 
 STYLE = (
     "<style>body{font:14px/1.4 -apple-system,system-ui,sans-serif;margin:2rem;color:#222}"
@@ -101,4 +102,4 @@ def create_cockpit(store: TraceStore) -> FastAPI:
 
 
 def app() -> FastAPI:
-    return create_cockpit(TraceStore())
+    return create_cockpit(TraceStore(Settings.from_env().trace_store_path or DEFAULT_PATH))

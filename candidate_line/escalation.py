@@ -10,7 +10,6 @@ written live with the tiers; this module only knows how to post.
 from __future__ import annotations
 
 import json
-import os
 import queue
 import threading
 import time
@@ -60,7 +59,7 @@ class SlackWebhookPoster:
     channel = "slack"
 
     def __init__(self, url: str | None = None, timeout: float = 5.0) -> None:
-        self._url = url or os.environ.get("SLACK_WEBHOOK_URL")
+        self._url = url  # from Settings.slack_webhook_url through default_queue; no os.environ here (DR-004)
         if not self._url:
             raise ValueError("SLACK_WEBHOOK_URL is not set (make secret NAME=SLACK_WEBHOOK_URL)")
         self._timeout = timeout

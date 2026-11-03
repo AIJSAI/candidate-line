@@ -65,7 +65,9 @@ def test_trace_cli_prints_the_latest_call(monkeypatch, capsys) -> None:
     store = TraceStore(":memory:")
     store.start_call("c9", "voice", caller="+15555550199")
     store.span("c9", "model", "haiku", ms=500, text="hello")
-    monkeypatch.setattr(cli, "TraceStore", lambda: store)
+    monkeypatch.setattr(
+        cli, "TraceStore", lambda path: store
+    )  # the path Settings names; the test keeps its own store
     assert cli.main(["last"]) == 0
     out = capsys.readouterr().out
     assert "call c9" in out and "***-***-0199" in out and "model      haiku" in out and "hello" in out
