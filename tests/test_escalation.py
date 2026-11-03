@@ -85,3 +85,16 @@ def test_slack_poster_needs_its_url(monkeypatch) -> None:
         assert "SLACK_WEBHOOK_URL" in str(error)
     else:
         raise AssertionError("a missing webhook URL must be refused at construction")
+
+
+def test_default_queue_posts_to_the_log_without_a_webhook_and_drains_before_exit() -> None:
+    from candidate_line.escalation import LogPoster, default_poster, default_queue
+
+    assert isinstance(default_poster(None), LogPoster)
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    q = default_queue(store, None)
+    q.submit(Escalation("CA1", "2", "a second move", "call the candidate", "http://127.0.0.1:8001/calls/CA1"))
+    q.drain()
+    [row] = store.escalations("CA1")
+    assert row.posted_at is not None and q._poster.posted  # type: ignore[attr-defined]

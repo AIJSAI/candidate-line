@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from candidate_line.brain import Brain
+from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import Hooks
 from candidate_line.telephony.audio import (
     decode_twilio_payload,
@@ -26,7 +27,7 @@ from candidate_line.telephony.audio import (
 )
 from candidate_line.telephony.speech import Speaker, Transcriber
 from candidate_line.traces.store import TraceStore
-from candidate_line.turn import TurnContext, run_turn
+from candidate_line.turn import TurnContext, run_silence, run_turn
 
 log = logging.getLogger("candidate_line.media")
 Send = Callable[[dict[str, Any]], Awaitable[None]]
@@ -44,6 +45,9 @@ OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 GRACE_AFTER_QUESTION_MS = 300
 GRACE_OTHERWISE_MS = 600
 GRACE_BACKSTOP_MS = 2000  # a partial that never becomes a final still releases the pending finals
+# A caller who says nothing for this long gets the on_silence hook (card 06's holding line); the phone never ran
+# it before the dry run of card 06 found the hole. It fires again after another such stretch.
+SILENCE_AFTER_S = 6.0
 _HANDOVER_MARKS = ("?", "!")
 
 
@@ -75,6 +79,8 @@ class MediaSession:
         greeting: str | None = None,
         grace_ms: tuple[int, int] = (GRACE_AFTER_QUESTION_MS, GRACE_OTHERWISE_MS),
         store: TraceStore | None = None,
+        escalations: EscalationQueue | None = None,
+        silence_after_s: float = SILENCE_AFTER_S,
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -83,7 +89,14 @@ class MediaSession:
         self._hooks = hooks
         self._greeting = greeting
         self.stream_sid = stream_sid
-        self.ctx = TurnContext(call_id=call_id, channel="voice", system=system, store=store)
+        self.ctx = TurnContext(
+            call_id=call_id, channel="voice", system=system, store=store, escalations=escalations
+        )
+        self._silence_after = silence_after_s
+        self._last_activity = time.monotonic()  # the caller's last words or the end of Gus's last line
+        self._hang_up = (
+            asyncio.Event()
+        )  # set by a turn whose result says hang_up; the loop ends once Gus has finished
         self.speaking = False
         self.barge_ins = 0
         self.turns = 0
@@ -111,8 +124,11 @@ class MediaSession:
         await self._transcriber.start()
         listener = asyncio.create_task(self._listen())
         greeter = asyncio.create_task(self.speak(self._greeting)) if self._greeting else None
+        watcher = asyncio.create_task(self._watch_silence())
         try:
             async for message in incoming:
+                if self._hang_up.is_set() and not self.speaking:
+                    break  # the closing line has played; closing the stream ends the call
                 event = message.get("event")
                 if event == "media":
                     await self._transcriber.feed(
@@ -137,9 +153,25 @@ class MediaSession:
             await _settle(
                 asyncio.ensure_future(self._transcriber.stop()), 5.0, f"transcriber stop {self.ctx.call_id}"
             )
+            watcher.cancel()
             for task, what in ((listener, "listener"), (greeter, "greeter")):
                 if task is not None:
                     await _settle(task, 3.0, f"{what} {self.ctx.call_id}")
+
+    async def _watch_silence(self) -> None:
+        """Runs the on_silence hook when the caller has said nothing for a while and Gus is not busy."""
+        while True:
+            await asyncio.sleep(0.25)
+            if self.speaking or self._thinking or self._pending or self._hang_up.is_set():
+                continue
+            quiet_for = time.monotonic() - self._last_activity
+            if quiet_for < self._silence_after:
+                continue
+            self._last_activity = time.monotonic()  # one line per stretch of silence
+            line = run_silence(self._hooks, self.ctx, round(quiet_for, 1))
+            if line:
+                log.info("silence %.0f s %s -> %r", quiet_for, self.ctx.call_id, line)
+                await self.speak(line)
 
     async def _listen(self) -> None:
         try:
@@ -147,6 +179,7 @@ class MediaSession:
                 if heard.is_partial:
                     log.debug("partial %s %r", self.ctx.call_id, heard.text[-60:])
                     if heard.text.strip():
+                        self._last_activity = time.monotonic()
                         if self.speaking:
                             await self.barge_in()
                         elif self._thinking:
@@ -155,6 +188,7 @@ class MediaSession:
                         self._arm_grace(None)
                     continue
                 log.info("final %s %r", self.ctx.call_id, heard.text)
+                self._last_activity = time.monotonic()
                 if not self._pending:
                     # The turn's clock starts at the first final, grace included.
                     self._turn_started = time.perf_counter()
@@ -231,6 +265,8 @@ class MediaSession:
             )
             if result.spoken:
                 await self.speak(result.spoken)
+            if getattr(result, "hang_up", False):
+                self._hang_up.set()
 
     async def speak(self, text: str) -> None:
         async with self._speak_lock:
@@ -266,6 +302,9 @@ class MediaSession:
         self._pending_marks.discard(name)
         if not self._pending_marks:
             self.speaking = False
+            self._last_activity = (
+                time.monotonic()
+            )  # the silence clock starts when Gus has finished, not when he began
 
     async def barge_in(self) -> None:
         self.barge_ins += 1

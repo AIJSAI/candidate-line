@@ -33,6 +33,8 @@ The tiers landing live (then the rule names which crossing calls `submit`, and t
 
 - **The channel stayed open on 2026-11-02 (about 14:50 CT).** The session tried to stand up the Slack webhook under James's go-ahead: his Google sign-in to Slack with the work account lands only in another workspace, which is not a place for this line's hand-offs, and the one Slack login in his 1Password has no workspace URL and is due a review. No app and no webhook were created. The log poster carries the Tuesday drill; `prompts/06` asks James for the channel (Slack in a workspace he names, or a text through the line's own number once Twilio is live) before the tier code is written.
 
+- **Amended 2026-11-02 evening, after the timed dry run of card 06.** Nothing at runtime built an `EscalationQueue`, so the card's "submit call site" had nowhere to live and a post made from text mode died with the process. Now `default_queue(store, webhook_url)` builds one per path beside the store (`SlackWebhookPoster` when `SLACK_WEBHOOK_URL` is set, the log poster otherwise; the eval runner always the log poster), the turn context carries it (`TurnContext.escalations`), and `drain()` lets text mode and the runner wait for the last post before they exit. The rule for which tier submits stays card 06's.
+
 ## Say it like this
 
 > (written after the teach-back)

@@ -5,12 +5,12 @@ Record: `docs/decisions/DR-021-tiers-and-observer.md` (live). The queue and its 
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md` (section 7, the tiers), `candidate_line/escalation.py`, `candidate_line/traces/cockpit.py`, `candidate_line/hooks.py` and `candidate_line/turn.py`. Implement the tier rule from `spec.md` as one pure function over the turn's result (the tool called, the guard's verdict, the caller's words), set `TurnResult.tier` so the `tier` eval check is evaluable, write the tier and its reason into the trace, and submit tier-2 hand-offs to the escalation queue with the template in `escalation.py`. Wire the cockpit's reply form so a recruiter's override is spoken on the next turn and logged as an override span. Add the kill switch: one file flag that makes every call say the closing line from `spec.md` and hang up. Run `make text`, show me one turn per tier, and stop. Touch only the files named below.
+> Read `AGENTS.md`, `spec.md` (section 7, the tiers), `candidate_line/escalation.py`, `candidate_line/traces/cockpit.py`, `candidate_line/hooks.py` and `candidate_line/turn.py`. Implement the tier rule from `spec.md` as one pure function over the turn's result (the tool called, the guard's verdict in `ctx.data["guard"]`, the caller's words, and the spoken reply, because a refusal runs no tool), set `TurnResult.tier` so the `tier` eval check is evaluable, write the tier and its reason into the trace (span kind `tier`), and submit tier-2 hand-offs through `ctx.escalations` (the queue every path builds beside its store; the log poster unless `SLACK_WEBHOOK_URL` is set; the masked number comes from the store's call row) with the template in `escalation.py`. Wire the cockpit's reply form so a recruiter's override is spoken on the next turn and logged as an `override` span, and show the tier on the list view. Add the kill switch: one file flag read in `LineHooks.on_turn` that makes every call say the closing line from `spec.md` and set `TurnResult.hang_up`, which the phone and text mode already honour. A tier-3 call gets its summary after it ends (the summary job, Sonnet 5.5, nobody waiting), posted with the trace link; if the clock is short, the job is a stub that posts the trace link alone and says so. Run `make text`, show me one turn per tier, and stop. Touch only the files named below.
 
 ## The tiers (boundaries from `spec.md`; the mechanics here)
 
 - **Tier 1, alone:** the line answers or acts and says so. No post.
-- **Tier 2, a person now:** the line says it is bringing a person in, posts the hand-off (caller's masked number, the ask in one line, the trace link), and holds the call with the holding line until the cockpit replies or the hold limit passes.
+- **Tier 2, a person now:** the line says it is bringing a person in, posts the hand-off (caller's masked number, the ask in one line, the trace link), and holds the call with the holding line until the cockpit replies or the hold limit passes. On the phone the holding line is said by the `on_silence` hook, which fires after six quiet seconds and again after each further stretch (`media.py`); in text mode, by `/silence N`.
 - **Tier 3, written up afterwards:** the line finishes the call and the summary job (Sonnet 5.5, nobody waiting; DR-003) writes the note; the note is posted with the trace link.
 
 ## The observer
@@ -30,11 +30,12 @@ Record: `docs/decisions/DR-021-tiers-and-observer.md` (live). The queue and its 
 
 1. The channel: the Slack webhook as built, or a text through the line's own number (Twilio, a second cost). Ask; the default is the webhook because it exists.
 2. The hold limit in seconds before a tier-2 call is closed with the callback promise.
-3. Whether a guard hit (card 05) raises the tier to 2 or only marks the trace. Card 05 leaves its verdicts in `ctx.data["guard"]` and its wish in `ctx.data["tier"]`; the tier rule reads them.
+3. Whether a guard hit (card 05) raises the tier to 2 or only marks the trace. Card 05 leaves its verdicts in `ctx.data["guard"]` and its wish in `ctx.data["tier"]`; the tier rule reads them and clears the per-turn keys at each turn's start.
+4. Whether a second move is a person now (tier 2) or a write-up (tier 3): the FAQ's F3.2 says the coordinator returns calls within a business day, which is tier 3, and the persona says the same, while the spec's Must-ask-first line reads as tier 2; the room decides, and the spec, the FAQ line or the persona changes to agree (card 01 or 04 re-entered). The dry run's tier rule needed the caller's words as a signal because Haiku answered a second move from the FAQ without calling the coordinator tool on one run in two.
 
 ## Files this card may touch
 
-`candidate_line/tiers.py` (new), `candidate_line/escalation.py` (the submit call site only), `candidate_line/traces/cockpit.py` (the reply form's handler and the kill switch), `candidate_line/turn.py`, `tests/test_tiers.py`, `docs/decisions/DR-021-tiers-and-observer.md`.
+`candidate_line/tiers.py` (new), `candidate_line/hooks.py` (the body of `LineHooks.on_turn` for the kill switch, plus its import), `candidate_line/traces/cockpit.py` (the reply form's handler, the kill switch's flip, and the tier on the list view), `candidate_line/turn.py`, `tests/test_tiers.py`, `docs/decisions/DR-021-tiers-and-observer.md`.
 
 ## Teach-back, after
 

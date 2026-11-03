@@ -25,7 +25,20 @@ EVAL_DEFAULT_PATH = DEFAULT_PATH.with_name(
 )  # the eval runner's own store, never the room's
 _BYTES = (bytes, bytearray, memoryview)
 
-SPAN_KINDS = ("transcribe", "model", "tool", "speech", "hook", "escalation")
+# The kinds the pre-built store knows plus the ones the room's cards write (cite and tier from card 03, override and
+# kill from card 06), so no card has to touch this file to name its span.
+SPAN_KINDS = (
+    "transcribe",
+    "model",
+    "tool",
+    "speech",
+    "hook",
+    "escalation",
+    "cite",
+    "tier",
+    "override",
+    "kill",
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (

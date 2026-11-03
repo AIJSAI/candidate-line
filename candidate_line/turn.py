@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from candidate_line.brain import Brain, Message, Reply
+from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import Hooks
 from candidate_line.persona import REPLY_MAX_TOKENS
 from candidate_line.traces.store import TraceStore
@@ -30,6 +31,9 @@ class TurnContext:
     # starts and ends the call: the phone and text mode on the room's store, the eval runner on its own file, a
     # unit test on ":memory:" or None. None means no tracing.
     store: TraceStore | None = field(default=None, repr=False, compare=False)
+    # The escalation queue the tier rule submits hand-offs to (card 06), built per path beside the store; None in
+    # unit tests. The eval runner's queue has the log poster, so an eval never reaches a real channel.
+    escalations: EscalationQueue | None = field(default=None, repr=False, compare=False)
     # Per-call scratch for the components the room builds: the verified candidate, the in-memory slots, the
     # tier so far. Nothing here outlives the call.
     data: dict[str, Any] = field(default_factory=dict)
@@ -47,6 +51,9 @@ class TurnResult:
     tools_called: tuple[str, ...] | None = None
     state: Mapping[str, Any] | None = None
     tier: str | None = None
+    # Card 06's kill switch sets this on the turn that says the closing line; the phone then ends the call after
+    # the line has played, and text mode ends the session.
+    hang_up: bool = False
 
 
 def run_turn(

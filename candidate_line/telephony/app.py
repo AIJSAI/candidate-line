@@ -20,6 +20,7 @@ from xml.sax.saxutils import escape
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 
 from candidate_line.brain import Brain, make_brain
+from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
@@ -73,6 +74,7 @@ class Deps:
     # The room's trace store, one per process; None in tests that do not trace. The call row starts at /voice
     # (the number is masked by the store) and ends when the stream stops.
     store: TraceStore | None = None
+    escalations: EscalationQueue | None = None  # built over the store; Slack when SLACK_WEBHOOK_URL is set
 
 
 def default_deps(settings: Settings) -> Deps:
@@ -82,7 +84,8 @@ def default_deps(settings: Settings) -> Deps:
         brain=lambda: make_brain(settings),
         hooks=default_hooks,
         system=settings.system_prompt(),
-        store=TraceStore(settings.trace_store_path or DEFAULT_PATH),
+        store=(store := TraceStore(settings.trace_store_path or DEFAULT_PATH)),
+        escalations=default_queue(store, settings.slack_webhook_url),
     )
 
 
@@ -165,6 +168,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             stream_sid=stream_sid,
             greeting=deps.greeting,
             store=deps.store,
+            escalations=deps.escalations,
         )
         try:
             await session.run(incoming())

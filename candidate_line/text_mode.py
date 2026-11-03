@@ -12,6 +12,7 @@ import uuid
 from collections.abc import Callable, Iterable
 
 from candidate_line.brain import Brain, make_brain
+from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
@@ -26,9 +27,16 @@ def repl(
     write: Callable[[str], None],
     system: str = PLACEHOLDER_SYSTEM,
     store: TraceStore | None = None,
+    escalations: EscalationQueue | None = None,
 ) -> TurnContext:
     """Feeds `lines` through the turn loop and writes each answer with its provider, model and latency."""
-    ctx = TurnContext(call_id=f"text-{uuid.uuid4().hex[:8]}", channel="text", system=system, store=store)
+    ctx = TurnContext(
+        call_id=f"text-{uuid.uuid4().hex[:8]}",
+        channel="text",
+        system=system,
+        store=store,
+        escalations=escalations,
+    )
     if store is not None:
         store.start_call(ctx.call_id, "text", provider=brain.name, model=brain.model)
     turns = 0
@@ -48,6 +56,9 @@ def repl(
         result = run_turn(brain, hooks, ctx, line)
         turns += 1
         write(f"gus> {result.spoken}" if result.spoken else "(gus said nothing)")
+        if result.hang_up:
+            write("(gus hung up)")
+            break
         write(
             f"     {result.reply.latency_ms} ms, {result.reply.input_tokens} in, {result.reply.output_tokens} out"
         )
@@ -61,6 +72,7 @@ def main() -> int:
     brain = make_brain(settings)
     try:
         store = TraceStore(settings.trace_store_path or DEFAULT_PATH)
+        queue = default_queue(store, settings.slack_webhook_url)
         repl(
             brain,
             default_hooks(),
@@ -68,7 +80,9 @@ def main() -> int:
             lambda s: print(s, flush=True),
             system=settings.system_prompt(),
             store=store,
+            escalations=queue,
         )
+        queue.drain()
     except Exception as error:  # noqa: BLE001  (a closed quota or a missing key is one line, not a traceback)
         print(f"{brain.name} {brain.model} failed: {error}", file=sys.stderr)
         print(

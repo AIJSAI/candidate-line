@@ -312,3 +312,74 @@ def test_a_partial_while_the_reply_is_being_made_supersedes_it_and_the_words_car
     assert speaker.said[1:] == ["Hi, I got an invite.", "What should I expect?"]
     assert [m.role for m in session.ctx.history] == ["user", "assistant"]
     assert session.ctx.history[0].text == "Hi, I got an invite. What should I expect?"
+
+
+class SilenceHooks(NoHooks):
+    def on_silence(self, ctx, seconds):
+        return "Still there?"
+
+
+def test_the_silence_hook_fires_on_the_phone_after_a_quiet_stretch() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send,
+        transcriber,
+        speaker,
+        EchoBrain(),
+        SilenceHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=GREETING,
+        silence_after_s=0.2,
+    )
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        await settle(lambda: "Still there?" in speaker.said, seconds=2.0)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert speaker.said[:2] == [GREETING, "Still there?"]
+
+
+def test_a_turn_that_says_hang_up_ends_the_call_after_its_line_has_played(monkeypatch) -> None:
+    from candidate_line import turn as turn_module
+    from candidate_line.brain import Reply
+    from candidate_line.telephony import media as media_module
+    from candidate_line.turn import TurnResult
+
+    def closing(brain, hooks, ctx, text, max_tokens=None):
+        return TurnResult(text, "Goodbye for today.", Reply("", 0, 0, 0, "echo", "none"), hang_up=True)
+
+    monkeypatch.setattr(media_module, "run_turn", closing)
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+    frames_after_close = {"n": 0}
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, EchoBrain(), NoHooks(), "sys", "CA1", SID, greeting=None
+    )
+
+    async def script():
+        transcriber.hear("anything", is_partial=False)
+        await settle(lambda: "Goodbye for today." in speaker.said)
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        for _ in range(50):  # the stream goes on sending frames; the session must stop reading them
+            yield frame()
+            frames_after_close["n"] += 1
+            await asyncio.sleep(0.01)
+
+    asyncio.run(session.run(script()))
+    assert speaker.said == ["Goodbye for today."]
+    assert frames_after_close["n"] < 50  # the loop ended before the stream did
+    assert turn_module.TurnResult is TurnResult

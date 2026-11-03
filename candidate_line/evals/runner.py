@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from candidate_line.brain import Brain, EchoBrain, Reply, make_brain
+from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.evals.checks import Verdict, evaluate
 from candidate_line.evals.rates import cost_usd
 from candidate_line.evals.schema import Case, load_cases
@@ -53,10 +54,19 @@ class CaseResult:
 
 
 def run_case(
-    case: Case, brain: Brain, hooks: Hooks, system: str = PLACEHOLDER_SYSTEM, store: TraceStore | None = None
+    case: Case,
+    brain: Brain,
+    hooks: Hooks,
+    system: str = PLACEHOLDER_SYSTEM,
+    store: TraceStore | None = None,
+    escalations: EscalationQueue | None = None,
 ) -> CaseResult:
     ctx = TurnContext(
-        call_id=f"eval-{case.id}-{uuid.uuid4().hex[:6]}", channel=case.channel, system=system, store=store
+        call_id=f"eval-{case.id}-{uuid.uuid4().hex[:6]}",
+        channel=case.channel,
+        system=system,
+        store=store,
+        escalations=escalations,
     )
     if store is not None:
         store.start_call(ctx.call_id, case.channel, provider=brain.name, model=brain.model)
@@ -165,13 +175,17 @@ def main(argv: list[str] | None = None) -> int:
     brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
     # The runner's own store, beside the room's and never in it: make trace last shows the room's last call.
     store = TraceStore(settings.eval_trace_store_path or EVAL_DEFAULT_PATH)
+    queue = default_queue(store, None)  # the log poster: an eval run never reaches a real channel
     results = []
     for case in cases:
-        result = run_case(case, brain, default_hooks(), system=settings.system_prompt(), store=store)
+        result = run_case(
+            case, brain, default_hooks(), system=settings.system_prompt(), store=store, escalations=queue
+        )
         store.end_call(
             result.ctx_call_id, "passed" if result.passed else ("pending" if result.pending else "failed")
         )
         results.append(result)
+    queue.drain()
     baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     report, code = summarize(results, baseline)
     print(report)

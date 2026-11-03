@@ -33,6 +33,7 @@ class Settings:
     log_level: str
     trace_store_path: str | None
     eval_trace_store_path: str | None
+    slack_webhook_url: str | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -71,6 +72,8 @@ class Settings:
             # store module's default beside var/traces.sqlite; TRACE_STORE_PATH is the name the store already used.
             trace_store_path=e.get("TRACE_STORE_PATH") or None,
             eval_trace_store_path=e.get("EVAL_TRACE_STORE_PATH") or None,
+            # The escalation channel (DR-013): Slack when set, the log poster otherwise. A secret, from the keychain.
+            slack_webhook_url=e.get("SLACK_WEBHOOK_URL") or None,
         )
 
     def system_prompt(self) -> str:

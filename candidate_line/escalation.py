@@ -13,6 +13,7 @@ import json
 import os
 import queue
 import threading
+import time
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
@@ -120,6 +121,25 @@ class EscalationQueue:
             finally:
                 self._queue.task_done()
 
+    def drain(self, timeout: float = 5.0) -> None:
+        """Waits, with a bound, until every submitted escalation has been posted or recorded as failed. Text mode
+        and the eval runner call it before they exit, because the worker is a daemon thread and a post still in
+        the queue would otherwise die with the process (the dry run of card 06)."""
+        deadline = time.monotonic() + timeout
+        while self._queue.unfinished_tasks and time.monotonic() < deadline:
+            time.sleep(0.01)
+
     def close(self, timeout: float = 5.0) -> None:
         self._queue.put(None)
         self._thread.join(timeout)
+
+
+def default_poster(webhook_url: str | None) -> Poster:
+    """Slack when the webhook is set, the log poster otherwise; the same interface either way."""
+    return SlackWebhookPoster(webhook_url) if webhook_url else LogPoster()
+
+
+def default_queue(store: TraceStore, webhook_url: str | None) -> EscalationQueue:
+    """What the phone and text mode run: one queue per process over the room's store. The eval runner passes no
+    webhook, so an eval never posts to a real channel (card 06 submits through `ctx.escalations`)."""
+    return EscalationQueue(store, default_poster(webhook_url))
