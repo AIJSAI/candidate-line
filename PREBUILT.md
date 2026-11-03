@@ -39,6 +39,7 @@ The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of 
 - no module but settings reads the environment, as DR-004 says: the store's default path is a constant, the Slack poster takes its URL from settings, the probe caller's Twilio identifiers are typed settings (299fa06);
 - the eval runner prints the cases that moved between runs and each case's brain time, `make baseline` writes the baseline from a green run, and a trace meta key named pin is stored masked (2c948e5); the direct probe target runs on the line's profile (1804dc8);
 - the quote-straightening table in its own module, `candidate_line/text.py`, so the guard and the eval checks share it without a circular import;
+- the hand-off message names the caller, the store looks up one call, the trace link has a setting (`COCKPIT_BASE_URL`), the log poster shows `[hand-off]` on screen, a hook fires when a call ends, and the silence path and a turn hook can ask for the hang-up through the context (43d8f07, 6cc3ff1);
 - the amendments to the cards after each card's second dry run, named in DR-015's second table.
 
 ## A dry run of the cards, and what came of it
