@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make test)",
+      "Bash(make eval)",
+      "Bash(make gate)",
+      "Bash(make trace:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}
