@@ -26,7 +26,7 @@ The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` secti
 4. **Must ask first**: the actions that need a human's yes, and who the human is.
 5. **Never**: the list that binds every tool and every runtime path (Rule 5). Each line is testable: it names what the line never says or does, and how an eval case would catch it.
 6. **Cite or refuse**: which knowledge the line may answer from (the sections of `data/faq.md` by id), the refusal line it says when the answer is not there (Rule 6), and the fallback line it says when the guard replaces a sentence (card 05; it may be the same line).
-7. **The tiers**: what the line handles alone, what it hands to a person during the call, and what it writes up afterwards; one line each, boundaries only; and the closing line the line says when the kill switch is on. The mechanics come in cards 05 and 06, and where a guard hit sits is their question, not this card's.
+7. **The tiers**: what the line handles alone, what it hands to a person during the call, and what it writes up afterwards; one line each, boundaries only; the closing line the line says when the kill switch is on, the holding line said while a person is fetched, and the line said when the hold limit passes. The mechanics come in cards 05 and 06, and where a guard hit sits is their question, not this card's.
 8. **Done means**: the acceptance criteria for the whole line, measurable, including the latency budget from DR-001, the eval gate from card 02 (every boundary case passes; the regression pass rate holds at or above the committed baseline), and the observability line that card 03 serves (every turn of every call leaves its spans in the trace store, readable by a recruiter).
 
 ## Acceptance criteria
@@ -44,6 +44,8 @@ The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` secti
 4. The refusal line, in Gus's voice, said when the FAQ has no answer.
 5. The fallback line the guard says in place of a sentence it caught (the refusal line doubles for it unless he wants another).
 6. The closing line the kill switch makes every call say before it hangs up.
+7. The holding line said while a person is fetched (card 06's hook says it after six quiet seconds).
+8. The line said when the hold limit passes, which also ends the call.
 
 ## Files this card may touch
 
