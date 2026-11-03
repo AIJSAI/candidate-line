@@ -8,16 +8,10 @@ import re
 from dataclasses import dataclass
 
 from candidate_line.evals.schema import Check
+from candidate_line.text import straighten
 from candidate_line.turn import TurnResult
 
 SECTION_ID = re.compile(r"\bF\d(?:\.\d)?\b")
-_CURLY = str.maketrans({"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"'})
-
-
-def straighten(text: str) -> str:
-    """A model writes curly apostrophes as often as straight ones; a pattern written with ' must catch both, in
-    the evals exactly as in the guard (the dry run of card 05)."""
-    return text.translate(_CURLY)
 
 
 @dataclass(frozen=True)

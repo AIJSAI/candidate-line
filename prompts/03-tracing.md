@@ -15,7 +15,7 @@ In reading order, not clock order (the guard's verdict is known before the words
 - `brain`: provider, model, input and output tokens, model latency, and the cost from the rate table in `candidate_line/evals/rates.py`.
 - `cited`: the section ids the reply cites, or `none`; the refusal flag is true when the reply is the spec's refusal line and null until card 04 makes refusals explicit.
 - `spoken`: the text handed to speech, the bytes synthesised, the milliseconds to first byte.
-- `guard` (card 05 fills it; written now as `clean`): the lexicon hit or `clean`.
+- `guard` (written from `ctx.data["guard"]` once card 05 fills it, else `clean`): the lexicon hit or `clean`.
 - `tier` (card 06 fills it; written now with a null tier and reason): the tier assigned and why.
 
 A span never holds audio bytes (the store refuses them: `store.py`), never a full phone number (the store masks at `start_call`), never a secret.
