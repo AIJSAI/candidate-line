@@ -30,7 +30,7 @@ Record: `docs/decisions/DR-021-tiers-and-observer.md` (live). The queue and its 
 
 1. The channel: the Slack webhook as built, or a text through the line's own number (Twilio, a second cost). Ask; the default is the webhook because it exists.
 2. The hold limit in seconds before a tier-2 call is closed with the callback promise.
-3. Whether a guard hit (card 05) raises the tier to 2 or only marks the trace.
+3. Whether a guard hit (card 05) raises the tier to 2 or only marks the trace. Card 05 leaves its verdicts in `ctx.data["guard"]` and its wish in `ctx.data["tier"]`; the tier rule reads them.
 
 ## Files this card may touch
 

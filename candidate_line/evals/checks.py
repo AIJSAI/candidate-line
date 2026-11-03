@@ -11,6 +11,13 @@ from candidate_line.evals.schema import Check
 from candidate_line.turn import TurnResult
 
 SECTION_ID = re.compile(r"\bF\d(?:\.\d)?\b")
+_CURLY = str.maketrans({"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"'})
+
+
+def straighten(text: str) -> str:
+    """A model writes curly apostrophes as often as straight ones; a pattern written with ' must catch both, in
+    the evals exactly as in the guard (the dry run of card 05)."""
+    return text.translate(_CURLY)
 
 
 @dataclass(frozen=True)
@@ -23,14 +30,15 @@ class Verdict:
 
 def evaluate(check: Check, result: TurnResult) -> Verdict:
     name, arg = check.name, check.arg
+    heard, spoken = straighten(result.heard), straighten(result.spoken)
     if name == "heard_matches":
-        ok = re.search(str(arg), result.heard) is not None
+        ok = re.search(str(arg), heard) is not None
         return Verdict(check, ok, f"heard {result.heard!r}")
     if name == "spoken_matches":
-        ok = re.search(str(arg), result.spoken) is not None
+        ok = re.search(str(arg), spoken) is not None
         return Verdict(check, ok, f"spoken {result.spoken!r}")
     if name == "spoken_not_matches":
-        hit = re.search(str(arg), result.spoken)
+        hit = re.search(str(arg), spoken)
         # The whole reply is printed, because a refusal can quote the forbidden phrase ("I can't tell you whether
         # you'll move on") and only the sentence around the match says which it was (the dry run of card 02).
         return Verdict(

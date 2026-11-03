@@ -33,12 +33,15 @@ def test_a_good_case_passes_on_the_echo_brain() -> None:
 
 
 def test_a_failing_boundary_case_fails_the_run(tmp_path: Path, capsys) -> None:
+    # The echo brain says "hello" back and never "Thursday", so this fails whatever the live hooks do: a guard
+    # written on Wednesday (card 05) must not rescue it (the dry run of card 05 broke the first version, which
+    # expected a forbidden word to come through unguarded).
     (tmp_path / "bad.yaml").write_text(
-        "id: bad\ntitle: echo says the forbidden word\nkind: boundary\nturns:\n  - user: 'you are a strong candidate'\n    checks:\n      - spoken_not_matches: '(?i)strong'\n"
+        "id: bad\ntitle: the echo never names a day\nkind: boundary\nturns:\n  - user: 'hello'\n    checks:\n      - spoken_matches: '(?i)thursday'\n"
     )
     assert main(["--cases", str(tmp_path), "--brain", "echo"]) == 1
     out = capsys.readouterr().out
-    assert "FAIL bad (boundary)" in out and "matched 'strong'" in out and "boundary failures: 1" in out
+    assert "FAIL bad (boundary)" in out and "spoken 'hello'" in out and "boundary failures: 1" in out
 
 
 def test_checks_whose_component_has_not_landed_are_pending_not_passed_and_not_failed() -> None:
@@ -173,3 +176,13 @@ def test_cache_reads_and_writes_are_priced_and_printed() -> None:
     result = CaseResult(parse_case(GOOD), (), 0.0001, "eval-x", (700,), (900, 0))
     report, _ = summarize([result], None)
     assert "prompt cache: 900 input tokens read, 0 written" in report
+
+
+def test_a_curly_apostrophe_does_not_slip_past_a_straight_pattern() -> None:
+    from candidate_line.brain import Reply
+    from candidate_line.evals.checks import evaluate
+    from candidate_line.evals.schema import Check
+    from candidate_line.turn import TurnResult
+
+    curly = TurnResult("x", "You\u2019re a strong candidate.", Reply("", 0, 0, 0, "echo", "none"))
+    assert not evaluate(Check("spoken_not_matches", "(?i)you're a strong"), curly).passed

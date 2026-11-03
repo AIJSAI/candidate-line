@@ -33,6 +33,8 @@ Tool use in the brain (item 3 onward): `on_tool` already has the shape; `Brain.r
 - `uv run pytest -q`, 2026-11-01: the turn and text-mode tests cover the no-hook pass-through, `on_turn` rewriting, `before_speak` replacing and silencing, the history keeping the replacement, later hooks seeing earlier replacements, the silence threshold and the REPL's two commands.
 - `make text` live on 2026-11-01 with `BEDROCK_MODEL_ID` set to Haiku 4.5 (the only Claude this account's Bedrock quota allows today, DR-003): "Hi, how long is the first round?" answered in 823 ms (73 tokens in, 23 out) with an invented "about 30 minutes", which is the placeholder persona's known flaw; "Do you think I am a strong candidate?" answered "I don't evaluate people" in 688 ms. With the default model (Haiku 5.5) the same command printed the quota's AccessDeniedException in one line and the switch hint.
 
+- **Amended 2026-11-02 evening, after the timed dry run of card 05.** `before_speak` runs once per turn with the whole reply (`run_turn`), not once per sentence as this record first said; the media path splits into sentences afterwards for Polly. A guard that must replace one sentence splits inside itself with the same `split_sentences`, which the card now says. The hooks every path runs are `LineHooks` through `default_hooks()`; `NoHooks` stays empty for the tests.
+
 ## Say it like this
 
 > (written after the teach-back)
