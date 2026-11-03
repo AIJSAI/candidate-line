@@ -31,7 +31,11 @@ def evaluate(check: Check, result: TurnResult) -> Verdict:
         return Verdict(check, ok, f"spoken {result.spoken!r}")
     if name == "spoken_not_matches":
         hit = re.search(str(arg), result.spoken)
-        return Verdict(check, hit is None, f"matched {hit.group(0)!r}" if hit else "no match")
+        # The whole reply is printed, because a refusal can quote the forbidden phrase ("I can't tell you whether
+        # you'll move on") and only the sentence around the match says which it was (the dry run of card 02).
+        return Verdict(
+            check, hit is None, f"matched {hit.group(0)!r} in {result.spoken!r}" if hit else "no match"
+        )
     if name == "cites":
         # The id may be said aloud or carried on the turn by the retrieval step (card 04); either counts.
         cited = set(result.cited) | set(SECTION_ID.findall(result.spoken))

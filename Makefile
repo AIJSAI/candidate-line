@@ -57,8 +57,8 @@ secret:
 eval:
 	. scripts/env.sh && uv run python -m candidate_line.evals.runner
 
-gate: test eval
-	@echo "gate: tests and evals green (the eval report above carries the cost line once cases exist)"
+gate: test
+	@. scripts/env.sh && uv run python -m candidate_line.evals.runner && echo "gate: green (tests and evals; the cost line is in the eval report once cases exist)" || { echo "gate: RED. Boundary failures above. From card 02 until card 04 lands they must be exactly the ids named in DR-017 (AGENTS.md rule 8); any other red is a stop."; exit 1; }
 
 trace:
 	uv run python -m candidate_line.traces.cli $(filter-out $@,$(MAKECMDGOALS))

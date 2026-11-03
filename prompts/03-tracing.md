@@ -23,7 +23,7 @@ A span never holds audio bytes (the store refuses them: `store.py`), never a ful
 - One turn in text mode produces exactly the spans above, in order, under one call id.
 - `make trace last` shows the turn with its hop latencies adding up to the measured turn within 50 ms.
 - A span carrying bytes is refused by the store and the test proves it.
-- `make gate` passes.
+- `make test` passes, and `make eval`'s red is exactly the list DR-017 named (rule 8: the gate turns green at card 04).
 
 ## Decisions left open, asked of James before writing
 

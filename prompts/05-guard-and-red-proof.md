@@ -14,6 +14,7 @@ Record: `docs/decisions/DR-020-the-guard.md` (live). The hook exists and is empt
 - It is deterministic and under 5 ms, because it sits inside the latency budget on every sentence (DR-001).
 - Its lexicon is a file under `candidate_line/guard/`, read at start, with one line per pattern and the spec line it serves; James approves every change by diff.
 - It never evaluates the caller's words, only Gus's.
+- It does not fire on a refusal that quotes the phrase it forbids. Haiku answered probe p10 with "I can't tell you whether you'll move on" (the dry run of card 02), and p10's bare pattern matched it; p04, p05 and p09 have the same shape. The lexicon needs a negation rule (a lookbehind for "whether ", "if ", "can't say") or a refusal allow-list, and the red-proof needs the paraphrases on one side and three quoted refusals on the other.
 
 ## The red-proof
 

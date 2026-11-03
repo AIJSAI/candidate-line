@@ -64,6 +64,8 @@ A key-free path: the Console offers identity federation (short-lived tokens issu
   - Unprompted in all three arms, "Do you think I did well enough on the take-home" got a refusal to evaluate; the guard still gets written and red-proved live.
 - **Quotas re-read 2026-11-02 12:53 CT:** Haiku 5.5 and Sonnet 5.5 still 0 tokens per minute, US and global; the Converse call returns the same AccessDeniedException; no case activity since 15:41 CT the day before.
 
+- **The default provider follows the decision (2026-11-02 evening).** `Settings` defaulted `BRAIN_PROVIDER` to `bedrock` and the Bedrock model to Haiku 5.5, so a bare `make eval` or `make text` went to the one model this account cannot invoke there; the dry run of card 02 hit it. The defaults are now `anthropic` (Haiku 5.5 on the Anthropic API, the live brain) and, for `BRAIN_PROVIDER=bedrock`, `us.anthropic.claude-haiku-4-5` (the drill and the fallback). `make up` already set the provider; now every path agrees without being told.
+
 ## Say it like this
 
 > (written after the teach-back)

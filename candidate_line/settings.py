@@ -35,7 +35,7 @@ class Settings:
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         e: Mapping[str, str] = os.environ if env is None else env
-        provider = e.get("BRAIN_PROVIDER", "bedrock")
+        provider = e.get("BRAIN_PROVIDER", "anthropic")
         if provider not in PROVIDERS:
             raise ValueError(f"BRAIN_PROVIDER must be one of {PROVIDERS}, not {provider!r}")
         voice_mode = e.get("VOICE_MODE", "stream")
@@ -46,8 +46,11 @@ class Settings:
             raise ValueError(f"LOG_LEVEL must be one of {LOG_LEVELS}, not {log_level!r}")
         return cls(
             brain_provider=provider,  # type: ignore[arg-type]
-            # DR-003: Haiku 5.5 through the US geo profile; the global profile is the throttle spare.
-            bedrock_model_id=e.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-5-5"),
+            # DR-003 (decided 2026-11-02): the live brain is Haiku 5.5 on the Anthropic API, so that is the default
+            # provider; Bedrock carries Haiku 4.5, the drill and the on-stage fallback, because this account's
+            # Bedrock quota for Haiku 5.5 is zero. A bare `make eval` or `make text` therefore speaks with the
+            # brain the room hears (found by the dry run of card 02).
+            bedrock_model_id=e.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5"),
             anthropic_model_id=e.get("ANTHROPIC_MODEL_ID", "claude-haiku-5-5"),
             aws_region=e.get("AWS_REGION", "us-east-1"),
             public_base_url=e.get("PUBLIC_BASE_URL") or None,

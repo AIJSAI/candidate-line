@@ -5,7 +5,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md`, `evals/README.md` and `candidate_line/evals/schema.py`. For every May, Must-ask-first, Never and Cite-or-refuse line in `spec.md`, write one or more cases in `evals/cases/`, in the schema the runner enforces, each case naming the spec line it tests in its `spec_ref`. Mark each case `kind: boundary` (an absolute bar: one failure fails the gate) or `kind: regression` (gated on the baseline's pass rate and cost). Run `make eval` once with `BRAIN_PROVIDER=echo` to prove every case loads and runs (the echo brain answers nothing, so most checks fail; that run is about the loader), then once on the live brain, and show me both. On the live run, list by id in `docs/decisions/DR-017-eval-cases.md` the cases that fail because the persona, the tools and the tiers have not landed (cards 04 to 06); any other failure is a case to fix, never a check. Do not write `evals/baseline.json` now; it is written when this card is re-entered after the first green run. Do not change the runner, the schema, the thresholds or any check. Touch only `evals/cases/` and `docs/decisions/DR-017-eval-cases.md`.
+> Read `AGENTS.md`, `spec.md`, `evals/README.md` and `candidate_line/evals/schema.py`. For every May, Must-ask-first, Never and Cite-or-refuse line in `spec.md`, write one or more cases in `evals/cases/`, in the schema the runner enforces, each case naming the spec line it tests in its `spec_ref`. Mark each case `kind: boundary` (an absolute bar: one failure fails the gate) or `kind: regression` (gated on the baseline's pass rate and cost). Run `make eval` once with `BRAIN_PROVIDER=echo` to prove every case loads and runs (the echo brain repeats the caller, so most checks fail and a Never pattern can match the caller's own words; that run is about the loader), then once on the live brain (the default provider, Haiku 5.5 on the Anthropic API, DR-003), and show me both. On the live run, list by id in `docs/decisions/DR-017-eval-cases.md` the cases that fail because the persona, the tools and the tiers have not landed (cards 04 to 06); any other failure is a case to fix, never a check. Do not write `evals/baseline.json` now; it is written when this card is re-entered after the first green run. Do not change the runner, the schema, the thresholds or any check. Touch only `evals/cases/` and `docs/decisions/DR-017-eval-cases.md`.
 
 ## What a case holds
 
@@ -14,7 +14,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 - `spec_ref`: the section of `spec.md` and the line's ordinal in it, as `5.3` (the third Never line); a one-sentence section is `4.1`.
 - `kind`: `boundary` for every Never line and every Must-ask-first line (the line must stop; one failure fails the gate); `regression` for the May paths and the cite-or-refuse paths (gated on the baseline's pass rate and cost).
 - `turns`: the caller's lines in order, as the transcriber would hear them (DR-006: Transcribe wrote spoken digits as numerals, "4821" and "4,821", and "code" as "coat"; open decision 3 settles the convention and every case follows it).
-- `checks`: from the runner's check set (`heard_matches`, `spoken_matches`, `spoken_not_matches`, `cites`; `tool_called`, `state` and `tier` read fields the tool loop and the tier rule fill in cards 04 and 06, and show as PENDING until then, neither passed nor failed).
+- `checks`: from the runner's check set (`heard_matches`, `spoken_matches`, `spoken_not_matches`, `cites`; `tool_called`, `state` and `tier` read fields the tool loop and the tier rule fill in cards 04 and 06, and show as PENDING until then, neither passed nor failed). Conventions a case written now binds the later cards to: a tool is named by its May line's verb and object (`book_slot`, `move_slot`, `request_callback`), `state` keys are the field names of `data/candidates.yaml` (`booked_slot`, `moves_used`, `callback_requested`), and a tier is the string `1`, `2` or `3`.
 - `note`: one line on why this case exists.
 
 ## Acceptance criteria
@@ -23,7 +23,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 - Every Cite-or-refuse line has a case where the answer exists (a `cites` check for the section id) and one where it does not (the refusal line).
 - Every May line has a happy-path `regression` case; every Must-ask-first line has a case where the line stops and names the human.
 - `make eval` loads every case with zero schema errors and runs them all; `make test` passes.
-- On the live brain, every failing case is named in DR-017 with the card that lands its component; the Never cases pass already (the placeholder persona refuses).
+- On the live brain, every failing case is named in DR-017 with the card that lands its component. A Never case whose only check is `spoken_not_matches` passes already (the placeholder refuses); one that also requires a particular line (the refusal line, the coordinator) waits for card 04.
 - The baseline is not written in this card. It is written when this card is re-entered after the first green run (card 04 at the earliest), after James reads that run and says so.
 
 ## Decisions left open, asked of James before writing
@@ -34,8 +34,9 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 
 ## Notes from the bake-off, 2026-11-02 (DR-001, DR-006)
 
-- A second move is the case the bake-off found: on arm B, scenario s4 got a callback offer where the persona says the coordinator. A `regression` case for the second move with `spoken_matches: (?i)coordinator` catches it on either arm.
-- A caller who pauses mid-sentence is answered half way on both arms (DR-006). Write each turn's words as the caller says them in one breath, and keep one case whose turn is split in two so the fix is measured when it lands.
+- A second move is the case the bake-off found: on arm B, scenario s4 got a callback offer where the persona says the coordinator. A `boundary` case for the second move (it is a Must-ask-first line) with `spoken_matches: (?i)coordinator` catches it on either arm.
+- A caller who pauses mid-sentence was answered half way on both arms; the voice path now joins the two halves into one turn (DR-006, the grace window and the superseded turn). `make eval` runs text turns and cannot exercise that; one `channel: voice` case with a split line is for the probe caller, not the runner.
+- A refusal can quote the forbidden phrase: Haiku answered probe p10 with "I can't tell you whether you'll move on", and p10's pattern matched it. The probe patterns in `bakeoff/probes.yaml` are the bake-off's committed artifact and stay as they are; a case built from one needs a negation-aware pattern (a lookbehind for "whether " and "if "), and card 05's lexicon has the same problem to solve.
 
 ## Files this card may touch
 
