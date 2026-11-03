@@ -2,9 +2,9 @@
 # Ids are candidate-line-NNNN and never reused. Each teach-back's misses land here at box 1, due the next day.
 - id: candidate-line-0001
   question: "Why does the brain sit behind one protocol chosen by an environment variable, and what triggered it?"
-  answer: "This account's Bedrock quota for Haiku 5.5 and Sonnet 5.5 was zero on 2026-11-01 and stayed zero after the increase cases closed, while Haiku 4.5 opened. Bedrock Converse and the Anthropic Messages API both return the same Reply, so the turn loop, the evals and the traces never know which ran. The switch rule in DR-003 is therefore one variable, decided Monday 18:00 CT."
+  answer: "This account's Bedrock quota for Haiku 5.5 and Sonnet 5.5 was zero on 2026-11-01 and stayed zero after the increase cases closed, while Haiku 4.5 opened. Bedrock Converse and the Anthropic Messages API both return the same Reply, so the turn loop, the evals and the traces never know which ran. The switch rule in DR-003 is therefore one variable, decided Monday about 13:00 CT (DR-003's update line)."
   say_it: "I put the model behind one interface so the provider is a config value, because the platform decision held but the account's quota did not."
-  ref: "candidate_line/brain/provider.py:139"
+  ref: "candidate_line/brain/provider.py:295"
   source: "receipt 2026-11-01"
   box: 0
   next_due: 2026-11-02
@@ -13,7 +13,7 @@
   question: "Where does barge-in happen, and what counts as barge-in today?"
   answer: "In the media session's listener: a partial transcript with words while Gus is speaking sends a clear message, which empties Twilio's buffer, and sets a flag that drops the remaining sentences. Gus counts as speaking from the first media chunk until Twilio returns the last mark. Energy on the inbound audio was rejected because breath and line noise would fire it."
   say_it: "Barge-in is a transcript event, not a volume event: words from the caller while Gus is talking clear Twilio's buffer and stop the rest of the reply."
-  ref: "candidate_line/telephony/media.py:97"
+  ref: "candidate_line/telephony/media.py:183"
   source: "receipt 2026-11-01"
   box: 0
   next_due: 2026-11-02
@@ -22,7 +22,7 @@
   question: "Why is the caller's number masked inside the trace store rather than at the webhook?"
   answer: "The store is the only writer. start_call is the one function that accepts a number and it keeps the last four digits before the row is written, so no span can carry a number by accident. A span handed bytes is refused, so audio never lands in the store either."
   say_it: "I mask at the single chokepoint that writes, because two writers each have to remember and one cannot forget."
-  ref: "candidate_line/traces/store.py:110"
+  ref: "candidate_line/traces/store.py:138"
   source: "receipt 2026-11-01"
   box: 0
   next_due: 2026-11-02
@@ -31,8 +31,170 @@
   question: "Why is thinking turned off on the live turn, and what did the measurement show?"
   answer: "Haiku 5.5 thinks by default. With adaptive thinking on and a 120-token cap, three of five Gus-sized replies came back with no text because the thinking spent the output budget; on a phone line that is a silent Gus. Thinking off with effort low gave a reply every time, and the turn's latency tracked output tokens, not the model: a 60-token cap gave a 901 ms median."
   say_it: "I turned thinking off because the caller is waiting and the measurement showed thinking eating the reply budget; the latency lever on a phone line is how many tokens Gus speaks."
-  ref: "candidate_line/brain/provider.py:100"
+  ref: "candidate_line/brain/provider.py:201"
   source: "DR-003 evidence 2026-11-02"
   box: 0
   next_due: 2026-11-02
+  history: []
+- id: candidate-line-0005
+  question: "When a turn is superseded on the phone, what is thrown away, what is kept, and what can it not undo?"
+  answer: "The reply is never spoken, the history is cut back to where the turn began, and the caller's words are carried to lead the next turn, so one whole question is answered once. A tool that already ran inside that turn stays done, and what it wrote into ctx.data stays. That is why card 04's open decision defaults to booking only after the caller confirms aloud: a superseded turn then books nothing."
+  say_it: "A reply the caller talked over is thrown away and their words carried forward, but a tool that already ran stays done, so a booking waits for a spoken yes."
+  ref: "candidate_line/telephony/media.py:247"
+  source: "receipt 2026-11-02"
+  box: 0
+  next_due: 2026-11-03
+  history: []
+- id: candidate-line-0006
+  question: "Where does the prompt-cache mark sit, and what does the cost line do with cached tokens?"
+  answer: "On the system prompt of the Anthropic request only, as cache_control ephemeral, because the persona and the FAQ are the same on every turn and a tool turn sends them twice; the Converse request sets no cache point and only reads the counters. Below the model's minimum cacheable size the mark does nothing (the 21:30 smoke cached nothing). The cost line prices cache reads at a tenth of the input rate and cache writes at 1.25 times, and make eval prints both."
+  say_it: "The persona and FAQ never change between turns and a tool turn sends them twice, so I mark them for the prompt cache and the cost line prices what the cache serves at a tenth."
+  ref: "candidate_line/brain/provider.py:230"
+  source: "receipt 2026-11-02"
+  box: 0
+  next_due: 2026-11-03
+  history: []
+- id: candidate-line-0007
+  question: "On the phone, when does the on_silence hook fire, and when does its clock start?"
+  answer: "A watcher task checks every 250 ms. When Gus is not speaking or thinking, no final transcript is waiting and no hang-up is set, and six seconds have passed since the caller's last words or since Twilio returned Gus's last mark, it runs the hook and speaks its line, then waits another six seconds. Before the dry run of card 06 the phone never called the hook, so a holding line could only play once the caller spoke."
+  say_it: "The phone keeps its own silence clock, starting when Gus finishes rather than when he starts, so a holding line plays even when the caller says nothing."
+  ref: "candidate_line/telephony/media.py:161"
+  source: "receipt 2026-11-02"
+  box: 0
+  next_due: 2026-11-03
+  history: []
+- id: candidate-line-0008
+  question: "Why does the CLI hold no long-lived key, what are the two profiles, and what did the first call after the switch teach?"
+  answer: "The May admin key in ~/.aws/credentials was replaced by IAM Identity Center: profile candidate-line is the CandidateLineBuilder permission set (an 8-hour session, Bedrock, Transcribe, Polly, budgets and quotas, no IAM writes), and candidate-line-admin is AdministratorAccess for one hour, used as a visible choice. The key went inactive at 15:46 CT and was deleted at 22:25 CT on 2026-11-02, and the credentials file was removed. The first call after the switch was silent because the Transcribe streaming SDK has its own credential chain that cannot read an Identity Center profile, so the transcriber now borrows boto3's credentials at every start."
+  say_it: "I replaced a permanent admin key with Identity Center and two roles, a narrow daily one and a one-hour break-glass, and the one SDK with its own credential chain told me so with a silent call, which I fixed in one function."
+  ref: "candidate_line/telephony/speech.py:68"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0009
+  question: "Your webhook is a public URL on a tunnel whose hostname changes at every start. How do you know a POST to /voice came from Twilio, and what happens when the auth token is missing?"
+  answer: "Every POST is checked against Twilio's signature: HMAC-SHA1 over the public URL followed by the form fields sorted by name, keyed with the auth token and compared in constant time; a mismatch is a 403. Behind the tunnel the app sees 127.0.0.1, so the URL it checks is rebuilt from PUBLIC_BASE_URL. It fails closed: with no TWILIO_AUTH_TOKEN the webhook answers 503 unless ALLOW_UNSIGNED_WEBHOOKS=1, which is for a local curl, and Twilio's own worked example is a unit test, which is why six lines beat the helper library. The first real call showed it live: an unsigned request two minutes before got 403 and Twilio's signed POST got 200."
+  say_it: "The webhook is a public URL, so every request proves it came from Twilio or is refused, and a missing token shuts the door instead of opening it."
+  ref: "candidate_line/telephony/app.py:115"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0010
+  question: "How long does the line wait after a final transcript before it runs the turn, and how did you arrive at those numbers?"
+  answer: "300 ms when the final ends in a question or exclamation mark, 600 ms otherwise, with a 2,000 ms backstop if a partial never becomes a final. They came from dialled probe calls on 2026-11-02 with every partial logged with its time: at 300 ms, then at 800 ms after a full stop, the turn still split, because the next sentence's first partial reached the line 1,234 ms after the previous final. A grace that long on every statement is a slow Gus, so the grace stayed short and a turn whose reply is still being made when the caller goes on is superseded. The third dialled call, at 20:06 CT on 300 and 600, answered the joined question once, at a recording gap of 3,060 ms."
+  say_it: "A pause between two sentences is not the end of a turn, so Gus waits a beat after a statement, less after a question, and drops any reply the caller talks past."
+  ref: "candidate_line/telephony/media.py:45"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0011
+  question: "Why run AWS's Nova Sonic sample unmodified as its own Node process instead of porting it into your Python app, and how can anyone check the as-is claim?"
+  answer: "A Python port needs AWS's experimental bidirectional-stream client rather than boto3, a week's risk for a measurement that needed one evening, and vendoring the sample would make its MIT-0 code and lockfile this repository's. It sits beside the repository pinned at commit 2d441b34c380, and pointing the Twilio webhook at its tunnel or at the line's selects the arm. Every change is in bakeoff/arm-b-settings.patch, a git diff of its src/: the bake-off persona word for word, the model id moved to amazon.nova-2-5-sonic, the Say preamble that named the vendor removed so both arms start the same way, and one log line that prints Sonic's usageEvent token counts for the cost rule."
+  say_it: "A port would have cost a week for a measurement that needed an evening, so I ran the speech-to-speech arm as AWS ships it, with every change in one patch anyone can read."
+  ref: "bakeoff/arm-b-settings.patch:10"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0012
+  question: "Why four named hooks that return a replacement, rather than one on_message hook with a mode flag, or a guard that raises to stop the turn?"
+  answer: "The guard and the observer need different moments: on_turn sees the caller's words before the brain, before_speak sees Gus's words before the caller, on_silence is told how long the caller has been quiet, and on_tool sees a tool call after it ran; four names say which moment where a flag would need a document. A hook that raises leaves the caller in silence, while one that returns a replacement leaves a sentence, and an empty string means say nothing, which is how the guard and the kill switch act. before_speak runs once per turn on the whole reply inside run_turn (the record first said per sentence and was amended), and the history keeps what the caller heard, not what the model wrote."
+  say_it: "A rule has to hold on the phone, in text and in the evals at once, so there is one turn function with four named hooks that hand back a sentence, never an exception."
+  ref: "candidate_line/turn.py:70"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0013
+  question: "Why do the candidates and slots come from a seeded script and not from a model, and how do you know they never drift?"
+  answer: "scripts/make_synthetic_data.py with seed 20261101 writes candidates.yaml, slots.yaml and baseline_invites.csv, and a test regenerates them into a temporary folder and compares them exactly, so an eval case that names a slot id or a code means the same thing next week. A model run twice gives different codes and slots and every case would float; only the FAQ prose came from a model, written once from the committed data/PROMPT.md (with one hand edit to F3.2 and F8.1 on 2026-11-03, noted in that file), and its section ids are what Gus cites. No fixture holds anything that could evaluate or reach a person: no scores, notes, phone numbers or emails, and every file says it is synthetic in its first line."
+  say_it: "An eval case has to mean the same thing next week, so the fixtures come from one seed and a test regenerates them, and nothing in them could be used to judge a person."
+  ref: "scripts/make_synthetic_data.py:17"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0014
+  question: "What did the bake-off measure for each arm's median turn and for arm B's cost per five-minute call, and how was each number taken?"
+  answer: "The probe caller dialled the same fifteen cases into each arm on 2026-11-02, both arms on the same persona, every call recorded dual-channel on Twilio, and the gap from the caller's last word to the reply read from the recording by energy (RMS over 500, a 300 ms hangover). Arm A's median was 2,060 ms (23 turns, 16 calls) and arm B's 1,360 ms (41 turns, 19 calls), so B was 700 ms faster, and the probe's own clock agreed at 669 ms. Arm B cost about 0.10 USD per five-minute call: Nova 2.5 Sonic at 0.057 from its own usageEvent token counts over three dialled calls, priced at the Price List rates read 2026-11-01, plus Twilio at 0.04, against about 0.18 for arm A. The rule fired for B on all three counts, and arm A is still the build because only A can check a sentence before it becomes audio."
+  say_it: "I wrote the rule before I measured, so when B won on speed and cost I said so, and I kept A because only A lets me check a sentence before the caller hears it."
+  ref: "docs/decisions/DR-001-voice-path.md:63"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0015
+  question: "Why keep dated text copies of vendor pages in docs/refs instead of links, and what do you do before quoting one in the room?"
+  answer: "Every rate, quota, model id and protocol fact a record relies on comes from a page saved as text with its read date in the file name, because vendor pages change and a link shows today's version, not the one the decision used. Saved pages settled real choices: the Polly API page lists mulaw at 8000 Hz as an output format, so no codec sits between Polly and the phone, and the Twilio security page's worked example is the unit test of the signature check. Before a fact is said aloud the page is re-read if its date is older than the day, and the date is said with it; everything in docs/refs was read on 2026-11-01."
+  say_it: "Vendor pages change and memory is not a source, so every number I say in the room has a dated saved page behind it."
+  ref: "docs/refs/README.md:3"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0016
+  question: "Why does the eval runner pass or fail on regular expressions with a model judge only as a spot check, and what does it do with a check whose component is not built yet?"
+  answer: "A model judge is the thing being tested, so it shares the blind spots it should catch; the bar is checks with no model in the loop: patterns over what the brain heard and what the caller heard, the guard's lexicon, and a cited section id, and a case's judge question never passes or fails it. tool_called, state and tier read fields on TurnResult that the tool loop and the tier rule fill, and None means not landed, so the verdict is pending: it names the check and the card that lands it, never counts as a pass, and does not fail the gate. It began as a failure, and card 02's dry run showed make gate then could not be green from card 02 until card 06, against AGENTS.md rule 8."
+  say_it: "The model is what I am testing, so it cannot be the judge of record: my evals pass or fail on checks anyone can read, and a check for a part not built yet says pending, never green."
+  ref: "candidate_line/evals/checks.py:54"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0017
+  question: "How does the probe caller measure a turn gap, and how do its numbers compare with the line's own log and the call recording?"
+  answer: "The probe plays Twilio's side of the stream and times the silence from its own last audio frame to the first audio from Gus after it; audio that arrives while the probe is still speaking is the tail of the last reply and never starts a gap. Straight into the local line on the echo brain it gave 740 to 780 ms medians over three runs of two replies on 2026-11-01, the cascaded path's floor with no model. On one dialled arm A call the three clocks read: the line's log 1,070 and 864 ms (final transcript to first byte sent), the probe 1,900 ms median (both phone legs), and the recording 1,740 ms, so the phone network adds roughly 800 ms around the line. Each number is reported with its method, and two clocks that disagree are a finding."
+  say_it: "Each clock leaves out a different part of the trip, so I time the same turn from the line's log, the probe and the call recording; the phone network alone adds about 800 ms."
+  ref: "candidate_line/probe/session.py:144"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0018
+  question: "Why keep traces in one SQLite file rather than an OpenTelemetry collector or JSON lines?"
+  answer: "The room needs a list of calls and a recruiter's reply that updates a row, not a span waterfall. A collector or a hosted tracing product means a new account and a new secret, and the recruiter's page would be a vendor's; an export can be added later as a span sink without changing a writer. JSON lines suit spans but make the list view read every line for one call's totals and cannot update the escalation row the reply closes. So var/traces.sqlite holds three tables, calls, spans and escalations, with no server and ignored by git, and since card 03's dry run each path opens its own store, so make eval cannot bury the room's call."
+  say_it: "The room needs a list of calls and a reply that updates a row, so traces live in one SQLite file with three tables, and a vendor exporter can come later without touching a writer."
+  ref: "candidate_line/traces/store.py:44"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0019
+  question: "Why does an escalation go through a queue and a worker thread instead of posting from the turn, and what happens when Slack is down or the queue is full?"
+  answer: "Posting from the turn would turn a three-second Slack hiccup into three seconds of silence on the phone. submit puts the escalation on a queue of 100 without waiting; one worker thread writes the escalation row to the trace store, posts, and records the post time or the error, so a failed post is written against the call and never raised into a turn. A full queue drops and counts rather than blocks, because an unbounded one would grow memory all day behind a dead webhook, and drain lets text mode and the eval runner wait for the last post before they exit."
+  say_it: "A slow channel must never slow a caller, so a hand-off goes on a bounded queue and a worker posts it, and a failure is written against the call, never raised into the turn."
+  ref: "candidate_line/escalation.py:99"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0020
+  question: "Why Claude Code as the coding tool, and why is there no measured comparison with Codex?"
+  answer: "The plan's test was twenty minutes of prompts/01 through each tool, keeping the one whose approvals and trail read better, and it could not run: Gatekeeper quarantined the unnotarized Codex 0.128.0 on 2026-11-01, and the reinstall was refused to the build session three times as external code. On 2026-11-02 about 13:50 CT James chose Claude Code with approvals on, because the team running the session builds with Claude, and dropped the comparison rather than deferring it; the record says it rests on two checks (Claude Code reads AGENTS.md at session start, and its shell reaches Bedrock and the Anthropic API) and the week's trail, not a measurement. A claude -p stand-in was rejected because it gives a diff with no approvals and no trail, the two things being compared, and the fallback is a second Claude Code session in the second pane under the switch rule: three minutes with no diff, or one work item failing twice."
+  say_it: "A decision should name the evidence it is missing, so I say plainly that the Codex comparison never ran and that I build with Claude Code because the team running the session builds with Claude."
+  ref: "docs/decisions/DR-014-the-coding-tool.md:13"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0021
+  question: "How long do the seven prompt cards take, how was that measured, and what does the number leave out?"
+  answer: "Each card was pasted, as the room will paste it, into a fresh coding agent (Claude Code's agent runtime on Opus 5.5) in a detached scratch worktree, with the session's draft answers standing in for James's and no approval pauses, and timed by wall clock; the worktree was discarded and only the defect list came into the repository. With the plumbing fixed, a card is 3 to 15 minutes of tool time (01 3, 02 10, 03 8, 04 15, 05 9, 06 14, 07 9), about 68 minutes end to end. That is tool time alone: the questions, the approvals, the reading aloud and the phone calls come on top, so in a 60-minute room the cut list is applied before the clock starts and card 04 is the one to protect. Every defect that mattered was in the pre-built plumbing, the worst a PIN read aloud because the brain had no tool channel."
+  say_it: "I wanted the defects found in my plumbing, not on the shared screen, so I ran every card against a clock first: about 68 minutes of tool time before a single question."
+  ref: "docs/decisions/DR-015-agents-md-and-prompt-cards.md:52"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
+  history: []
+- id: candidate-line-0022
+  question: "The tag is called prebuilt-2026-11-03 but sits on a commit from the night before. How would someone in the room check what existed before the session and what came after?"
+  answer: "The tag marks the line between plumbing built beforehand and judgment built live: it points at 8ad137b, 2026-11-02 at 22:00 CT, and PREBUILT.md, shown at minute 2, lists every pre-built item with its date, sha and record. git log prebuilt-2026-11-03..HEAD lists every commit after it, and row 15 says those are records, the room's hour and make restart, declared in row 14. At e5b3c5e three later commits also change the FAQ (8ce9d6a), the eval runner (3aae326) and the probe caller (e5b3c5e), and the list does not yet name them, so they need a line before minute 2."
+  say_it: "The room should see exactly what existed before it, so I tagged the pre-built state, and every commit after the tag has to be declared in the list."
+  ref: "PREBUILT.md:26"
+  source: "review 2026-11-03"
+  box: 0
+  next_due: 2026-11-04
   history: []

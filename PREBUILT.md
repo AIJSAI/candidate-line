@@ -23,7 +23,20 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 | 12 | The escalation webhook and its message template; the rule for when it posts is written live, with the tiers | 2026-11-01, 93ad659 | DR-013 | |
 | 13 | The coding tool: Claude Code, with the comparison that could not run (Codex quarantined by Gatekeeper, its reinstall refused to the session) | 2026-11-02, 82928f1 | DR-014 | |
 | 14 | `AGENTS.md`, finished; `prompts/01` to `07`, one work item each with acceptance criteria and its decisions left open; the five-line problem card drafted in `prompts/01`; `docs/room.md` | 2026-11-02, 507f3e0; the draft, the room notes and the dry-run amendments the same evening (c872d82, bc4fb79); the hour sized to sixty minutes on 2026-11-03 (`docs/room.md`, the 60-minute line in cards 01 and 06) and `make restart` the same day, so a card's code reaches the phone without touching the tunnel or the webhook | DR-015 | |
-| 15 | The tag `prebuilt-2026-11-03` | 2026-11-02, 8ad137b (22:00 CT); the commits after it are records, the room's hour and `make restart`, declared in row 14 | | |
+| 15 | The tag `prebuilt-2026-11-03` | 2026-11-02, 8ad137b (22:00 CT); what came after it is listed below the table | | |
+
+## After the tag, 2026-11-03
+
+The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of the session and a second dry run of the cards followed (DR-015). Everything after the tag is pre-built plumbing or a record, never a decision about a caller, and it is listed here so minute 2 shows it with the table:
+
+- the hour sized to sixty minutes and the 60-minute problem card (8e7ca89, 8ce9d6a); `data/faq.md` F3.2 and F8.1 say the line hands a move to the coordinator, to agree with that card (8ce9d6a);
+- `make restart`, so a card's code reaches the phone without touching the tunnel or the webhook (b630c30);
+- the eval runner leaves a `channel: voice` case to the probe caller (3aae326);
+- the probe caller counts only audio after its own last frame as Gus's reply (e5b3c5e, DR-011's open quirk);
+- the phone drains its hand-off queue when it stops (d2ec46f);
+- every test traces in memory and never in the room's store, the transcriber's finals carry a confidence and a lag from the end of speech, the cost carries no float noise (8f0c745), and the phone app is built when uvicorn asks for it rather than at import (7d4a0c3);
+- two records corrected to the code, DR-001's grace figure and DR-003's cached-read sentence (26710c9);
+- the amendments to the cards after each card's second dry run, named in DR-015's second table.
 
 ## A dry run of the cards, and what came of it
 
