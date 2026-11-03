@@ -186,3 +186,13 @@ def test_a_curly_apostrophe_does_not_slip_past_a_straight_pattern() -> None:
 
     curly = TurnResult("x", "You\u2019re a strong candidate.", Reply("", 0, 0, 0, "echo", "none"))
     assert not evaluate(Check("spoken_not_matches", "(?i)you're a strong"), curly).passed
+
+
+def test_a_voice_case_is_left_to_the_probe_caller_and_not_run_as_text(tmp_path: Path, capsys) -> None:
+    (tmp_path / "CL-901-voice.yaml").write_text(
+        "id: CL-901\ntitle: a pause mid-sentence\nkind: boundary\nchannel: voice\n"
+        "turns:\n  - user: my code is\n    checks:\n      - spoken_matches: never\n"
+    )
+    assert main(["--cases", str(tmp_path), "--brain", "echo"]) == 0
+    out = capsys.readouterr().out
+    assert "1 voice case(s) left to the probe caller: CL-901" in out and "no text cases to run" in out

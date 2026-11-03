@@ -40,7 +40,7 @@ The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` secti
 
 1. The firm's name. (ACME until he names it; the name goes into `candidate_line/persona.py` later, not now.)
 2. The one sentence a good call ends on.
-3. Whether the line may book a slot on its own or only hold it for a person to confirm.
+3. Whether the line may book a slot on its own or only hold it for a person to confirm; and, if it books, whether the booking is written when the tool runs or only after the caller confirms the slot out loud (the default is after, so a turn superseded by the caller's next words books nothing, DR-006). The spec's May line says which, so card 02 writes the confirmation turn into the booking case from the start.
 4. The refusal line, in Gus's voice, said when the FAQ has no answer.
 5. The fallback line the guard says in place of a sentence it caught (the refusal line doubles for it unless he wants another).
 6. The closing line the kill switch makes every call say before it hangs up.

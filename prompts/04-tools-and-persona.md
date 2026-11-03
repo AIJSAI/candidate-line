@@ -32,7 +32,7 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 1. Retrieval: whole FAQ in the prompt (1,100 words, cheap and simple) or a section lookup by keyword first (smaller prompt, one more place to be wrong). Ask him; the default is whole FAQ until a measurement says otherwise.
 2. How Gus names a cited section aloud: by its id ("F3.2") or by its title.
 3. Whether a booking tool writes to `data/slots.yaml` on disk or to an in-memory copy reset per call.
-4. Whether a booking is written when the tool runs or only after the caller confirms it out loud. A turn can be superseded before Gus speaks (DR-006) and its tools have already run by then; the default is after the confirmation, so a superseded turn books nothing. That choice adds a confirmation turn to the booking and move cases, which is card 02 re-entered. Re-enter card 02 for the baseline right after this card's gate goes green: two minutes, and from then on the regression bar can fail something.
+4. Settled by the spec (card 01, decision 3): if the May line books only after the caller confirms the slot out loud, the booking tool runs on the confirmation turn and a superseded turn books nothing. Re-enter card 02 for the baseline right after this card's gate goes green: two minutes, and from then on the regression bar can fail something.
 
 ## Notes from the bake-off, 2026-11-02 (DR-001, DR-003)
 

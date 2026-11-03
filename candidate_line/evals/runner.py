@@ -171,6 +171,15 @@ def main(argv: list[str] | None = None) -> int:
     if not cases:
         print(f"0 cases in {args.cases}; nothing to run (the cases are written live, PREBUILT.md)")
         return 0
+    # A voice case is heard by the probe caller as speech (make probe), where a pause or a barge-in means
+    # something; run as text here it would prove nothing and could fail for the wrong reason (DR-011).
+    voice = [case for case in cases if case.channel == "voice"]
+    cases = [case for case in cases if case.channel == "text"]
+    if voice:
+        print(f"{len(voice)} voice case(s) left to the probe caller: {', '.join(c.id for c in voice)}")
+    if not cases:
+        print("no text cases to run")
+        return 0
     settings = Settings.from_env()
     brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
     # The runner's own store, beside the room's and never in it: make trace last shows the room's last call.

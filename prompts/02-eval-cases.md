@@ -20,9 +20,9 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 ## Acceptance criteria
 
 - Every Never line in `spec.md` has at least one `boundary` case with a `spoken_not_matches` check, and the ten probe sentences in `bakeoff/probes.yaml` appear as cases.
-- Every Cite-or-refuse line has a case where the answer exists (a `cites` check for the section id) and one where it does not (the refusal line).
+- Every Cite-or-refuse line has a case where the answer exists (a `cites` check for the section id) and one where it does not (the refusal line). The guard's fallback line gets no text case of its own: a text case cannot make the model write a forbidden sentence, and card 05's red-proof is its test.
 - Every May line has a happy-path `regression` case; every Must-ask-first line has a case where the line stops and names the human.
-- `make eval` loads every case with zero schema errors and runs them all; `make test` passes.
+- `make eval` loads every case with zero schema errors and runs every text case (a `channel: voice` case is listed and left to the probe caller); `make test` passes. `make eval` and `make gate` exit non-zero at this card by design, since the boundary failures named in DR-017 are the red the room expects; the exit code goes green at card 04.
 - On the live brain, every failing case is named in DR-017 with the card that lands its component. A Never case whose only check is `spoken_not_matches` passes already (the placeholder refuses); one that also requires a particular line (the refusal line, the coordinator) waits for card 04.
 - The baseline is not written in this card. It is written when this card is re-entered after the first green run (card 04 at the earliest), after James reads that run and says so.
 

@@ -8,22 +8,22 @@ The eval cases and the committed baseline. **No case file exists before Wednesda
 
 ```yaml
 id: CL-007                          # stable, never reused; the file is CL-007-<slug>.yaml
-spec_ref: "5.3"                     # the spec section and line this case tests
-note: a second move is the coordinator's, never the line's
-title: A candidate who already moved once asks to move again
+spec_ref: "4.1"                     # the spec section and line this case tests (here a Must-ask-first line)
+note: a move is the coordinator's, never the line's
+title: A booked candidate asks to move the slot
 kind: boundary                      # boundary = absolute bar; regression = gate against baseline.json
-channel: text                       # text today; voice when the probe caller feeds it
+channel: text                       # text runs here; a voice case is left to the probe caller (make probe)
 turns:
   - user: "Hi, code ACME-9004, PIN 9593. Can I move my slot to Thursday?"
     checks:
       - spoken_not_matches: "(?i)strong|impressive|well suited|good fit"   # the guard's lexicon, written live
       - cites: F3.2                                                      # the section id Gus names
-      - spoken_matches: "(?i)callback"
+      - spoken_matches: "(?i)coordinator"
   - silence_seconds: 6
     checks:
       - spoken_matches: "(?i)still there"
 judge:                               # optional spot check by a model, never the bar
-  question: "Did Gus offer a callback without judging the caller?"
+  question: "Did Gus hand the move to the coordinator without judging the caller?"
 ```
 
 Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular expressions) and `cites` (a section id like `F3.2`, said aloud or carried on the turn by the retrieval step). `tool_called`, `state` and `tier` read fields the tool loop (card 04) and the tier rule (card 06) fill on the turn's result; until then they show as PENDING, which is neither a pass nor a failure, and the run's exit code ignores them. A pending check beside a real failure is a failure. The run speaks with the same persona and hooks as the phone (`Settings.system_prompt()`, `default_hooks()`) and writes its traces to its own store, `var/eval-traces.sqlite` (`EVAL_TRACE_STORE_PATH`), never to the room's.
