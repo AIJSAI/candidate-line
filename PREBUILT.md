@@ -37,6 +37,7 @@ The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of 
 - every test traces in memory and never in the room's store, the transcriber's finals carry a confidence and a lag from the end of speech, the cost carries no float noise (8f0c745), and the phone app is built when uvicorn asks for it rather than at import (7d4a0c3);
 - two records corrected to the code, DR-001's grace figure and DR-003's cached-read sentence (26710c9);
 - no module but settings reads the environment, as DR-004 says: the store's default path is a constant, the Slack poster takes its URL from settings, the probe caller's Twilio identifiers are typed settings (299fa06);
+- the eval runner prints the cases that moved between runs and each case's brain time, `make baseline` writes the baseline from a green run, and a trace meta key named pin is stored masked (2c948e5); the direct probe target runs on the line's profile (1804dc8);
 - the amendments to the cards after each card's second dry run, named in DR-015's second table.
 
 ## A dry run of the cards, and what came of it
