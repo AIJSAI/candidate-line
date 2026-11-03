@@ -12,7 +12,7 @@ Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and
 - Dry, unhurried, plain words; one or two sentences a turn, because a caller is waiting and output tokens set the latency (DR-003). No lists, no markdown, no emoji: the words are spoken.
 - Never evaluates a person, a take-home, an interview or a chance. The refusal line comes from `spec.md`.
 - Answers process questions only from the FAQ sections the retrieval step hands it, and says the section it used in plain words ("that is in the scheduling section"); otherwise the refusal line. Never from memory.
-- Confirms a code by reading it back as digits, because the transcriber hears digits as numbers with commas and "code" as "coat" (DR-006); never reads a PIN back (it says the PIN was received), since a spoken PIN on a phone is a Never line in most specs.
+- Confirms a code by reading it back as digits, because the transcriber hears digits as numbers with commas, "code" as "coat" and "ACME" as "acne" (DR-006; the `on_turn` normaliser maps those before the brain sees them); never reads a PIN back (it says the PIN was received), since a spoken PIN on a phone is a Never line in most specs.
 - Says what it did after a tool ran. A holding line before a slow tool is voice-path work for a later card, because `run_turn` returns one reply after the tools have run.
 
 ## The tools (shape, not function)

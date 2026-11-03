@@ -60,6 +60,8 @@ The first real call (then the turn gap is measured from the recording, DR-001's 
 
 - **Amended 2026-11-02 evening, after the timed dry run of card 06: the silence hook and the hang-up.** The media session never called `run_silence`, so on the phone the `on_silence` hook (DR-008) had never fired and card 06's holding line could only play when the caller spoke. A watcher now runs the hook after six quiet seconds (the caller's last words or the end of Gus's last line, whichever is later) and again after each further stretch, when Gus is neither speaking nor thinking. And a turn whose result says `hang_up` (card 06's kill switch) ends the stream once its line has played, which ends the call. Both tested with the fakes; the next dialled call carries the numbers.
 
+- **Two callers at once (2026-11-02, 22:26 CT, the tagged head).** The room's two callers will dial together, so the probe placed two calls into the line two seconds apart from two probe servers behind two tunnels (p03 and the booking scenario s2). Both ran interleaved in one process, each with its own turns, barge-ins and call row, no error, no cross-talk; recording medians 2,830 and 3,340 ms worst for p03 (PASS) and 3,080 and 3,260 for s2, against 2,600 to 2,900 for a lone call earlier in the evening, so the second call costs a few hundred milliseconds. s2 failed its check for a reason the room will meet: Transcribe heard "My code is ACME four eight two one" as "My coat is acne for 821", Gus kept asking for a code it could not parse, and nothing was booked. "Coat" was known (DR-006 above); "acne" for ACME is new, and both belong to card 04's `on_turn` normaliser.
+
 ## Say it like this
 
 > (written after the teach-back)
