@@ -31,6 +31,20 @@ log = logging.getLogger("candidate_line.media")
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 
+# A final transcript is not the end of a thought. A caller who pauses mid-sentence gets a final at the pause, and
+# answering it answers half a question (seen on both arms on the first dialled calls, 2026-11-02). So after a final
+# the session waits a short grace for more speech: a partial inside it means the caller went on, and the finals are
+# joined into one turn. The wait is short after a question mark, where the caller has handed over the turn, and
+# longer after a full stop or no mark at all. The grace cannot be long enough on its own: on the dialled calls of
+# 2026-11-02 the next sentence's first partial reached the line 1,234 ms after the previous final, and a grace that
+# long on every statement is a slow Gus. So the grace is short, and a turn whose reply is still being made when the
+# caller goes on is superseded: its reply is dropped, its words are carried into the next turn, and the caller never
+# hears the half-answer. The cost is the grace on every turn plus one wasted model call when it happens; DR-006.
+GRACE_AFTER_QUESTION_MS = 300
+GRACE_OTHERWISE_MS = 600
+GRACE_BACKSTOP_MS = 2000  # a partial that never becomes a final still releases the pending finals
+_HANDOVER_MARKS = ("?", "!")
+
 
 async def _settle(task: asyncio.Future, timeout: float, what: str) -> None:
     """Awaits a task with a bound and never awaits it past that: a shield keeps the timeout from cancelling into
@@ -58,6 +72,7 @@ class MediaSession:
         call_id: str,
         stream_sid: str,
         greeting: str | None = None,
+        grace_ms: tuple[int, int] = (GRACE_AFTER_QUESTION_MS, GRACE_OTHERWISE_MS),
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -77,6 +92,18 @@ class MediaSession:
         self._mark_seq = 0
         # Set when a final transcript arrives; cleared when the first reply byte goes out, for the turn-gap log line.
         self._turn_started: float | None = None
+        self._grace_ms = grace_ms
+        self._pending: list[str] = []  # finals waiting out the grace, joined into one turn when it ends
+        self._grace: asyncio.Task | None = None
+        self._thinking = False  # a turn's reply is being made and nothing has been spoken yet
+        self._superseded = (
+            False  # the caller went on talking during that; the reply is dropped when it arrives
+        )
+        self._carry = ""  # the superseded turn's words, prepended to the next turn's
+        self.superseded = 0
+        self._stopped = (
+            False  # set when Twilio's stop arrives; a turn finishing after it is dropped, not an error
+        )
 
     async def run(self, incoming: AsyncIterator[dict[str, Any]]) -> None:
         await self._transcriber.start()
@@ -94,6 +121,8 @@ class MediaSession:
                 elif event == "stop":
                     break
         finally:
+            self._stopped = True
+            self._cancel_grace()  # the caller has gone; a turn still waiting out its grace is not spoken
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
             # Same rule as the probe: the CRT transport can hang a close or a cancel after Twilio has gone, so wait
@@ -109,21 +138,80 @@ class MediaSession:
         try:
             async for heard in self._transcriber.events():
                 if heard.is_partial:
-                    if self.speaking and heard.text.strip():
-                        await self.barge_in()
+                    log.debug("partial %s %r", self.ctx.call_id, heard.text[-60:])
+                    if heard.text.strip():
+                        if self.speaking:
+                            await self.barge_in()
+                        elif self._thinking:
+                            self._superseded = True
+                        # The caller went on talking: the pending finals wait for the next final, with a backstop.
+                        self._arm_grace(None)
                     continue
-                await self.handle_utterance(heard.text)
+                log.info("final %s %r", self.ctx.call_id, heard.text)
+                if not self._pending:
+                    # The turn's clock starts at the first final, grace included.
+                    self._turn_started = time.perf_counter()
+                self._pending.append(heard.text)
+                self._arm_grace(heard.text)
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("listening failed for %s", self.ctx.call_id)
             raise
 
+    def _arm_grace(self, last_final: str | None) -> None:
+        self._cancel_grace()
+        if last_final is None:
+            ms = GRACE_BACKSTOP_MS
+        else:
+            ms = self._grace_ms[0] if last_final.rstrip().endswith(_HANDOVER_MARKS) else self._grace_ms[1]
+        self._grace = asyncio.create_task(self._end_of_turn(ms))
+
+    def _cancel_grace(self) -> None:
+        if self._grace is not None and not self._grace.done():
+            self._grace.cancel()
+        self._grace = None
+
+    async def _end_of_turn(self, ms: int) -> None:
+        await asyncio.sleep(ms / 1000)
+        self._grace = None  # from here the task is a turn, and a later cancel must not reach the brain call
+        text = " ".join(self._pending).strip()
+        self._pending.clear()
+        if not text:
+            return
+        try:
+            await self.handle_utterance(text)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            if self._stopped:
+                # The caller hung up while the turn was being made (a goodbye, mostly); the socket is closed.
+                log.info("turn dropped after the stop for %s (%s)", self.ctx.call_id, type(error).__name__)
+            else:
+                log.exception("turn failed for %s", self.ctx.call_id)
+
     async def handle_utterance(self, text: str) -> None:
         async with self._utterance_lock:
+            if self._carry:
+                text = f"{self._carry} {text}"
+                self._carry = ""
+            if self._turn_started is None:
+                self._turn_started = time.perf_counter()
+            self._thinking, self._superseded = True, False
+            try:
+                result = await asyncio.to_thread(run_turn, self._brain, self._hooks, self.ctx, text)
+            finally:
+                self._thinking = False
+            if self._superseded:
+                # The caller kept talking while this reply was being made: the reply is never spoken, the turn's
+                # two messages come off the history, and its words lead the next turn, so one whole question is
+                # answered once. The turn's clock keeps running from the first final.
+                del self.ctx.history[-2:]
+                self._carry = text
+                self.superseded += 1
+                log.info("turn superseded %s heard=%r (the caller kept talking)", self.ctx.call_id, text)
+                return
             self.turns += 1
-            self._turn_started = time.perf_counter()
-            result = await asyncio.to_thread(run_turn, self._brain, self._hooks, self.ctx, text)
             reply = getattr(result, "reply", None)
             log.info(
                 "turn %d %s heard=%r reply=%r brain_ms=%s",

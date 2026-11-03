@@ -43,7 +43,7 @@ def test_codec_round_trip_and_sentence_split() -> None:
 
 
 def run_session(
-    transcriber: ScriptedTranscriber, speaker: FakeSpeaker, script, greeting=GREETING
+    transcriber: ScriptedTranscriber, speaker: FakeSpeaker, script, greeting=GREETING, grace_ms=(50, 150)
 ) -> tuple[list[dict], MediaSession]:
     sent: list[dict] = []
 
@@ -51,7 +51,16 @@ def run_session(
         sent.append(message)
 
     session = MediaSession(
-        send, transcriber, speaker, EchoBrain(), NoHooks(), "sys", "CA1", SID, greeting=greeting
+        send,
+        transcriber,
+        speaker,
+        EchoBrain(),
+        NoHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=greeting,
+        grace_ms=grace_ms,
     )
 
     async def incoming():
@@ -186,3 +195,120 @@ def test_the_media_websocket_runs_a_session_end_to_end() -> None:
         assert ws.receive_json()["event"] == "mark"
         ws.send_json({"event": "stop", "streamSid": SID})
     assert speaker.said == ["Hi.", "book me thursday"] and transcriber.stopped
+
+
+async def quiet(session, sent, transcriber) -> None:
+    """Lets the greeting finish and its mark come back, so the session is quiet before the caller speaks."""
+    await settle(lambda: any(m["event"] == "mark" for m in sent))
+    session._on_mark(sent[-1]["mark"]["name"])
+    await settle(lambda: not session.speaking)
+
+
+def test_two_finals_inside_the_grace_become_one_turn() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hi, I got an invite.", is_partial=False)
+        await asyncio.sleep(0.02)  # inside the 150 ms grace that follows a full stop
+        transcriber.hear("What should I expect?", is_partial=False)
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 3)  # the echo, spoken by sentence
+        await asyncio.sleep(0.2)  # long enough for a second turn to have fired if the finals were not joined
+        yield {"event": "stop", "streamSid": SID}
+
+    _sent, session = run_session(transcriber, speaker, script)
+    assert speaker.said == [GREETING, "Hi, I got an invite.", "What should I expect?"]
+    assert session.turns == 1
+
+
+def test_a_partial_inside_the_grace_holds_the_turn_for_the_next_final() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hi, I got an invite.", is_partial=False)
+        await asyncio.sleep(0.03)
+        transcriber.hear("what should", is_partial=True)  # the caller is still talking
+        await asyncio.sleep(0.2)  # past the 150 ms grace: the partial must have held the turn
+        assert session.turns == 0
+        transcriber.hear("What should I expect?", is_partial=False)
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 3)
+        yield {"event": "stop", "streamSid": SID}
+
+    _sent, session = run_session(transcriber, speaker, script)
+    assert speaker.said[1:] == ["Hi, I got an invite.", "What should I expect?"]
+    assert session.barge_ins == 0
+
+
+def test_a_question_mark_waits_less_than_a_full_stop() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    waits: dict[str, float] = {}
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        for line in ("Can I?", "Thanks."):
+            t0 = time.monotonic()
+            transcriber.hear(line, is_partial=False)
+            await settle(lambda line=line: speaker.said[-1] == line)
+            waits[line] = time.monotonic() - t0
+        yield {"event": "stop", "streamSid": SID}
+
+    run_session(transcriber, speaker, script, grace_ms=(50, 400))
+    assert waits["Can I?"] < 0.3
+    assert waits["Thanks."] >= 0.35
+
+
+def test_a_turn_still_in_its_grace_is_dropped_when_the_caller_hangs_up() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hello", is_partial=False)  # 150 ms grace; the stop arrives first
+        yield {"event": "stop", "streamSid": SID}
+
+    _sent, session = run_session(transcriber, speaker, script)
+    assert session.turns == 0 and speaker.said == [GREETING]
+
+
+class GatedEcho:
+    """An echo brain that answers only when the test opens the gate, so a turn can be caught mid-thought."""
+
+    name = "gated-echo"
+    model = "none"
+
+    def __init__(self) -> None:
+        self.gate = threading.Event()
+        self._echo = EchoBrain()
+
+    def reply(self, system, history, max_tokens=200):
+        self.gate.wait(2)
+        return self._echo.reply(system, history, max_tokens=max_tokens)
+
+
+def test_a_partial_while_the_reply_is_being_made_supersedes_it_and_the_words_carry_over() -> None:
+    transcriber, speaker, brain = ScriptedTranscriber(), FakeSpeaker(), GatedEcho()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, brain, NoHooks(), "sys", "CA1", SID, greeting=GREETING, grace_ms=(50, 60)
+    )
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hi, I got an invite.", is_partial=False)
+        await settle(lambda: session._thinking)  # the grace passed and the reply is being made
+        transcriber.hear("What should", is_partial=True)  # the caller went on before Gus spoke
+        await asyncio.sleep(0.02)
+        transcriber.hear("What should I expect?", is_partial=False)
+        brain.gate.set()
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 3)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert session.superseded == 1 and session.turns == 1 and session.barge_ins == 0
+    assert speaker.said[1:] == ["Hi, I got an invite.", "What should I expect?"]
+    assert [m.role for m in session.ctx.history] == ["user", "assistant"]
+    assert session.ctx.history[0].text == "Hi, I got an invite. What should I expect?"
