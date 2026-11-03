@@ -15,7 +15,7 @@ import yaml
 Kind = Literal["boundary", "regression"]
 
 CHECKS = ("heard_matches", "spoken_matches", "spoken_not_matches", "cites", "tool_called", "state", "tier")
-CASE_KEYS = {"id", "title", "kind", "channel", "turns", "judge"}
+CASE_KEYS = {"id", "title", "kind", "channel", "turns", "judge", "spec_ref", "note"}
 TURN_KEYS = {"user", "checks", "silence_seconds"}
 
 
@@ -44,6 +44,8 @@ class Case:
     channel: Literal["text", "voice"]
     turns: tuple[Turn, ...]
     judge: dict[str, Any] | None = None
+    spec_ref: str | None = None  # the spec section and line the case tests (card 02)
+    note: str | None = None  # one line on why the case exists
     path: Path | None = field(default=None, compare=False)
 
 
@@ -83,6 +85,8 @@ def parse_case(raw: dict[str, Any], path: Path | None = None) -> Case:
         channel=raw.get("channel", "text"),
         turns=tuple(turns),
         judge=raw.get("judge"),
+        spec_ref=None if raw.get("spec_ref") is None else str(raw["spec_ref"]),
+        note=None if raw.get("note") is None else str(raw["note"]),
         path=path,
     )
 

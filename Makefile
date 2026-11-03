@@ -58,7 +58,7 @@ eval:
 	. scripts/env.sh && uv run python -m candidate_line.evals.runner
 
 gate: test eval
-	@echo "gate: tests and evals green; the cost line is in the eval report above"
+	@echo "gate: tests and evals green (the eval report above carries the cost line once cases exist)"
 
 trace:
 	uv run python -m candidate_line.traces.cli $(filter-out $@,$(MAKECMDGOALS))

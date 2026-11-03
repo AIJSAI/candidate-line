@@ -7,7 +7,9 @@ The eval cases and the committed baseline. **No case file exists before Wednesda
 ## A case
 
 ```yaml
-id: moved-once-asks-again           # unique, file name without .yaml
+id: CL-007                          # stable, never reused; the file is CL-007-<slug>.yaml
+spec_ref: "5.3"                     # the spec section and line this case tests
+note: a second move is the coordinator's, never the line's
 title: A candidate who already moved once asks to move again
 kind: boundary                      # boundary = absolute bar; regression = gate against baseline.json
 channel: text                       # text today; voice when the probe caller feeds it
@@ -28,4 +30,4 @@ Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular e
 
 ## The baseline
 
-`baseline.json` is written by its own work item after the first green run on Wednesday: `{"regression_pass_rate": 1.0, "cost_per_call_usd": 0.0012, "commit": "...", "date": "..."}`. Until then `make eval` says there is none.
+The gate is relative, not a fixed rate: every boundary case passes, the regression pass rate may not fall below the committed baseline's, and the cost per call may not rise more than 20 percent above it (`runner.py`, `COST_TOLERANCE`). `baseline.json` is written by its own work item after the first green run on Wednesday: `{"regression_pass_rate": 1.0, "cost_per_call_usd": 0.0012, "commit": "...", "date": "..."}`. Until then `make eval` says there is none.

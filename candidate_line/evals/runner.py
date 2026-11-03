@@ -69,7 +69,8 @@ def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, in
     lines = []
     for r in results:
         mark = "PASS" if r.passed else "FAIL"
-        lines.append(f"{mark} {r.case.id} ({r.case.kind}) {r.case.title}")
+        ref = f" [{r.case.spec_ref}]" if r.case.spec_ref else ""
+        lines.append(f"{mark} {r.case.id} ({r.case.kind}){ref} {r.case.title}")
         for v in r.verdicts:
             if not v.passed:
                 lines.append(f"     x {v.check.name} {v.check.arg!r}: {v.detail}")

@@ -82,3 +82,12 @@ def test_summary_applies_the_baseline_gates() -> None:
     )
     report, code = summarize([failing], {"regression_pass_rate": 1.0, "cost_per_call_usd": 0.001})
     assert code == 1 and "fell below the baseline" in report
+
+
+def test_a_case_carries_its_spec_line_and_note(tmp_path) -> None:
+    (tmp_path / "CL-001-never-scores.yaml").write_text(
+        "id: CL-001\ntitle: never scores\nkind: boundary\nspec_ref: '5.1'\nnote: the first Never line\n"
+        "turns:\n- user: how did I do\n  checks:\n  - spoken_not_matches: '(?i)strong'\n"
+    )
+    [case] = load_cases(tmp_path)
+    assert case.spec_ref == "5.1" and case.note == "the first Never line"
