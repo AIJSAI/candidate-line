@@ -40,6 +40,7 @@ class CaseResult:
     cost_usd: float | None
     ctx_call_id: str = ""
     latencies_ms: tuple[int, ...] = ()  # one per model turn, the brain's own clock
+    cached_tokens: tuple[int, int] = (0, 0)  # prompt-cache reads and writes across the case's model turns
 
     @property
     def passed(self) -> bool:
@@ -63,6 +64,7 @@ def run_case(
     cost = 0.0
     priced = True
     latencies: list[int] = []
+    cache_read = cache_write = 0
     for turn in case.turns:
         if turn.user is None:
             said = run_silence(hooks, ctx, turn.silence_seconds or 0.0)
@@ -73,13 +75,22 @@ def run_case(
         else:
             result = run_turn(brain, hooks, ctx, turn.user)
             latencies.append(result.reply.latency_ms)
+            cache_read += result.reply.cached_input_tokens
+            cache_write += result.reply.cache_write_input_tokens
             turn_cost = cost_usd(result.reply)
             if turn_cost is None:
                 priced = False
             else:
                 cost += turn_cost
         verdicts.extend(evaluate(check, result) for check in turn.checks)
-    return CaseResult(case, tuple(verdicts), cost if priced else None, ctx.call_id, tuple(latencies))
+    return CaseResult(
+        case,
+        tuple(verdicts),
+        cost if priced else None,
+        ctx.call_id,
+        tuple(latencies),
+        (cache_read, cache_write),
+    )
 
 
 def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, int]:
@@ -115,7 +126,10 @@ def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, in
     if cost_per_call is None:
         lines.append("cost per call: no priced model turns in this run")
     else:
-        lines.append(f"cost per call: {cost_per_call:.5f} USD")
+        reads = sum(r.cached_tokens[0] for r in results)
+        writes = sum(r.cached_tokens[1] for r in results)
+        cache = f" (prompt cache: {reads} input tokens read, {writes} written)" if reads or writes else ""
+        lines.append(f"cost per call: {cost_per_call:.5f} USD{cache}")
     if baseline:
         base_rate, base_cost = baseline.get("regression_pass_rate"), baseline.get("cost_per_call_usd")
         if pass_rate is not None and base_rate is not None and pass_rate < base_rate:

@@ -158,3 +158,18 @@ def test_the_report_carries_a_brain_latency_line_when_a_model_ran() -> None:
     result = CaseResult(parse_case(GOOD), (), None, "eval-x", (640, 910, 720))
     report, _ = summarize([result], None)
     assert "brain latency: median 720 ms, worst 910 ms over 3 model turns" in report
+
+
+def test_cache_reads_and_writes_are_priced_and_printed() -> None:
+    from candidate_line.brain import Reply
+    from candidate_line.evals.rates import cost_usd
+    from candidate_line.evals.runner import CaseResult
+
+    plain = Reply("x", 1000, 100, 0, "anthropic", "claude-haiku-5-5")
+    cached = Reply("x", 100, 100, 0, "anthropic", "claude-haiku-5-5", cached_input_tokens=900)
+    written = Reply("x", 100, 100, 0, "anthropic", "claude-haiku-5-5", cache_write_input_tokens=900)
+    assert cost_usd(cached) < cost_usd(plain) < cost_usd(written)
+    assert abs(cost_usd(cached) - (100 * 0.10 + 900 * 0.01 + 100 * 0.5) / 1e6) < 1e-12
+    result = CaseResult(parse_case(GOOD), (), 0.0001, "eval-x", (700,), (900, 0))
+    report, _ = summarize([result], None)
+    assert "prompt cache: 900 input tokens read, 0 written" in report

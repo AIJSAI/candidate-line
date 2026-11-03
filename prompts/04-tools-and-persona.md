@@ -22,7 +22,7 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 ## Acceptance criteria
 
 - Every May line has a tool; every Must-ask-first line has a tool that returns a hand-off, never an action.
-- The persona prompt is under 300 words, holds the Never list verbatim from `spec.md`, and the brevity rule.
+- The persona prompt is under 300 words (the FAQ text it carries is not counted), holds the Never list verbatim from `spec.md` (the rule sentences, without their case references), and the brevity rule.
 - A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, measured with `make eval`'s brain-latency line (text mode: the brain only; the phone adds the speech hops). A tool turn is two model calls; the reply cap and the prompt's size are the levers.
 - The `cites` checks in `evals/` pass for the cases where the answer exists, and the refusal cases pass where it does not.
 - `make gate` passes.
@@ -32,16 +32,16 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 1. Retrieval: whole FAQ in the prompt (1,100 words, cheap and simple) or a section lookup by keyword first (smaller prompt, one more place to be wrong). Ask him; the default is whole FAQ until a measurement says otherwise.
 2. How Gus names a cited section aloud: by its id ("F3.2") or by its title.
 3. Whether a booking tool writes to `data/slots.yaml` on disk or to an in-memory copy reset per call.
-4. Whether a booking is written when the tool runs or only after the caller confirms it out loud. A turn can be superseded before Gus speaks (DR-006) and its tools have already run by then; the default is after the confirmation, so a superseded turn books nothing.
+4. Whether a booking is written when the tool runs or only after the caller confirms it out loud. A turn can be superseded before Gus speaks (DR-006) and its tools have already run by then; the default is after the confirmation, so a superseded turn books nothing. That choice adds a confirmation turn to the booking and move cases, which is card 02 re-entered.
 
 ## Notes from the bake-off, 2026-11-02 (DR-001, DR-003)
 
 - The bake-off persona already says "one or two short sentences"; arm A's replies still ran 192 characters a reply (about 45 tokens) and the recording's median turn was 2,060 ms. DR-003 measured 901 ms at a 60-token cap. The brevity rule is a latency decision: set the reply cap beside the persona (`REPLY_MAX_TOKENS` in `persona.py`, 200 today) and read `make eval`'s brain-latency line before and after.
-- The dry run of this card (2026-11-02) on a text protocol took 23 minutes, made two to four model calls a tool turn at about 3,000 input tokens each with the whole FAQ in the prompt (cost per eval run up 13 times), measured a 2,316 ms median brain time on the happy paths, and once spoke a caller's PIN when its parser missed. The native channel removes the parser; the Anthropic brain marks the system prompt for the prompt cache (`cache_control`), and the cost line shows cached input tokens once the prompt is past the model's minimum cacheable size; the FAQ's size and the reply cap are the levers that remain.
+- The dry run of this card (2026-11-02) on a text protocol took 23 minutes, made two to four model calls a tool turn at about 3,000 input tokens each with the whole FAQ in the prompt (cost per eval run up 13 times), measured a 2,316 ms median brain time on the happy paths, and once spoke a caller's PIN when its parser missed. The native channel removes the parser; the Anthropic brain marks the system prompt for the prompt cache (`cache_control`), and the cost line shows cached input tokens once the prompt is past the model's minimum cacheable size; the FAQ's size and the reply cap are the levers that remain. The second pass on the native channel took 15 minutes, zero boundary failures, median brain time 1,165 ms over 52 model turns. Two things it learned about the cap: a tool call's arguments spend output tokens, so a cap of 100 cut a `verify_caller` call off before its PIN and a cap of 250 fit two complete calls; the lever on brevity is the persona's words and a cap that leaves room for the largest tool input. And the eval cost line now prices cache reads and writes and prints them; the first replay showed 112 uncached against 3,863 cached input tokens on a tool turn.
 
 ## Files this card may touch
 
-`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the body of `LineHooks.on_tool` only), `candidate_line/turn.py` (the tool loop only), `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
+`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the body of `LineHooks.on_tool` only), `candidate_line/turn.py` (the tool loop only), each plus the imports it needs, `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
 
 ## Teach-back, after
 

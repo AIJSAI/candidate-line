@@ -280,9 +280,9 @@ class GatedEcho:
         self.gate = threading.Event()
         self._echo = EchoBrain()
 
-    def reply(self, system, history, max_tokens=200):
+    def reply(self, system, history, max_tokens=200, tools=()):
         self.gate.wait(2)
-        return self._echo.reply(system, history, max_tokens=max_tokens)
+        return self._echo.reply(system, history, max_tokens=max_tokens, tools=tools)
 
 
 def test_a_partial_while_the_reply_is_being_made_supersedes_it_and_the_words_carry_over() -> None:

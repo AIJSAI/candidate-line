@@ -38,7 +38,7 @@ Record: `docs/decisions/DR-020-the-guard.md` (live). The hook exists and is empt
 
 ## Files this card may touch
 
-`candidate_line/guard/` (new), `candidate_line/hooks.py` (the body of `LineHooks.before_speak` only), `tests/test_guard_red_proof.py`, `docs/decisions/DR-020-the-guard.md`.
+`candidate_line/guard/` (new), `candidate_line/hooks.py` (the body of `LineHooks.before_speak` only, plus the import it needs), `tests/test_guard_red_proof.py`, `docs/decisions/DR-020-the-guard.md`.
 
 ## Teach-back, after
 

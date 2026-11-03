@@ -65,7 +65,12 @@ class Reply:
     model: str
     tool_calls: tuple[ToolCall, ...] = ()  # non-empty means the turn is not over: run them and call again
     stop_reason: str = "end_turn"
-    cached_input_tokens: int = 0  # input tokens served from the prompt cache (the Anthropic API reports them)
+    cached_input_tokens: int = (
+        0  # input tokens read from the prompt cache (priced at a tenth of the input rate)
+    )
+    cache_write_input_tokens: int = (
+        0  # input tokens written into the cache (priced at 1.25 times the input rate)
+    )
 
 
 class Brain(Protocol):
@@ -159,6 +164,8 @@ class BedrockConverseBrain:
             model=self.model,
             tool_calls=calls,
             stop_reason=str(response.get("stopReason", "end_turn")),
+            cached_input_tokens=int(usage.get("cacheReadInputTokens") or 0),
+            cache_write_input_tokens=int(usage.get("cacheWriteInputTokens") or 0),
         )
 
 
@@ -247,6 +254,7 @@ class AnthropicMessagesBrain:
             tool_calls=calls,
             stop_reason=str(getattr(response, "stop_reason", None) or "end_turn"),
             cached_input_tokens=int(getattr(response.usage, "cache_read_input_tokens", None) or 0),
+            cache_write_input_tokens=int(getattr(response.usage, "cache_creation_input_tokens", None) or 0),
         )
 
 
