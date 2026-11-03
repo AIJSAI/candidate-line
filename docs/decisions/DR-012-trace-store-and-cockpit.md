@@ -32,6 +32,8 @@ The spans landing live (then `run_turn` writes `model` and `hook` spans and the 
 - `uv run pytest -q tests/test_traces.py`, 2026-11-01: masking keeps four digits and never leaks the number into a row; spans number in order; bytes and unknown kinds are refused; the cockpit lists, escapes a `<script>` in a transcript, logs a reply through the form, and answers 404 for an unknown call or escalation; `make trace last` prints the latest call.
 - `make trace last` on the empty store: one line saying so, exit 0. `.gitignore` carries `var/`.
 
+- **Amended 2026-11-02 evening, after the timed dry run of card 03.** Three things the room would have hit: every path ran its turns against one default store, so `make eval` wrote 39 calls into the store `make trace last` reads and the room's text call was no longer the last; the byte refusal caught `bytes` in `text` only (a `memoryview`, bytes as a span name, and bytes inside `meta` got through, the last refused only by `json.dumps` by accident); and nothing ever called `end_call`, so every outcome stayed empty. Now the turn context carries its store (`TurnContext.store`, `None` = no tracing), each path opens its own and starts and ends the call (the phone at `/voice` with the masked number and at the stream's stop with the turn counts; text mode at its start and `/quit`; the eval runner on `var/eval-traces.sqlite`, `EVAL_TRACE_STORE_PATH`, with the verdict as the outcome), and the refusal checks text, name and the whole of `meta`. The spans themselves are still card 03's.
+
 ## Say it like this
 
 > (written after the teach-back)

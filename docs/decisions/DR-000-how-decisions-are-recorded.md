@@ -21,7 +21,7 @@ Copy everything inside the block into a new file.
 
 Status: DRAFT | DECIDED YYYY-MM-DD | SUPERSEDED by DR-NNN
 Built: pre-built (PREBUILT.md row N) | live (minute NN)
-Commit: <short sha where it landed>
+Commit: <short sha where it landed; a record that lands in the same commit as its code writes "this commit", and the log carries the sha>
 
 ## What it is
 Two or three sentences: the component and the job it does.

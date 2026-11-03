@@ -69,3 +69,17 @@ def test_trace_cli_prints_the_latest_call(monkeypatch, capsys) -> None:
     assert cli.main(["last"]) == 0
     out = capsys.readouterr().out
     assert "call c9" in out and "***-***-0199" in out and "model      haiku" in out and "hello" in out
+
+
+def test_bytes_in_the_name_or_the_metadata_or_a_memoryview_are_refused() -> None:
+    import pytest
+
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    with pytest.raises(TypeError):
+        store.span("CA1", "speech", "spoken", text=memoryview(b"\x00\x01"))
+    with pytest.raises(TypeError):
+        store.span("CA1", "speech", b"spoken")  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        store.span("CA1", "speech", "spoken", meta={"audio": {"frames": [b"\xff"]}})
+    assert store.spans("CA1") == []

@@ -31,6 +31,8 @@ class Settings:
     polly_voice: str
     system_prompt_file: str | None
     log_level: str
+    trace_store_path: str | None
+    eval_trace_store_path: str | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -64,6 +66,11 @@ class Settings:
             system_prompt_file=e.get("SYSTEM_PROMPT_FILE") or None,
             # DEBUG prints every partial transcript with its time, for reading a turn's end-pointing (DR-006).
             log_level=log_level,
+            # The room's store (the phone, text mode, make trace last, the cockpit) and the eval runner's own, so
+            # make eval never fills the store the room reads (found by the dry run of card 03). None = the
+            # store module's default beside var/traces.sqlite; TRACE_STORE_PATH is the name the store already used.
+            trace_store_path=e.get("TRACE_STORE_PATH") or None,
+            eval_trace_store_path=e.get("EVAL_TRACE_STORE_PATH") or None,
         )
 
     def system_prompt(self) -> str:

@@ -25,6 +25,7 @@ from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
+from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 
 log = logging.getLogger("candidate_line.app")
 
@@ -69,6 +70,9 @@ class Deps:
     # caller on 2026-11-02 because this defaulted to the echo line while the brain was Haiku 5.5).
     system: str = PLACEHOLDER_SYSTEM
     greeting: str | None = GREETING
+    # The room's trace store, one per process; None in tests that do not trace. The call row starts at /voice
+    # (the number is masked by the store) and ends when the stream stops.
+    store: TraceStore | None = None
 
 
 def default_deps(settings: Settings) -> Deps:
@@ -78,6 +82,7 @@ def default_deps(settings: Settings) -> Deps:
         brain=lambda: make_brain(settings),
         hooks=default_hooks,
         system=settings.system_prompt(),
+        store=TraceStore(settings.trace_store_path or DEFAULT_PATH),
     )
 
 
@@ -117,6 +122,10 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=503, detail="PUBLIC_BASE_URL is not set; the stream needs a public wss host"
             )
+        if deps.store is not None and form.get("CallSid"):
+            deps.store.start_call(
+                form["CallSid"], "voice", caller=form.get("From"), provider=settings.brain_provider
+            )
         return Response(content=twiml_stream(settings.public_base_url), media_type="text/xml")
 
     @app.websocket("/media")
@@ -155,6 +164,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             call_id=call_id,
             stream_sid=stream_sid,
             greeting=deps.greeting,
+            store=deps.store,
         )
         try:
             await session.run(incoming())

@@ -25,6 +25,7 @@ from candidate_line.telephony.audio import (
     split_sentences,
 )
 from candidate_line.telephony.speech import Speaker, Transcriber
+from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, run_turn
 
 log = logging.getLogger("candidate_line.media")
@@ -73,6 +74,7 @@ class MediaSession:
         stream_sid: str,
         greeting: str | None = None,
         grace_ms: tuple[int, int] = (GRACE_AFTER_QUESTION_MS, GRACE_OTHERWISE_MS),
+        store: TraceStore | None = None,
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -81,7 +83,7 @@ class MediaSession:
         self._hooks = hooks
         self._greeting = greeting
         self.stream_sid = stream_sid
-        self.ctx = TurnContext(call_id=call_id, channel="voice", system=system)
+        self.ctx = TurnContext(call_id=call_id, channel="voice", system=system, store=store)
         self.speaking = False
         self.barge_ins = 0
         self.turns = 0
@@ -122,6 +124,11 @@ class MediaSession:
                     break
         finally:
             self._stopped = True
+            if self.ctx.store is not None:
+                self.ctx.store.end_call(
+                    self.ctx.call_id,
+                    f"{self.turns} turns, {self.barge_ins} barge-ins, {self.superseded} superseded",
+                )
             self._cancel_grace()  # the caller has gone; a turn still waiting out its grace is not spoken
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).

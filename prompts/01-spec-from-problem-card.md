@@ -25,7 +25,7 @@ The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` secti
 5. **Never**: the list that binds every tool and every runtime path (Rule 5). Each line is testable: it names what the line never says or does, and how an eval case would catch it.
 6. **Cite or refuse**: which knowledge the line may answer from (the sections of `data/faq.md` by id), and the refusal line it says when the answer is not there (Rule 6).
 7. **The tiers**: what the line handles alone, what it hands to a person during the call, and what it writes up afterwards; one line each, boundaries only. The mechanics come in cards 05 and 06.
-8. **Done means**: the acceptance criteria for the whole line, measurable, including the latency budget from DR-001 and the eval gate from card 02 (every boundary case passes; the regression pass rate holds at or above the committed baseline).
+8. **Done means**: the acceptance criteria for the whole line, measurable, including the latency budget from DR-001, the eval gate from card 02 (every boundary case passes; the regression pass rate holds at or above the committed baseline), and the observability line that card 03 serves (every turn of every call leaves its spans in the trace store, readable by a recruiter).
 
 ## Acceptance criteria
 

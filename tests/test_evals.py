@@ -133,3 +133,13 @@ def test_a_case_carries_its_spec_line_and_note(tmp_path) -> None:
     )
     [case] = load_cases(tmp_path)
     assert case.spec_ref == "5.1" and case.note == "the first Never line"
+
+
+def test_the_runner_writes_its_calls_into_the_store_it_is_given_and_nowhere_else(tmp_path) -> None:
+    from candidate_line.traces.store import TraceStore
+
+    store = TraceStore(":memory:")
+    case = parse_case(GOOD)
+    result = run_case(case, EchoBrain(), NoHooks(), store=store)
+    [call] = store.calls()
+    assert call.call_id == result.ctx_call_id and call.channel == case.channel

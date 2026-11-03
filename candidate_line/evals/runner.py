@@ -24,6 +24,7 @@ from candidate_line.evals.schema import Case, load_cases
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
+from candidate_line.traces.store import EVAL_DEFAULT_PATH, TraceStore
 from candidate_line.turn import TurnContext, TurnResult, run_silence, run_turn
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -37,6 +38,7 @@ class CaseResult:
     case: Case
     verdicts: tuple[Verdict, ...]
     cost_usd: float | None
+    ctx_call_id: str = ""
 
     @property
     def passed(self) -> bool:
@@ -48,8 +50,14 @@ class CaseResult:
         return not self.passed and all(v.passed or v.pending for v in self.verdicts)
 
 
-def run_case(case: Case, brain: Brain, hooks: Hooks, system: str = PLACEHOLDER_SYSTEM) -> CaseResult:
-    ctx = TurnContext(call_id=f"eval-{case.id}-{uuid.uuid4().hex[:6]}", channel=case.channel, system=system)
+def run_case(
+    case: Case, brain: Brain, hooks: Hooks, system: str = PLACEHOLDER_SYSTEM, store: TraceStore | None = None
+) -> CaseResult:
+    ctx = TurnContext(
+        call_id=f"eval-{case.id}-{uuid.uuid4().hex[:6]}", channel=case.channel, system=system, store=store
+    )
+    if store is not None:
+        store.start_call(ctx.call_id, case.channel, provider=brain.name, model=brain.model)
     verdicts: list[Verdict] = []
     cost = 0.0
     priced = True
@@ -68,7 +76,7 @@ def run_case(case: Case, brain: Brain, hooks: Hooks, system: str = PLACEHOLDER_S
             else:
                 cost += turn_cost
         verdicts.extend(evaluate(check, result) for check in turn.checks)
-    return CaseResult(case, tuple(verdicts), cost if priced else None)
+    return CaseResult(case, tuple(verdicts), cost if priced else None, ctx.call_id)
 
 
 def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, int]:
@@ -133,7 +141,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     settings = Settings.from_env()
     brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
-    results = [run_case(case, brain, default_hooks(), system=settings.system_prompt()) for case in cases]
+    # The runner's own store, beside the room's and never in it: make trace last shows the room's last call.
+    store = TraceStore(settings.eval_trace_store_path or EVAL_DEFAULT_PATH)
+    results = []
+    for case in cases:
+        result = run_case(case, brain, default_hooks(), system=settings.system_prompt(), store=store)
+        store.end_call(
+            result.ctx_call_id, "passed" if result.passed else ("pending" if result.pending else "failed")
+        )
+        results.append(result)
     baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     report, code = summarize(results, baseline)
     print(report)

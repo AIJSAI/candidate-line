@@ -26,7 +26,7 @@ judge:                               # optional spot check by a model, never the
   question: "Did Gus offer a callback without judging the caller?"
 ```
 
-Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular expressions) and `cites` (a section id like `F3.2`, said aloud or carried on the turn by the retrieval step). `tool_called`, `state` and `tier` read fields the tool loop (card 04) and the tier rule (card 06) fill on the turn's result; until then they show as PENDING, which is neither a pass nor a failure, and the run's exit code ignores them. A pending check beside a real failure is a failure. The run speaks with the same persona and hooks as the phone (`Settings.system_prompt()`, `default_hooks()`).
+Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular expressions) and `cites` (a section id like `F3.2`, said aloud or carried on the turn by the retrieval step). `tool_called`, `state` and `tier` read fields the tool loop (card 04) and the tier rule (card 06) fill on the turn's result; until then they show as PENDING, which is neither a pass nor a failure, and the run's exit code ignores them. A pending check beside a real failure is a failure. The run speaks with the same persona and hooks as the phone (`Settings.system_prompt()`, `default_hooks()`) and writes its traces to its own store, `var/eval-traces.sqlite` (`EVAL_TRACE_STORE_PATH`), never to the room's.
 
 ## The baseline
 

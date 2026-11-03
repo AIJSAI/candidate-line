@@ -5,9 +5,11 @@ Record: `docs/decisions/DR-018-tracing.md` (live). The store and the cockpit are
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md`, `candidate_line/turn.py`, `candidate_line/traces/store.py` and `candidate_line/traces/cockpit.py`. Wire the turn loop so that each turn writes one span per hop, through the store's own functions only, with the fields listed in this card. Add a test that runs one turn against the echo brain and reads the spans back. Then run `make text`, speak three turns, run `make trace last`, and show me the output. Touch only the files named below.
+> Read `AGENTS.md`, `spec.md`, `candidate_line/turn.py`, `candidate_line/traces/store.py` and `candidate_line/traces/cockpit.py`. Wire the turn loop so that each turn writes one span per hop through `ctx.store` (the `TraceStore` every path already opens and hands to the turn context: the phone and text mode on the room's store, the eval runner on its own file, `None` in a unit test, which writes nothing), using the store's own functions only, with the fields listed in this card; `start_call` and `end_call` are the path's job and already happen. Add a test that runs one turn against the echo brain with a `TraceStore(":memory:")` and reads the spans back. Then run `make text`, speak three turns, run `make trace last`, and show me the output. Touch only the files named below.
 
 ## The spans, per turn
+
+In reading order, not clock order (the guard's verdict is known before the words are spoken). The fields only the voice path knows (the transcriber's confidence and its end-of-speech-to-final time, the bytes synthesised and the time to the first byte) are filled by `media.py` on a call and are null in text mode.
 
 - `heard`: the final transcript, its confidence if the transcriber gives one, and the milliseconds from end of speech to the final.
 - `brain`: provider, model, input and output tokens, model latency, and the cost from the rate table in `candidate_line/evals/rates.py`.
@@ -28,11 +30,12 @@ A span never holds audio bytes (the store refuses them: `store.py`), never a ful
 ## Decisions left open, asked of James before writing
 
 1. Whether the cockpit's reply form (the recruiter override) writes its own span in this card or waits for card 06.
-2. The retention of `var/traces.sqlite` between build days: keep, or wipe at the start of each day.
+2. The retention of `var/traces.sqlite` between build days: keep, or wipe at the start of each day (`make eval` writes to `var/eval-traces.sqlite`, so the room's store holds only the room's calls).
+3. Whether the `heard` span masks a spoken PIN (four digits after the word PIN) before it is stored; the store masks the caller's number at `start_call` and nothing else. The default is yes.
 
 ## Files this card may touch
 
-`candidate_line/turn.py`, `candidate_line/traces/store.py` (new span types only, never the masking or the refusal), `tests/test_traces.py`, `docs/decisions/DR-018-tracing.md`.
+`candidate_line/turn.py`, `candidate_line/traces/store.py` (new span kinds only, never the masking or the refusal), `candidate_line/telephony/media.py` (the voice-only fields at the two places that know them), `candidate_line/traces/cli.py` (printed columns only), `tests/test_traces.py`, `docs/decisions/DR-018-tracing.md`.
 
 ## Teach-back, after
 

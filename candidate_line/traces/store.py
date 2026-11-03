@@ -20,6 +20,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_PATH = Path(os.environ.get("TRACE_STORE_PATH", ROOT / "var" / "traces.sqlite"))
+EVAL_DEFAULT_PATH = DEFAULT_PATH.with_name(
+    "eval-traces.sqlite"
+)  # the eval runner's own store, never the room's
+_BYTES = (bytes, bytearray, memoryview)
 
 SPAN_KINDS = ("transcribe", "model", "tool", "speech", "hook", "escalation")
 
@@ -37,6 +41,17 @@ CREATE TABLE IF NOT EXISTS escalations (
   reason TEXT NOT NULL, suggested_action TEXT NOT NULL, channel TEXT NOT NULL, posted_at TEXT, post_error TEXT,
   reply TEXT, replied_by TEXT, replied_at TEXT);
 """
+
+
+def _holds_bytes(value: Any) -> bool:
+    """Bytes anywhere in the metadata, however nested; the refusal is explicit, not json.dumps's accident."""
+    if isinstance(value, _BYTES):
+        return True
+    if isinstance(value, dict):
+        return any(_holds_bytes(k) or _holds_bytes(v) for k, v in value.items())
+    if isinstance(value, list | tuple):
+        return any(_holds_bytes(v) for v in value)
+    return False
 
 
 def now() -> str:
@@ -145,7 +160,7 @@ class TraceStore:
     ) -> int:
         if kind not in SPAN_KINDS:
             raise ValueError(f"span kind must be one of {SPAN_KINDS}, not {kind!r}")
-        if isinstance(text, bytes | bytearray):
+        if isinstance(text, _BYTES) or isinstance(name, _BYTES) or _holds_bytes(meta):
             raise TypeError("a span carries text and metadata, never audio bytes")
         with self._lock:
             seq = (

@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from candidate_line.brain import Brain, Message, Reply
 from candidate_line.hooks import Hooks
+from candidate_line.traces.store import TraceStore
 
 Channel = Literal["voice", "text"]
 
@@ -24,6 +25,10 @@ class TurnContext:
     system: str
     history: list[Message] = field(default_factory=list)
     started_at: float = field(default_factory=time.monotonic)
+    # The trace store this turn writes into (card 03 writes the spans through it). Each path opens its own and
+    # starts and ends the call: the phone and text mode on the room's store, the eval runner on its own file, a
+    # unit test on ":memory:" or None. None means no tracing.
+    store: TraceStore | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
