@@ -142,6 +142,13 @@ class EscalationRow:
     replied_at: str | None
 
 
+# The list view and the single-row lookup read the same columns, so a CallRow means the same thing from both.
+_CALL_SELECT = """SELECT c.*, (SELECT COUNT(*) FROM spans s WHERE s.call_id = c.call_id) AS span_count,
+   (SELECT COALESCE(SUM(ms), 0) FROM spans s WHERE s.call_id = c.call_id AND s.kind = 'model') AS model_ms,
+   (SELECT COUNT(*) FROM escalations e WHERE e.call_id = c.call_id) AS escalations
+   FROM calls c"""
+
+
 class TraceStore:
     def __init__(self, path: Path | str = DEFAULT_PATH) -> None:
         if path != ":memory:":
@@ -220,13 +227,16 @@ class TraceStore:
     def calls(self, limit: int = 100) -> list[CallRow]:
         with self._lock:
             rows = self._conn.execute(
-                """SELECT c.*, (SELECT COUNT(*) FROM spans s WHERE s.call_id = c.call_id) AS span_count,
-                   (SELECT COALESCE(SUM(ms), 0) FROM spans s WHERE s.call_id = c.call_id AND s.kind = 'model') AS model_ms,
-                   (SELECT COUNT(*) FROM escalations e WHERE e.call_id = c.call_id) AS escalations
-                   FROM calls c ORDER BY c.started_at DESC LIMIT ?""",
-                (limit,),
+                f"{_CALL_SELECT} ORDER BY c.started_at DESC LIMIT ?", (limit,)
             ).fetchall()
         return [CallRow(**dict(r)) for r in rows]
+
+    def call(self, call_id: str) -> CallRow | None:
+        """One call by id, or None. The hand-off reads its masked caller here, and a scan of `calls(limit)` would
+        miss a call that is not among the latest ones."""
+        with self._lock:
+            row = self._conn.execute(f"{_CALL_SELECT} WHERE c.call_id = ?", (call_id,)).fetchone()
+        return None if row is None else CallRow(**dict(row))
 
     def spans(self, call_id: str) -> list[SpanRow]:
         with self._lock:

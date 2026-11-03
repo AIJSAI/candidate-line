@@ -7,6 +7,7 @@ Commands: `/silence N` runs the silence hook as if N seconds passed; `/quit` end
 
 from __future__ import annotations
 
+import logging
 import sys
 import uuid
 from collections.abc import Callable, Iterable
@@ -18,6 +19,8 @@ from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 from candidate_line.turn import TurnContext, run_silence, run_turn
+
+log = logging.getLogger("candidate_line.text_mode")
 
 
 def repl(
@@ -50,8 +53,11 @@ def repl(
         if line.startswith("/silence"):
             parts = line.split()
             seconds = float(parts[1]) if len(parts) > 1 else 5.0
-            said = run_silence(hooks, ctx, seconds)
-            write(f"gus> {said}" if said else "(silence hook said nothing)")
+            silence = run_silence(hooks, ctx, seconds)
+            write(f"gus> {silence.said}" if silence.said else "(silence hook said nothing)")
+            if silence.hang_up:
+                write("(gus hung up)")
+                break
             continue
         result = run_turn(brain, hooks, ctx, line)
         turns += 1
@@ -62,8 +68,14 @@ def repl(
         write(
             f"     {result.reply.latency_ms} ms, {result.reply.input_tokens} in, {result.reply.output_tokens} out"
         )
+    outcome = f"{turns} turns"
+    try:
+        hooks.on_call_end(ctx, outcome)
+    except Exception:
+        # A hook must never break a hang-up: the store still records the end, as on the phone.
+        log.exception("on_call_end failed for %s", ctx.call_id)
     if store is not None:
-        store.end_call(ctx.call_id, f"{turns} turns")
+        store.end_call(ctx.call_id, outcome)
     return ctx
 
 

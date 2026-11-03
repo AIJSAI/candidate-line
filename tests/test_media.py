@@ -13,6 +13,7 @@ from candidate_line.telephony.app import Deps, create_app, twiml_stream
 from candidate_line.telephony.audio import MULAW_FRAME_BYTES, mulaw_to_pcm16, pcm16_to_mulaw, split_sentences
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import FakeSpeaker, ScriptedTranscriber
+from candidate_line.traces.store import TraceStore
 
 SID = "MZ123"
 
@@ -399,3 +400,102 @@ def test_a_turn_that_says_hang_up_ends_the_call_after_its_line_has_played(monkey
     assert speaker.said == ["Goodbye for today."]
     assert frames_after_close["n"] < 50  # the loop ended before the stream did
     assert turn_module.TurnResult is TurnResult
+
+
+class CallEndRecorder(NoHooks):
+    """Records each call-end hook with whether the store had already recorded the end at that moment."""
+
+    def __init__(self, store: TraceStore) -> None:
+        self.store = store
+        self.seen: list[tuple[str, str | None, bool]] = []
+
+    def on_call_end(self, ctx, outcome):
+        row = self.store.call(ctx.call_id)
+        self.seen.append((ctx.call_id, outcome, row is not None and row.ended_at is not None))
+
+
+def stopped_session(hooks, store: TraceStore) -> MediaSession:
+    """A session whose caller says one thing and hangs up, on the fake ears and mouth."""
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, EchoBrain(), hooks, "sys", "CA1", SID, greeting=None, store=store
+    )
+
+    async def script():
+        transcriber.hear("hello there", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert transcriber.stopped  # the hang-up ran to its end
+    return session
+
+
+def test_the_phone_runs_the_call_end_hook_once_just_before_the_store_ends_the_call() -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    hooks = CallEndRecorder(store)
+    stopped_session(hooks, store)
+    assert hooks.seen == [("CA1", "1 turns, 0 barge-ins, 0 superseded", False)]
+    assert store.call("CA1").ended_at is not None
+
+
+def test_a_call_end_hook_that_raises_never_breaks_the_phones_hang_up(caplog) -> None:
+    class Broken(NoHooks):
+        def on_call_end(self, ctx, outcome):
+            raise RuntimeError("summary job down")
+
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    stopped_session(Broken(), store)
+    assert store.call("CA1").outcome == "1 turns, 0 barge-ins, 0 superseded"
+    assert any("on_call_end failed" in r.getMessage() for r in caplog.records)
+
+
+class HoldingLine(NoHooks):
+    def on_silence(self, ctx, seconds):
+        ctx.data["hang_up"] = True  # the holding line at the hold limit (card 06)
+        return "I'll let you go. Call back any time."
+
+
+def test_a_silence_hook_that_asks_for_the_hang_up_ends_the_call_after_its_line_has_played() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+    frames_after_close = {"n": 0}
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send,
+        transcriber,
+        speaker,
+        EchoBrain(),
+        HoldingLine(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=GREETING,
+        silence_after_s=0.2,
+    )
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        # The event is set only after the line's last mark has gone out, so every mark is in `sent` by then.
+        await settle(lambda: session._hang_up.is_set())
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        for _ in range(50):  # the stream goes on sending frames; the session must stop reading them
+            yield frame()
+            frames_after_close["n"] += 1
+            await asyncio.sleep(0.01)
+
+    asyncio.run(session.run(script()))
+    assert speaker.said == [GREETING, "I'll let you go.", "Call back any time."]  # spoken by sentence
+    assert frames_after_close["n"] < 50  # the loop ended before the stream did
+    assert "hang_up" not in session.ctx.data

@@ -1,4 +1,7 @@
+import logging
 import time
+
+import pytest
 
 from candidate_line.escalation import (
     Escalation,
@@ -6,7 +9,9 @@ from candidate_line.escalation import (
     LogPoster,
     SlackWebhookPoster,
     format_message,
+    trace_link,
 )
+from candidate_line.settings import DEFAULT_COCKPIT_BASE_URL
 from candidate_line.traces import TraceStore
 
 E = Escalation(
@@ -22,6 +27,44 @@ def test_the_message_carries_tier_reason_action_and_trace_link() -> None:
     text = format_message(E)
     for piece in ("notify", "c1", "second time", "within the hour", "/calls/c1", "closes the loop"):
         assert piece in text
+
+
+def test_the_message_names_the_caller_from_the_stores_call_row() -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA7", "voice", caller="+15555550100")
+    row = store.call("CA7")
+    assert row is not None and row.caller_masked is not None
+    e = Escalation(
+        "CA7",
+        "2",
+        "a second move",
+        "call the candidate",
+        trace_link(DEFAULT_COCKPIT_BASE_URL, "CA7"),
+        caller=row.caller_masked,
+    )
+    text = format_message(e)
+    assert "Caller: ***-***-0100" in text and "5555550100" not in text
+    assert "Caller: -" in format_message(E)  # text mode has no number, and the field still reads
+
+
+def test_the_trace_link_is_the_cockpit_page_for_the_call() -> None:
+    assert trace_link("http://127.0.0.1:8001", "CA1") == "http://127.0.0.1:8001/calls/CA1"
+    assert (
+        trace_link("https://cockpit.example/", "text-1a2b3c4d")
+        == "https://cockpit.example/calls/text-1a2b3c4d"
+    )
+
+
+def test_the_log_poster_shows_the_hand_off_on_stderr_and_in_the_log(
+    capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    poster = LogPoster()
+    with caplog.at_level(logging.INFO, logger="candidate_line.escalation"):
+        poster.post(format_message(E))
+    out, err = capsys.readouterr()
+    assert err.startswith("[hand-off] Candidate Line: notify on call c1") and out == ""
+    assert poster.posted == [format_message(E)]  # the in-memory list the tests read is kept
+    assert [r.getMessage() for r in caplog.records] == [f"[hand-off] {format_message(E)}"]
 
 
 def wait_for(predicate, seconds: float = 2.0) -> None:

@@ -44,3 +44,10 @@ def test_the_probe_callers_twilio_identifiers_come_through_settings() -> None:
         {"TWILIO_ACCOUNT_SID": "ACx", "TWILIO_LINE_NUMBER": "+15550001", "TWILIO_PROBE_NUMBER": ""}
     )
     assert (s.twilio_account_sid, s.twilio_line_number, s.twilio_probe_number) == ("ACx", "+15550001", None)
+
+
+def test_the_cockpit_base_url_defaults_to_the_loopback_cockpit_and_can_be_named() -> None:
+    assert Settings.from_env({}).cockpit_base_url == "http://127.0.0.1:8001"  # make cockpit's address
+    assert Settings.from_env({"COCKPIT_BASE_URL": ""}).cockpit_base_url == "http://127.0.0.1:8001"
+    named = Settings.from_env({"COCKPIT_BASE_URL": "https://cockpit.example"})
+    assert named.cockpit_base_url == "https://cockpit.example"

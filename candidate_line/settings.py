@@ -16,6 +16,9 @@ Provider = Literal["bedrock", "anthropic", "echo"]
 PROVIDERS: tuple[Provider, ...] = ("bedrock", "anthropic", "echo")
 VoiceMode = Literal["say", "stream"]
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING")
+# `make cockpit` serves on loopback at this address (Makefile), so a hand-off's trace link works on this Mac with
+# nothing set; COCKPIT_BASE_URL names another address when the recruiter reads the cockpit elsewhere.
+DEFAULT_COCKPIT_BASE_URL = "http://127.0.0.1:8001"
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,7 @@ class Settings:
     trace_store_path: str | None
     eval_trace_store_path: str | None
     slack_webhook_url: str | None
+    cockpit_base_url: str
     # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above.
     twilio_account_sid: str | None
     twilio_line_number: str | None
@@ -81,6 +85,8 @@ class Settings:
             eval_trace_store_path=e.get("EVAL_TRACE_STORE_PATH") or None,
             # The escalation channel (DR-013): Slack when set, the log poster otherwise. A secret, from the keychain.
             slack_webhook_url=e.get("SLACK_WEBHOOK_URL") or None,
+            # Where a hand-off's trace link points (escalation.trace_link). An empty value reads as unset.
+            cockpit_base_url=e.get("COCKPIT_BASE_URL") or DEFAULT_COCKPIT_BASE_URL,
         )
 
     def system_prompt(self) -> str:

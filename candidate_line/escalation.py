@@ -10,17 +10,23 @@ written live with the tiers; this module only knows how to post.
 from __future__ import annotations
 
 import json
+import logging
 import queue
+import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
 
 from candidate_line.traces import TraceStore
 
+log = logging.getLogger("candidate_line.escalation")
+
 TEMPLATE = (
     "Candidate Line: {tier} on call {call_id}\n"
+    "Caller: {caller}\n"
     "Why: {reason}\n"
     "Suggested next action: {suggested_action}\n"
     "Trace: {trace_url}\n"
@@ -35,16 +41,26 @@ class Escalation:
     reason: str
     suggested_action: str
     trace_url: str
+    # The masked number from the store's call row (TraceStore.call), so the recruiter knows who to ring back
+    # without opening the trace; "-" in text mode, where there is no number. Never a raw number (AGENTS.md rule 7).
+    caller: str = "-"
 
 
 def format_message(e: Escalation) -> str:
     return TEMPLATE.format(
         tier=e.tier,
         call_id=e.call_id,
+        caller=e.caller,
         reason=e.reason,
         suggested_action=e.suggested_action,
         trace_url=e.trace_url,
     )
+
+
+def trace_link(base_url: str, call_id: str) -> str:
+    """The cockpit page for one call. The base comes from Settings.cockpit_base_url, so a hand-off posted from a
+    tunnel or another host can point at a cockpit the recruiter can reach; a trailing slash is not doubled."""
+    return f"{base_url.rstrip('/')}/calls/{urllib.parse.quote(call_id, safe='')}"
 
 
 class Poster(Protocol):
@@ -75,7 +91,7 @@ class SlackWebhookPoster:
 
 
 class LogPoster:
-    """No channel: the message is kept in memory. Text mode and the tests use it."""
+    """No channel: the message is kept in memory and shown. Text mode, the eval runner and the tests use it."""
 
     channel = "log"
 
@@ -84,6 +100,10 @@ class LogPoster:
 
     def post(self, text: str) -> None:
         self.posted.append(text)
+        # A hand-off nobody can see is no hand-off: with no Slack webhook the room still watches the post land, on
+        # stderr so it never mixes into text mode's answers on stdout, and in the log beside the turn lines.
+        print(f"[hand-off] {text}", file=sys.stderr, flush=True)
+        log.info("[hand-off] %s", text)
 
 
 class EscalationQueue:

@@ -140,11 +140,14 @@ class MediaSession:
                     break
         finally:
             self._stopped = True
+            outcome = f"{self.turns} turns, {self.barge_ins} barge-ins, {self.superseded} superseded"
+            try:
+                self._hooks.on_call_end(self.ctx, outcome)
+            except Exception:
+                # A hook must never break a hang-up: the store still records the end and the stream still closes.
+                log.exception("on_call_end failed for %s", self.ctx.call_id)
             if self.ctx.store is not None:
-                self.ctx.store.end_call(
-                    self.ctx.call_id,
-                    f"{self.turns} turns, {self.barge_ins} barge-ins, {self.superseded} superseded",
-                )
+                self.ctx.store.end_call(self.ctx.call_id, outcome)
             self._cancel_grace()  # the caller has gone; a turn still waiting out its grace is not spoken
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
@@ -168,10 +171,14 @@ class MediaSession:
             if quiet_for < self._silence_after:
                 continue
             self._last_activity = time.monotonic()  # one line per stretch of silence
-            line = run_silence(self._hooks, self.ctx, round(quiet_for, 1))
-            if line:
-                log.info("silence %.0f s %s -> %r", quiet_for, self.ctx.call_id, line)
-                await self.speak(line)
+            reply = run_silence(self._hooks, self.ctx, round(quiet_for, 1))
+            if reply.said:
+                log.info("silence %.0f s %s -> %r", quiet_for, self.ctx.call_id, reply.said)
+                await self.speak(reply.said)
+            if reply.hang_up:
+                # Set after the line is sent, as a closing turn does: the loop ends once its marks come back.
+                log.info("silence hang-up %s", self.ctx.call_id)
+                self._hang_up.set()
 
     async def _listen(self) -> None:
         try:

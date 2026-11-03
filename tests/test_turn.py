@@ -1,6 +1,6 @@
 from candidate_line.brain import EchoBrain, Message
 from candidate_line.hooks import HookChain, NoHooks
-from candidate_line.turn import TurnContext, run_silence, run_turn
+from candidate_line.turn import SilenceReply, TurnContext, run_silence, run_turn
 
 
 def ctx() -> TurnContext:
@@ -26,6 +26,9 @@ class Rewriter:
     def on_tool(self, ctx, name, args, result):
         return None
 
+    def on_call_end(self, ctx, outcome):
+        return None
+
 
 class Guard:
     def __init__(self) -> None:
@@ -42,6 +45,9 @@ class Guard:
         return "Still there?" if seconds >= 5 else None
 
     def on_tool(self, ctx, name, args, result):
+        return None
+
+    def on_call_end(self, ctx, outcome):
         return None
 
 
@@ -70,9 +76,38 @@ def test_before_speak_can_silence_gus() -> None:
 
 def test_silence_hook_speaks_only_past_its_threshold() -> None:
     c = ctx()
-    assert run_silence(HookChain([Guard()]), c, 2) is None
-    assert run_silence(HookChain([Guard()]), c, 6) == "Still there?"
+    assert run_silence(HookChain([Guard()]), c, 2) == SilenceReply(said=None, hang_up=False)
+    assert run_silence(HookChain([Guard()]), c, 6) == SilenceReply(said="Still there?", hang_up=False)
     assert c.history == [Message("assistant", "Still there?")]
+
+
+def test_a_silence_hook_that_asks_for_the_hang_up_gets_it_once() -> None:
+    class Holding(Guard):
+        def on_silence(self, ctx, seconds):
+            ctx.data["hang_up"] = True  # the holding line at the hold limit (card 06)
+            return "I'll let you go. Call back any time."
+
+    c = ctx()
+    reply = run_silence(HookChain([Holding()]), c, 30)
+    assert reply == SilenceReply(said="I'll let you go. Call back any time.", hang_up=True)
+    assert "hang_up" not in c.data  # popped, so a later silence does not inherit the request
+    assert run_silence(HookChain([Guard()]), c, 6).hang_up is False
+
+
+def test_the_chain_runs_every_call_end_hook_in_order() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    class Recorder(Guard):
+        def __init__(self, name: str) -> None:
+            super().__init__()
+            self.name = name
+
+        def on_call_end(self, ctx, outcome):
+            seen.append((self.name, outcome))
+
+    HookChain([Recorder("first"), Recorder("second")]).on_call_end(ctx(), "2 turns")
+    assert seen == [("first", "2 turns"), ("second", "2 turns")]
+    assert NoHooks().on_call_end(ctx(), None) is None
 
 
 def test_later_hooks_see_earlier_replacements() -> None:

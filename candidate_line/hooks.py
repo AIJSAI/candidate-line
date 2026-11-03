@@ -1,4 +1,4 @@
-"""Four hooks the turn loop calls, empty today, filled live on Wednesday.
+"""Four hooks the turn loop calls, and one the call's end calls, empty today, filled live on Wednesday.
 
 Why hooks and not subclasses: the guard, the observer, the kill switch and the override log are written in the
 room, each as one small object that plugs into a loop nobody rewrites. Each hook may return None (no change) or
@@ -28,9 +28,13 @@ class Hooks(Protocol):
     def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
         """Sees every tool call after it ran. Observes only; the override log and the traces start here."""
 
+    def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
+        """Called once when the call ends, just before the store records its end, with the outcome it records.
+        Observes only. The phone runs it on the event loop, so slow work goes to a worker, never inline."""
+
 
 class NoHooks:
-    """The four hooks, doing nothing. The default until Wednesday."""
+    """The hooks, doing nothing. The default until Wednesday."""
 
     def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
         return None
@@ -42,14 +46,18 @@ class NoHooks:
         return None
 
     def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
+        return None
+
+    def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
         return None
 
 
 class LineHooks:
-    """The line's own hooks: four empty bodies the room fills on Wednesday (card 04 `on_tool`, card 05 `before_speak`,
-    card 06 the tiers' observer on `on_tool` and the kill switch on `on_turn`). Every runtime path gets one through
-    `default_hooks()`, so a body written here runs on the phone, in text mode and in the eval runner alike.
-    `NoHooks` above stays truly empty, for the tests."""
+    """The line's own hooks: empty bodies the room fills on Wednesday (card 04 `on_tool`, card 05 `before_speak`,
+    card 06 the tiers' observer on `on_tool`, the kill switch on `on_turn`, the holding line on `on_silence` and the
+    summary on `on_call_end`). Every runtime path gets one through `default_hooks()`, so a body written here runs on
+    the phone, in text mode and in the eval runner alike; `on_call_end` alone runs only on the phone and in text
+    mode, where a call really ends. `NoHooks` above stays truly empty, for the tests."""
 
     def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
         return None
@@ -61,6 +69,11 @@ class LineHooks:
         return None
 
     def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
+        return None
+
+    def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
+        # Card 06's tier-3 summary job runs here: the call is over, so the summary nobody waits on starts now,
+        # handed to a worker so the hang-up is never held up by it.
         return None
 
 
@@ -102,3 +115,7 @@ class HookChain:
     def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
         for hook in self._hooks:
             hook.on_tool(ctx, name, args, result)
+
+    def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
+        for hook in self._hooks:
+            hook.on_call_end(ctx, outcome)

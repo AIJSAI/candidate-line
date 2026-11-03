@@ -106,3 +106,15 @@ def test_a_meta_key_that_names_a_pin_is_stored_masked_at_any_depth() -> None:
     }
     assert not any(pin in repr(span) for pin in ("9593", "1234", "4321"))
     assert meta["pin"] == "9593"  # the caller's own dict is left as it was
+
+
+def test_one_call_is_looked_up_by_id_and_an_unknown_id_is_none() -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA3", "voice", caller="+15555550133", provider="anthropic", model="haiku")
+    store.span("CA3", "model", "haiku", ms=400)
+    store.start_call("CA4", "text")
+    row = store.call("CA3")
+    assert row is not None and row.call_id == "CA3" and row.caller_masked == "***-***-0133"
+    assert row.span_count == 1 and row.model_ms == 400  # the same columns as the list view
+    assert row == next(r for r in store.calls() if r.call_id == "CA3")
+    assert store.call("nope") is None

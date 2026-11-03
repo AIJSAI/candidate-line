@@ -118,10 +118,14 @@ def run_case(
     cache_read = cache_write = 0
     for turn in case.turns:
         if turn.user is None:
-            said = run_silence(hooks, ctx, turn.silence_seconds or 0.0)
-            # A silence turn runs no model, so its "reply" is empty and free.
+            silence = run_silence(hooks, ctx, turn.silence_seconds or 0.0)
+            # A silence turn runs no model, so its "reply" is empty and free. Its hang-up rides on the result, as a
+            # closing turn's does, so the holding line's end of the call is not lost between the hook and the case.
             result = TurnResult(
-                heard="", spoken=said or "", reply=Reply("", 0, 0, 0, brain.name, brain.model)
+                heard="",
+                spoken=silence.said or "",
+                reply=Reply("", 0, 0, 0, brain.name, brain.model),
+                hang_up=silence.hang_up,
             )
         else:
             result = run_turn(brain, hooks, ctx, turn.user)

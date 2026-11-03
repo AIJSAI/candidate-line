@@ -75,8 +75,20 @@ def run_turn(
     return TurnResult(heard=heard, spoken=spoken, reply=reply)
 
 
-def run_silence(hooks: Hooks, ctx: TurnContext, seconds: float) -> str | None:
+@dataclass(frozen=True)
+class SilenceReply:
+    """What a stretch of silence produced: the line to say, if any, and whether the call should then end."""
+
+    said: str | None
+    hang_up: bool
+
+
+def run_silence(hooks: Hooks, ctx: TurnContext, seconds: float) -> SilenceReply:
     line = hooks.on_silence(ctx, seconds)
     if line:
         ctx.history.append(Message("assistant", line))
-    return line
+    # A hook asks for the hang-up through the call's scratch (card 06's holding line at the hold limit), so
+    # on_silence keeps returning only the line to say. Popped, so one request ends the call once and a later
+    # silence does not inherit it.
+    hang_up = bool(ctx.data.pop("hang_up", False))
+    return SilenceReply(said=line or None, hang_up=hang_up)
