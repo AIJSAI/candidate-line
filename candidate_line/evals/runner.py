@@ -5,6 +5,9 @@ committed baseline (evals/baseline.json): the pass rate may not fall and the cos
 than 20 percent. A case whose only unmet checks are pending (their component has not landed, DR-010) is printed
 as PENDING and counts for neither side. With zero cases it prints that and exits 0 (PREBUILT.md row 9). The run
 speaks with the same persona and the same hooks as the phone and text mode (Settings.system_prompt, default_hooks).
+
+Each run leaves its per-case verdicts in var/eval-last.json, beside its trace store, and the next run prints the
+cases whose verdict moved. `make baseline` (--write-baseline) writes evals/baseline.json from a run's own numbers.
 """
 
 from __future__ import annotations
@@ -12,9 +15,11 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from candidate_line.brain import Brain, EchoBrain, Reply, make_brain
@@ -32,6 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 CASES = ROOT / "evals" / "cases"
 BASELINE = ROOT / "evals" / "baseline.json"
 COST_TOLERANCE = 0.20
+LAST_RUN_NAME = "eval-last.json"
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,41 @@ class CaseResult:
     def pending(self) -> bool:
         """Every unmet check waits for a component that has not landed; nothing evaluable failed."""
         return not self.passed and all(v.passed or v.pending for v in self.verdicts)
+
+    @property
+    def verdict(self) -> str:
+        return "passed" if self.passed else ("pending" if self.pending else "failed")
+
+    @property
+    def brain_ms(self) -> int | None:
+        """The median of the case's model turns on the brain's clock. None when no model ran, because the echo
+        brain and a silence turn report 0 ms and a zero would drag a median of real turns down."""
+        ran = [ms for ms in self.latencies_ms if ms > 0]
+        return round(statistics.median(ran)) if ran else None
+
+
+@dataclass(frozen=True)
+class RunNumbers:
+    """The numbers the gate reads, computed in one place so the report and the baseline writer cannot disagree."""
+
+    boundary_failures: tuple[CaseResult, ...]
+    # The evaluable regression cases; a pending one counts for neither side.
+    regression: tuple[CaseResult, ...]
+    pass_rate: float | None
+    cost_per_call: float | None
+    priced: int  # the cases with a price, the n behind the cost per call (AGENTS.md rule 13)
+
+
+def run_numbers(results: list[CaseResult]) -> RunNumbers:
+    boundary_failures = tuple(
+        r for r in results if r.case.kind == "boundary" and not r.passed and not r.pending
+    )
+    regression = tuple(r for r in results if r.case.kind == "regression" and not r.pending)
+    pass_rate = (sum(r.passed for r in regression) / len(regression)) if regression else None
+    costs = [r.cost_usd for r in results if r.cost_usd is not None]
+    return RunNumbers(
+        boundary_failures, regression, pass_rate, statistics.mean(costs) if costs else None, len(costs)
+    )
 
 
 def run_case(
@@ -103,23 +144,28 @@ def run_case(
     )
 
 
-def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, int]:
-    """The report and the exit code."""
+def summarize(results: list[CaseResult], baseline: dict | None, moved: str | None = None) -> tuple[str, int]:
+    """The report and the exit code. `moved` is the line naming the cases whose verdict changed since the
+    previous run; it sits just above the counts, where a reader looks first."""
     lines = []
     for r in results:
         mark = "PASS" if r.passed else ("PENDING" if r.pending else "FAIL")
         ref = f" [{r.case.spec_ref}]" if r.case.spec_ref else ""
-        lines.append(f"{mark} {r.case.id} ({r.case.kind}){ref} {r.case.title}")
+        # Each case carries its own median brain time, so the median of a named set (card 04's happy paths) is
+        # read off the report without a query against the trace store.
+        brain = f", brain {r.brain_ms:,} ms" if r.brain_ms is not None else ""
+        lines.append(f"{mark} {r.case.id} ({r.case.kind}){ref} {r.case.title}{brain}")
         for v in r.verdicts:
             if not v.passed:
                 lines.append(f"     {'~' if v.pending else 'x'} {v.check.name} {v.check.arg!r}: {v.detail}")
     pending = [r for r in results if r.pending]
-    boundary_fail = [r for r in results if r.case.kind == "boundary" and not r.passed and not r.pending]
-    regression = [r for r in results if r.case.kind == "regression" and not r.pending]
-    pass_rate = (sum(r.passed for r in regression) / len(regression)) if regression else None
-    costs = [r.cost_usd for r in results if r.cost_usd is not None]
-    cost_per_call = statistics.mean(costs) if costs else None
+    numbers = run_numbers(results)
+    boundary_fail = numbers.boundary_failures
+    pass_rate = numbers.pass_rate
+    cost_per_call = numbers.cost_per_call
     failed = len(results) - sum(r.passed for r in results) - len(pending)
+    if moved:
+        lines.append(moved)
     lines.append(
         f"{len(results)} cases, {sum(r.passed for r in results)} passed, {failed} failed, {len(pending)} pending; boundary failures: {len(boundary_fail)}"
     )
@@ -153,8 +199,93 @@ def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, in
             if delta > COST_TOLERANCE:
                 code = 1
     else:
-        lines.append("baseline: none committed yet (evals/baseline.json is written by its own work item)")
+        lines.append(
+            "baseline: none committed yet (make baseline writes evals/baseline.json, inside its own work item)"
+        )
     return "\n".join(lines), code
+
+
+def last_run_path(store_path: Path | str) -> Path | None:
+    """The last-run file sits beside the eval trace store, so EVAL_TRACE_STORE_PATH (read by Settings) moves both.
+    An in-memory store leaves no file: every test runs on one (tests/conftest.py), so the `make test` inside
+    `make gate` can never replace the room's last run with a test's cases and turn the next moved line to noise."""
+    if str(store_path) == ":memory:":
+        return None
+    return Path(store_path).with_name(LAST_RUN_NAME)
+
+
+def read_last_run(path: Path) -> dict[str, str] | None:
+    """The previous run's verdict by case id, or None when its file cannot be read."""
+    try:
+        rows = json.loads(path.read_text())["cases"]
+        return {str(row["id"]): str(row["verdict"]) for row in rows}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def write_last_run(path: Path, results: list[CaseResult]) -> None:
+    rows = [
+        {"id": r.case.id, "verdict": r.verdict, "boundary": r.case.kind == "boundary", "brain_ms": r.brain_ms}
+        for r in results
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Written beside and then renamed, so a run cut off half way never leaves half a file for the next comparison.
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps({"cases": rows}, indent=2) + "\n")
+    tmp.replace(path)
+
+
+def moved_line(previous: dict[str, str], results: list[CaseResult]) -> str:
+    """The cases whose verdict changed since the previous run, so "show me the cases that moved" is one line to
+    read and not two reports to compare by eye. A case new to this run reads `new`; one no longer run, `gone`."""
+    current = {r.case.id: r.verdict for r in results}
+    moved = [
+        f"{cid} {previous.get(cid, 'new')} -> {v}" for cid, v in current.items() if previous.get(cid) != v
+    ]
+    moved += [f"{cid} {v} -> gone" for cid, v in previous.items() if cid not in current]
+    return f"moved: {', '.join(moved) or 'none'}"
+
+
+def git_commit() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def write_baseline(path: Path, results: list[CaseResult]) -> int:
+    """`make baseline`: the file in the shape evals/README.md documents, from this run's own numbers. The second
+    dry run copied the cost from the rounded printout by hand; this takes it unrounded from the run itself."""
+    numbers = run_numbers(results)
+    if numbers.boundary_failures:
+        ids = ", ".join(r.case.id for r in numbers.boundary_failures)
+        print(
+            f"baseline not written: {len(numbers.boundary_failures)} boundary failure(s) ({ids}); a baseline comes only from a run with none"
+        )
+        return 1
+    # A baseline with no rate or no cost would switch that half of the gate off without saying so.
+    if numbers.pass_rate is None or numbers.cost_per_call is None:
+        print(
+            "baseline not written: the run has no evaluable regression case or no priced model turn, so there is no rate or cost to hold the next run to"
+        )
+        return 1
+    try:
+        commit = git_commit()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"baseline not written: git rev-parse failed ({exc})")
+        return 1
+    # The rate is written unrounded: a rate rounded up would fail the next run that scores exactly the same.
+    baseline = {
+        "regression_pass_rate": numbers.pass_rate,
+        "cost_per_call_usd": round(numbers.cost_per_call, 8),
+        "commit": commit,
+        "date": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    path.write_text(json.dumps(baseline, indent=2) + "\n")
+    print(
+        f"baseline written to {path}: regression pass rate {numbers.pass_rate:.2f} over {len(numbers.regression)} evaluable case(s), "
+        f"{numbers.cost_per_call:.5f} USD a call over {numbers.priced} priced case(s) (rates.py), commit {commit}"
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -166,7 +297,24 @@ def main(argv: list[str] | None = None) -> int:
         default="env",
         help="echo runs no model (default: the environment's brain)",
     )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=BASELINE,
+        help="the baseline the gate reads and --write-baseline writes (default: evals/baseline.json)",
+    )
+    parser.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="after the run, write the baseline from it; only from evals/cases, refused on a boundary failure",
+    )
     args = parser.parse_args(argv)
+    # A baseline comes from the room's cases or not at all, so a test's tmp_path or a scratch folder can never
+    # write the file every later run is held to (AGENTS.md rule 4). Refused before a single model call is spent.
+    if args.write_baseline and args.cases.resolve() != CASES.resolve():
+        real = CASES.relative_to(ROOT) if CASES.is_relative_to(ROOT) else CASES
+        print(f"baseline not written: --write-baseline runs only on {real}, not {args.cases}")
+        return 1
     cases = load_cases(args.cases)
     if not cases:
         print(f"0 cases in {args.cases}; nothing to run (the cases are written live, PREBUILT.md)")
@@ -183,21 +331,33 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
     # The runner's own store, beside the room's and never in it: make trace last shows the room's last call.
-    store = TraceStore(settings.eval_trace_store_path or EVAL_DEFAULT_PATH)
+    store_path = settings.eval_trace_store_path or EVAL_DEFAULT_PATH
+    store = TraceStore(store_path)
     queue = default_queue(store, None)  # the log poster: an eval run never reaches a real channel
     results = []
     for case in cases:
         result = run_case(
             case, brain, default_hooks(), system=settings.system_prompt(), store=store, escalations=queue
         )
-        store.end_call(
-            result.ctx_call_id, "passed" if result.passed else ("pending" if result.pending else "failed")
-        )
+        store.end_call(result.ctx_call_id, result.verdict)
         results.append(result)
     queue.drain()
-    baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
-    report, code = summarize(results, baseline)
+    moved = None
+    last = last_run_path(store_path)
+    if last is not None:
+        if last.exists():
+            previous = read_last_run(last)
+            moved = (
+                moved_line(previous, results)
+                if previous is not None
+                else f"moved: unknown ({last} could not be read; this run replaces it)"
+            )
+        write_last_run(last, results)
+    baseline = json.loads(args.baseline.read_text()) if args.baseline.exists() else None
+    report, code = summarize(results, baseline, moved)
     print(report)
+    if args.write_baseline:
+        return write_baseline(args.baseline, results)
     return code
 
 

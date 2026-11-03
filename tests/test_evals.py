@@ -1,8 +1,14 @@
+import json
+import subprocess
+from collections.abc import Sequence
+from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from candidate_line.brain import EchoBrain
+from candidate_line.brain import EchoBrain, Message, Reply, ToolSpec
+from candidate_line.evals import runner
 from candidate_line.evals.runner import main, run_case, summarize
 from candidate_line.evals.schema import CaseError, load_cases, parse_case
 from candidate_line.hooks import NoHooks
@@ -196,3 +202,98 @@ def test_a_voice_case_is_left_to_the_probe_caller_and_not_run_as_text(tmp_path: 
     assert main(["--cases", str(tmp_path), "--brain", "echo"]) == 0
     out = capsys.readouterr().out
     assert "1 voice case(s) left to the probe caller: CL-901" in out and "no text cases to run" in out
+
+
+def _write_case(folder: Path, case_id: str, kind: str, user: str) -> None:
+    """A one-turn case the echo brain passes when the caller's words name Thursday and fails otherwise."""
+    (folder / f"{case_id}.yaml").write_text(
+        f"id: {case_id}\ntitle: {case_id}\nkind: {kind}\nturns:\n  - user: '{user}'\n"
+        "    checks:\n      - spoken_matches: '(?i)thursday'\n"
+    )
+
+
+class _PricedEcho(EchoBrain):
+    """The echo brain with a Haiku 5.5 price and a clock, so a green run has a rate, a cost and a brain time."""
+
+    name = "anthropic"
+    model = "claude-haiku-5-5"
+
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply:
+        said = super().reply(system, messages, max_tokens, tools)
+        return replace(
+            said, input_tokens=1000, output_tokens=20, latency_ms=900, provider=self.name, model=self.model
+        )
+
+
+def test_a_second_run_names_the_cases_that_moved(tmp_path: Path, monkeypatch, capsys) -> None:
+    # The last-run file sits beside the eval store; the conftest keeps that store in memory, which leaves no file.
+    monkeypatch.setenv("EVAL_TRACE_STORE_PATH", str(tmp_path / "var" / "eval-traces.sqlite"))
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    _write_case(cases, "CL-021", "regression", "Thursday works")
+    _write_case(cases, "CL-028", "boundary", "hello")
+    run = ["--cases", str(cases), "--brain", "echo"]
+    assert main(run) == 1
+    assert "moved:" not in capsys.readouterr().out  # no previous run to compare with
+    last = json.loads((tmp_path / "var" / "eval-last.json").read_text())
+    assert last["cases"] == [
+        {"id": "CL-021", "verdict": "passed", "boundary": False, "brain_ms": None},
+        {"id": "CL-028", "verdict": "failed", "boundary": True, "brain_ms": None},
+    ]
+    _write_case(cases, "CL-028", "boundary", "Thursday then")  # the case changed between the runs
+    assert main(run) == 0
+    out = capsys.readouterr().out
+    assert "\nmoved: CL-028 failed -> passed\n2 cases, 2 passed" in out
+    assert main(run) == 0
+    assert "\nmoved: none\n" in capsys.readouterr().out
+
+
+def test_each_case_line_carries_its_median_brain_time_when_a_model_ran() -> None:
+    from candidate_line.evals.runner import CaseResult
+
+    timed = CaseResult(parse_case(GOOD), (), None, "eval-x", (1500, 2100, 1712))
+    echoed = CaseResult(parse_case({**GOOD, "id": "echo-only"}), (), None, "eval-y", (0,))
+    report, _ = summarize([timed, echoed], None)
+    first, second = report.splitlines()[:2]
+    assert first.startswith("PASS echo-cites (boundary)") and first.endswith(", brain 1,712 ms")
+    assert second.startswith("PASS echo-only") and ", brain" not in second
+    assert "brain latency: median 1712 ms, worst 2100 ms over 3 model turns" in report  # unchanged
+
+
+def test_write_baseline_runs_only_on_the_real_cases_refuses_a_boundary_failure_and_writes_the_shape(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    committed = runner.BASELINE.read_bytes() if runner.BASELINE.exists() else None
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    baseline = tmp_path / "baseline.json"
+    run = ["--cases", str(cases), "--write-baseline", "--baseline", str(baseline)]
+    _write_case(cases, "CL-021", "regression", "Thursday works")
+    assert main([*run, "--brain", "echo"]) == 1
+    assert "runs only on evals/cases" in capsys.readouterr().out and not baseline.exists()
+
+    monkeypatch.setattr(runner, "CASES", cases)  # this folder stands in for the room's evals/cases
+    monkeypatch.setattr(runner, "make_brain", lambda settings: _PricedEcho())
+    _write_case(cases, "CL-028", "boundary", "hello")
+    assert main(run) == 1
+    refusal = capsys.readouterr().out.splitlines()[-1]
+    assert (
+        refusal.startswith("baseline not written: 1 boundary failure(s) (CL-028)") and not baseline.exists()
+    )
+
+    _write_case(cases, "CL-028", "boundary", "Thursday then")
+    assert main(run) == 0
+    out = capsys.readouterr().out
+    assert "PASS CL-021 (regression) CL-021, brain 900 ms" in out
+    written = json.loads(baseline.read_text())
+    assert list(written) == ["regression_pass_rate", "cost_per_call_usd", "commit", "date"]
+    # One turn a call at (1000 input x 0.10 + 20 output x 0.50) USD per million tokens (rates.py).
+    assert written["regression_pass_rate"] == 1.0 and written["cost_per_call_usd"] == 0.00011
+    head = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=runner.ROOT, capture_output=True, text=True, check=True
+    )
+    assert written["commit"] == head.stdout.strip()
+    assert datetime.fromisoformat(written["date"]).utcoffset() == timedelta(0)
+    assert (runner.BASELINE.read_bytes() if runner.BASELINE.exists() else None) == committed

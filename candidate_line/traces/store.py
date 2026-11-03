@@ -2,7 +2,8 @@
 
 Why SQLite: one file under var/ (ignored by git), no server, readable with any tool, and the cockpit's list view
 is one query. Why masking lives here: the store is the only writer, so a caller's number is masked in the one
-function that accepts it and no span can carry a raw number by accident. The spans themselves are written live
+function that accepts it and no span can carry a raw number by accident. A span's metadata loses any PIN the same
+way, in the one function that writes spans (the second dry run of card 04). The spans themselves are written live
 on Wednesday from the turn loop; today the store, its schema and its page exist.
 """
 
@@ -25,6 +26,7 @@ EVAL_DEFAULT_PATH = DEFAULT_PATH.with_name(
     "eval-traces.sqlite"
 )  # the eval runner's own store, never the room's
 _BYTES = (bytes, bytearray, memoryview)
+PIN_MASK = "****"
 
 # The kinds the pre-built store knows plus the ones the room's cards write (cite from card 03, tier, override and
 # kill from card 06; card 03 writes a tier placeholder), so no card has to touch this file to name its span.
@@ -66,6 +68,20 @@ def _holds_bytes(value: Any) -> bool:
     if isinstance(value, list | tuple):
         return any(_holds_bytes(v) for v in value)
     return False
+
+
+def _mask_pins(value: Any) -> Any:
+    """A copy of the metadata with the value of every key that names a PIN replaced, however deeply nested.
+
+    Why nested: a tool span's meta holds the tool's arguments, and the arguments of the call that checks a caller
+    carry the PIN the caller just said (the second dry run of card 04). Why a substring of the lowercase name:
+    `pin`, `PIN` and `caller_pin` are all caught, and a key caught by accident only loses its value from a trace.
+    """
+    if isinstance(value, dict):
+        return {k: PIN_MASK if "pin" in str(k).lower() else _mask_pins(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_mask_pins(v) for v in value]
+    return value
 
 
 def now() -> str:
@@ -195,7 +211,7 @@ class TraceStore:
                     chars,
                     seconds,
                     text,
-                    json.dumps(meta or {}),
+                    json.dumps(_mask_pins(meta or {})),
                 ),
             )
             self._conn.commit()

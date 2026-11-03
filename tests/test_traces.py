@@ -85,3 +85,24 @@ def test_bytes_in_the_name_or_the_metadata_or_a_memoryview_are_refused() -> None
     with pytest.raises(TypeError):
         store.span("CA1", "speech", "spoken", meta={"audio": {"frames": [b"\xff"]}})
     assert store.spans("CA1") == []
+
+
+def test_a_meta_key_that_names_a_pin_is_stored_masked_at_any_depth() -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA2", "text")
+    meta = {
+        "pin": "9593",
+        "args": {"code": "ACME-9004", "PIN": "1234"},
+        "calls": [{"caller_pin": 4321}],
+        "slot": "S1105-0930",
+    }
+    store.span("CA2", "tool", "verify_caller", text="verified", meta=meta)
+    [span] = store.spans("CA2")
+    assert span.meta == {
+        "pin": "****",
+        "args": {"code": "ACME-9004", "PIN": "****"},
+        "calls": [{"caller_pin": "****"}],
+        "slot": "S1105-0930",
+    }
+    assert not any(pin in repr(span) for pin in ("9593", "1234", "4321"))
+    assert meta["pin"] == "9593"  # the caller's own dict is left as it was
