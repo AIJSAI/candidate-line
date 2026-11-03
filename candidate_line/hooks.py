@@ -45,6 +45,30 @@ class NoHooks:
         return None
 
 
+class LineHooks:
+    """The line's own hooks: four empty bodies the room fills on Wednesday (card 04 `on_tool`, card 05 `before_speak`,
+    card 06 the tiers' observer on `on_tool` and the kill switch on `on_turn`). Every runtime path gets one through
+    `default_hooks()`, so a body written here runs on the phone, in text mode and in the eval runner alike.
+    `NoHooks` above stays truly empty, for the tests."""
+
+    def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
+        return None
+
+    def before_speak(self, ctx: TurnContext, text: str) -> str | None:
+        return None
+
+    def on_silence(self, ctx: TurnContext, seconds: float) -> str | None:
+        return None
+
+    def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
+        return None
+
+
+def default_hooks() -> Hooks:
+    """What the phone, text mode and the eval runner run: the line's hooks, in one chain."""
+    return HookChain([LineHooks()])
+
+
 class HookChain:
     """Runs hooks in order; a replacement from one hook is what the next hook sees."""
 

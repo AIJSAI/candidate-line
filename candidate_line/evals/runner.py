@@ -2,7 +2,9 @@
 
 Boundary cases are an absolute bar: one failure fails the run. Regression cases are a gate against the
 committed baseline (evals/baseline.json): the pass rate may not fall and the cost per call may not rise more
-than 20 percent. With zero cases it prints that and exits 0, which is today's state (PREBUILT.md row 9).
+than 20 percent. A case whose only unmet checks are pending (their component has not landed, DR-010) is printed
+as PENDING and counts for neither side. With zero cases it prints that and exits 0 (PREBUILT.md row 9). The run
+speaks with the same persona and the same hooks as the phone and text mode (Settings.system_prompt, default_hooks).
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from candidate_line.brain import Brain, EchoBrain, Reply, make_brain
 from candidate_line.evals.checks import Verdict, evaluate
 from candidate_line.evals.rates import cost_usd
 from candidate_line.evals.schema import Case, load_cases
-from candidate_line.hooks import Hooks, NoHooks
+from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.turn import TurnContext, TurnResult, run_silence, run_turn
@@ -39,6 +41,11 @@ class CaseResult:
     @property
     def passed(self) -> bool:
         return all(v.passed for v in self.verdicts)
+
+    @property
+    def pending(self) -> bool:
+        """Every unmet check waits for a component that has not landed; nothing evaluable failed."""
+        return not self.passed and all(v.passed or v.pending for v in self.verdicts)
 
 
 def run_case(case: Case, brain: Brain, hooks: Hooks, system: str = PLACEHOLDER_SYSTEM) -> CaseResult:
@@ -68,20 +75,26 @@ def summarize(results: list[CaseResult], baseline: dict | None) -> tuple[str, in
     """The report and the exit code."""
     lines = []
     for r in results:
-        mark = "PASS" if r.passed else "FAIL"
+        mark = "PASS" if r.passed else ("PENDING" if r.pending else "FAIL")
         ref = f" [{r.case.spec_ref}]" if r.case.spec_ref else ""
         lines.append(f"{mark} {r.case.id} ({r.case.kind}){ref} {r.case.title}")
         for v in r.verdicts:
             if not v.passed:
-                lines.append(f"     x {v.check.name} {v.check.arg!r}: {v.detail}")
-    boundary_fail = [r for r in results if r.case.kind == "boundary" and not r.passed]
-    regression = [r for r in results if r.case.kind == "regression"]
+                lines.append(f"     {'~' if v.pending else 'x'} {v.check.name} {v.check.arg!r}: {v.detail}")
+    pending = [r for r in results if r.pending]
+    boundary_fail = [r for r in results if r.case.kind == "boundary" and not r.passed and not r.pending]
+    regression = [r for r in results if r.case.kind == "regression" and not r.pending]
     pass_rate = (sum(r.passed for r in regression) / len(regression)) if regression else None
     costs = [r.cost_usd for r in results if r.cost_usd is not None]
     cost_per_call = statistics.mean(costs) if costs else None
+    failed = len(results) - sum(r.passed for r in results) - len(pending)
     lines.append(
-        f"{len(results)} cases, {sum(r.passed for r in results)} passed, {len(results) - sum(r.passed for r in results)} failed; boundary failures: {len(boundary_fail)}"
+        f"{len(results)} cases, {sum(r.passed for r in results)} passed, {failed} failed, {len(pending)} pending; boundary failures: {len(boundary_fail)}"
     )
+    if pending:
+        lines.append(
+            f"pending: {len(pending)} cases wait for a component that has not landed (marked ~ above); they are neither passed nor failed"
+        )
     code = 1 if boundary_fail else 0
     if cost_per_call is None:
         lines.append("cost per call: no priced model turns in this run")
@@ -118,8 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     if not cases:
         print(f"0 cases in {args.cases}; nothing to run (the cases are written live, PREBUILT.md)")
         return 0
-    brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(Settings.from_env())
-    results = [run_case(case, brain, NoHooks()) for case in cases]
+    settings = Settings.from_env()
+    brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
+    results = [run_case(case, brain, default_hooks(), system=settings.system_prompt()) for case in cases]
     baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else None
     report, code = summarize(results, baseline)
     print(report)

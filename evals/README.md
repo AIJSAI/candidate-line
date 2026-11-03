@@ -1,6 +1,6 @@
 # evals/
 
-The eval cases and the committed baseline. **No case file exists before Wednesday**; the first ten are written in the room, then eleven, then twelve (PREBUILT.md). AGENTS.md rule 4: nothing here changes except inside the work item that names it, with James approving the diff, and never to make a run pass.
+The eval cases and the committed baseline. **No case file exists before Wednesday**; the first set is written in the room from the spec, then one more for the counter-case, then another for the change the room asks for (PREBUILT.md). AGENTS.md rule 4: nothing here changes except inside the work item that names it, with James approving the diff, and never to make a run pass.
 
 `make eval` runs every `cases/*.yaml` through the same turn loop as the phone (`candidate_line/evals/runner.py`); `make gate` adds the tests and the cost line. A case the runner cannot read is refused, and a check it cannot evaluate yet fails with a sentence that says so (DR-010).
 
@@ -26,7 +26,7 @@ judge:                               # optional spot check by a model, never the
   question: "Did Gus offer a callback without judging the caller?"
 ```
 
-Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular expressions) and `cites` (a section id like `F3.2` in what Gus said). Declared and refusing until their components land live: `tool_called`, `state`, `tier`.
+Checks today: `heard_matches`, `spoken_matches`, `spoken_not_matches` (regular expressions) and `cites` (a section id like `F3.2`, said aloud or carried on the turn by the retrieval step). `tool_called`, `state` and `tier` read fields the tool loop (card 04) and the tier rule (card 06) fill on the turn's result; until then they show as PENDING, which is neither a pass nor a failure, and the run's exit code ignores them. A pending check beside a real failure is a failure. The run speaks with the same persona and hooks as the phone (`Settings.system_prompt()`, `default_hooks()`).
 
 ## The baseline
 

@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Callable, Iterable
 
 from candidate_line.brain import Brain, make_brain
-from candidate_line.hooks import Hooks, NoHooks
+from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.turn import TurnContext, run_silence, run_turn
@@ -52,7 +52,9 @@ def main() -> int:
     settings = Settings.from_env()
     brain = make_brain(settings)
     try:
-        repl(brain, NoHooks(), sys.stdin, lambda s: print(s, flush=True), system=settings.system_prompt())
+        repl(
+            brain, default_hooks(), sys.stdin, lambda s: print(s, flush=True), system=settings.system_prompt()
+        )
     except Exception as error:  # noqa: BLE001  (a closed quota or a missing key is one line, not a traceback)
         print(f"{brain.name} {brain.model} failed: {error}", file=sys.stderr)
         print(

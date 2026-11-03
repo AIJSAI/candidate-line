@@ -41,12 +41,54 @@ def test_a_failing_boundary_case_fails_the_run(tmp_path: Path, capsys) -> None:
     assert "FAIL bad (boundary)" in out and "matched 'strong'" in out and "boundary failures: 1" in out
 
 
-def test_checks_that_need_live_components_fail_loudly() -> None:
+def test_checks_whose_component_has_not_landed_are_pending_not_passed_and_not_failed() -> None:
     case = parse_case(
         {**GOOD, "turns": [{"user": "book it", "checks": [{"tool_called": {"name": "book_slot"}}]}]}
     )
     result = run_case(case, EchoBrain(), NoHooks())
-    assert not result.passed and "not evaluable" in result.verdicts[0].detail
+    assert not result.passed and result.pending and "pending" in result.verdicts[0].detail
+    report, code = summarize([result], None)
+    assert code == 0 and "PENDING echo-cites" in report and "1 pending" in report
+    tiered = parse_case({**GOOD, "turns": [{"user": "x", "checks": [{"tier": "2"}]}]})
+    assert run_case(tiered, EchoBrain(), NoHooks()).pending
+
+
+def test_a_pending_check_beside_a_real_failure_is_a_failure() -> None:
+    case = parse_case(
+        {
+            **GOOD,
+            "kind": "boundary",
+            "turns": [
+                {"user": "book it", "checks": [{"tool_called": "book_slot"}, {"spoken_matches": "thursday"}]}
+            ],
+        }
+    )
+    result = run_case(case, EchoBrain(), NoHooks())
+    assert not result.passed and not result.pending
+    assert summarize([result], None)[1] == 1
+
+
+def test_landed_components_are_evaluated_from_the_turn_result() -> None:
+    from candidate_line.brain import Reply
+    from candidate_line.evals.checks import evaluate
+    from candidate_line.evals.schema import Check
+    from candidate_line.turn import TurnResult
+
+    reply = Reply("", 0, 0, 0, "echo", "none")
+    done = TurnResult(
+        "x",
+        "that is in the scheduling section",
+        reply,
+        cited=("F3.2",),
+        tools_called=("book_slot",),
+        state={"slot": "S1105-0930"},
+        tier="1",
+    )
+    assert evaluate(Check("cites", "F3.2"), done).passed  # the id rode on the turn, not in the words
+    assert evaluate(Check("tool_called", "book_slot"), done).passed
+    assert not evaluate(Check("tool_called", "move_slot"), done).passed
+    assert evaluate(Check("state", {"slot": "S1105-0930"}), done).passed
+    assert evaluate(Check("tier", "1"), done).passed and not evaluate(Check("tier", "2"), done).passed
 
 
 def test_unknown_keys_and_checks_are_refused() -> None:

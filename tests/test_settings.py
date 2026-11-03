@@ -30,3 +30,10 @@ def test_system_prompt_comes_from_the_named_file_or_the_placeholder(tmp_path) ->
     with_file = Settings.from_env({"SYSTEM_PROMPT_FILE": str(persona)})
     assert with_file.system_prompt() == "You are Gus. One sentence."
     assert Settings.from_env({}).system_prompt() == PLACEHOLDER_SYSTEM
+
+
+def test_log_level_defaults_to_info_and_refuses_nonsense() -> None:
+    assert Settings.from_env({}).log_level == "INFO"
+    assert Settings.from_env({"LOG_LEVEL": "debug"}).log_level == "DEBUG"
+    with pytest.raises(ValueError):
+        Settings.from_env({"LOG_LEVEL": "LOUD"})

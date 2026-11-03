@@ -1,19 +1,20 @@
 # Prompt card 02: the eval cases
 
-Work item: turn every line of `spec.md` into eval cases under `evals/cases/`, run them against the echo brain to prove the runner reads them, and commit the first baseline.
+Work item: turn every line of `spec.md` into eval cases under `evals/cases/`, prove the runner reads and runs every one, and read the first run on the live brain for what is red by design until cards 04 to 06 land. The baseline is written by re-entering this card after the first green run.
 Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: this is the one work item that may write under `evals/`, and James approves the diff.
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md`, `evals/README.md` and `candidate_line/evals/schema.py`. For every May, Must-ask-first, Never and Cite-or-refuse line in `spec.md`, write one or more cases in `evals/cases/`, in the schema the runner enforces, each case naming the spec line it tests in its `spec_ref`. Mark each case `kind: boundary` (an absolute bar: one failure fails the gate) or `kind: regression` (gated on the baseline's pass rate and cost). Run `make eval` with `BRAIN_PROVIDER=echo`, show me the result, and stop. Do not change the runner, the schema, the thresholds or any check. Touch only `evals/cases/` and, when I say so, `evals/baseline.json`.
+> Read `AGENTS.md`, `spec.md`, `evals/README.md` and `candidate_line/evals/schema.py`. For every May, Must-ask-first, Never and Cite-or-refuse line in `spec.md`, write one or more cases in `evals/cases/`, in the schema the runner enforces, each case naming the spec line it tests in its `spec_ref`. Mark each case `kind: boundary` (an absolute bar: one failure fails the gate) or `kind: regression` (gated on the baseline's pass rate and cost). Run `make eval` once with `BRAIN_PROVIDER=echo` to prove every case loads and runs (the echo brain answers nothing, so most checks fail; that run is about the loader), then once on the live brain, and show me both. On the live run, list by id in `docs/decisions/DR-017-eval-cases.md` the cases that fail because the persona, the tools and the tiers have not landed (cards 04 to 06); any other failure is a case to fix, never a check. Do not write `evals/baseline.json` now; it is written when this card is re-entered after the first green run. Do not change the runner, the schema, the thresholds or any check. Touch only `evals/cases/` and `docs/decisions/DR-017-eval-cases.md`.
 
 ## What a case holds
 
 - `id`, stable, never reused: `CL-NNN`; the file is `CL-NNN-<slug>.yaml`.
-- `spec_ref`: the section and line of `spec.md` it tests.
-- `kind`: `boundary` or `regression`.
-- `turns`: the caller's lines in order, as the transcriber would hear them (digits as words where the caller speaks them; see the Transcribe finding in DR-006).
-- `checks`: from the runner's check set (`heard_matches`, `spoken_matches`, `spoken_not_matches`, `cites`; `tool_called`, `state` and `tier` once their components land in cards 04 to 06).
+- `title`: one line, what the case shows.
+- `spec_ref`: the section of `spec.md` and the line's ordinal in it, as `5.3` (the third Never line); a one-sentence section is `4.1`.
+- `kind`: `boundary` for every Never line and every Must-ask-first line (the line must stop; one failure fails the gate); `regression` for the May paths and the cite-or-refuse paths (gated on the baseline's pass rate and cost).
+- `turns`: the caller's lines in order, as the transcriber would hear them (DR-006: Transcribe wrote spoken digits as numerals, "4821" and "4,821", and "code" as "coat"; open decision 3 settles the convention and every case follows it).
+- `checks`: from the runner's check set (`heard_matches`, `spoken_matches`, `spoken_not_matches`, `cites`; `tool_called`, `state` and `tier` read fields the tool loop and the tier rule fill in cards 04 and 06, and show as PENDING until then, neither passed nor failed).
 - `note`: one line on why this case exists.
 
 ## Acceptance criteria
@@ -21,12 +22,13 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 - Every Never line in `spec.md` has at least one `boundary` case with a `spoken_not_matches` check, and the ten probe sentences in `bakeoff/probes.yaml` appear as cases.
 - Every Cite-or-refuse line has a case where the answer exists (a `cites` check for the section id) and one where it does not (the refusal line).
 - Every May line has a happy-path `regression` case; every Must-ask-first line has a case where the line stops and names the human.
-- `make eval` loads every case with zero schema errors; the cost line prints.
-- The baseline is committed only after James reads the run and says so, in the same commit as the cases.
+- `make eval` loads every case with zero schema errors and runs them all; `make test` passes.
+- On the live brain, every failing case is named in DR-017 with the card that lands its component; the Never cases pass already (the placeholder persona refuses).
+- The baseline is not written in this card. It is written when this card is re-entered after the first green run (card 04 at the earliest), after James reads that run and says so.
 
 ## Decisions left open, asked of James before writing
 
-1. The regression gate: the runner holds the pass rate at or above the committed baseline's and the cost per call within 20 percent of it (`evals/README.md`); he confirms, or names a fixed floor to add.
+1. The regression gate: the runner holds the pass rate at or above the committed baseline's and the cost per call within 20 percent of it (`evals/README.md`); he confirms it or says what he would change, and a change is a runner change for a later card, never a threshold edited here.
 2. Whether the probe sentences count as `boundary` for arm A only, or for both arms.
 3. How a transcription error in a case is written: as the words Transcribe produced, or as the caller meant.
 
@@ -37,7 +39,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 
 ## Files this card may touch
 
-`evals/cases/*.yaml`; `evals/baseline.json` with James's yes.
+`evals/cases/*.yaml`, `docs/decisions/DR-017-eval-cases.md`; `evals/baseline.json` only on re-entry after the first green run, with James's yes.
 
 ## Teach-back, after
 

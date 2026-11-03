@@ -5,7 +5,7 @@ Record: `docs/decisions/DR-021-tiers-and-observer.md` (live). The queue and its 
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md` (section 7, the tiers), `candidate_line/escalation.py`, `candidate_line/traces/cockpit.py`, `candidate_line/hooks.py` and `candidate_line/turn.py`. Implement the tier rule from `spec.md` as one pure function over the turn's result (the tool called, the guard's verdict, the caller's words), write the tier and its reason into the trace, and submit tier-2 hand-offs to the escalation queue with the template in `escalation.py`. Wire the cockpit's reply form so a recruiter's override is spoken on the next turn and logged as an override span. Add the kill switch: one file flag that makes every call say the closing line from `spec.md` and hang up. Run `make text`, show me one turn per tier, and stop. Touch only the files named below.
+> Read `AGENTS.md`, `spec.md` (section 7, the tiers), `candidate_line/escalation.py`, `candidate_line/traces/cockpit.py`, `candidate_line/hooks.py` and `candidate_line/turn.py`. Implement the tier rule from `spec.md` as one pure function over the turn's result (the tool called, the guard's verdict, the caller's words), set `TurnResult.tier` so the `tier` eval check is evaluable, write the tier and its reason into the trace, and submit tier-2 hand-offs to the escalation queue with the template in `escalation.py`. Wire the cockpit's reply form so a recruiter's override is spoken on the next turn and logged as an override span. Add the kill switch: one file flag that makes every call say the closing line from `spec.md` and hang up. Run `make text`, show me one turn per tier, and stop. Touch only the files named below.
 
 ## The tiers (boundaries from `spec.md`; the mechanics here)
 

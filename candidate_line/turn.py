@@ -7,8 +7,9 @@ Wednesday holds in all three without three edits.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from candidate_line.brain import Brain, Message, Reply
 from candidate_line.hooks import Hooks
@@ -30,6 +31,13 @@ class TurnResult:
     heard: str
     spoken: str
     reply: Reply
+    # Filled by the components the room builds: card 04's tool loop sets `cited`, `tools_called` and `state`,
+    # card 06's tier rule sets `tier`. None means the component has not landed, so an eval check that reads it is
+    # pending, not failed (DR-010); the checks never guess.
+    cited: tuple[str, ...] = ()
+    tools_called: tuple[str, ...] | None = None
+    state: Mapping[str, Any] | None = None
+    tier: str | None = None
 
 
 def run_turn(

@@ -15,6 +15,7 @@ from typing import Literal
 Provider = Literal["bedrock", "anthropic", "echo"]
 PROVIDERS: tuple[Provider, ...] = ("bedrock", "anthropic", "echo")
 VoiceMode = Literal["say", "stream"]
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING")
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class Settings:
     voice_mode: VoiceMode
     polly_voice: str
     system_prompt_file: str | None
+    log_level: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -39,6 +41,9 @@ class Settings:
         voice_mode = e.get("VOICE_MODE", "stream")
         if voice_mode not in ("say", "stream"):
             raise ValueError(f"VOICE_MODE must be say or stream, not {voice_mode!r}")
+        log_level = e.get("LOG_LEVEL", "INFO").upper()
+        if log_level not in LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL must be one of {LOG_LEVELS}, not {log_level!r}")
         return cls(
             brain_provider=provider,  # type: ignore[arg-type]
             # DR-003: Haiku 5.5 through the US geo profile; the global profile is the throttle spare.
@@ -54,12 +59,15 @@ class Settings:
             polly_voice=e.get("POLLY_VOICE", "Matthew"),
             # The bake-off runs both arms on one prompt file (DR-001, DR-007); unset means the placeholder persona.
             system_prompt_file=e.get("SYSTEM_PROMPT_FILE") or None,
+            # DEBUG prints every partial transcript with its time, for reading a turn's end-pointing (DR-006).
+            log_level=log_level,
         )
 
     def system_prompt(self) -> str:
-        """The system prompt the line speaks with: the named file's text, or the placeholder until the spec lands."""
-        from candidate_line.persona import PLACEHOLDER_SYSTEM
+        """The system prompt the line speaks with: the named file's text, or the persona module's SYSTEM_PROMPT
+        (the placeholder until card 04 writes Gus)."""
+        from candidate_line.persona import SYSTEM_PROMPT
 
         if self.system_prompt_file:
             return Path(self.system_prompt_file).read_text(encoding="utf-8").strip()
-        return PLACEHOLDER_SYSTEM
+        return SYSTEM_PROMPT

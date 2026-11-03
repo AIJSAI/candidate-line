@@ -1,5 +1,6 @@
-"""Deterministic checks over one turn. A check the line cannot evaluate yet (tools, state, tiers land live)
-returns a failure that says so, so a case never passes because its check was skipped."""
+"""Deterministic checks over one turn. A check whose component has not landed yet (the tool loop, the tier rule)
+returns a verdict marked pending: not a pass, so a case never passes because a check was skipped, and not a failure,
+so the gate can be read between the cards that land those components (DR-010)."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ class Verdict:
     check: Check
     passed: bool
     detail: str
+    pending: bool = False  # the component this check reads has not landed; neither a pass nor a failure
 
 
 def evaluate(check: Check, result: TurnResult) -> Verdict:
@@ -31,7 +33,26 @@ def evaluate(check: Check, result: TurnResult) -> Verdict:
         hit = re.search(str(arg), result.spoken)
         return Verdict(check, hit is None, f"matched {hit.group(0)!r}" if hit else "no match")
     if name == "cites":
-        cited = set(SECTION_ID.findall(result.spoken))
+        # The id may be said aloud or carried on the turn by the retrieval step (card 04); either counts.
+        cited = set(result.cited) | set(SECTION_ID.findall(result.spoken))
         return Verdict(check, str(arg) in cited, f"cited {sorted(cited) or 'nothing'}")
-    # The remaining checks need the tools, the state and the tiers, which are written live on Wednesday.
-    return Verdict(check, False, f"check {name!r} is not evaluable until its component lands (see DR-010)")
+    if name == "tool_called":
+        wanted = str(arg["name"]) if isinstance(arg, dict) else str(arg)
+        if result.tools_called is None:
+            return Verdict(check, False, "pending: the tool loop has not landed (card 04)", pending=True)
+        return Verdict(
+            check, wanted in result.tools_called, f"tools called {list(result.tools_called) or 'none'}"
+        )
+    if name == "state":
+        if result.state is None:
+            return Verdict(check, False, "pending: no tool has reported state yet (card 04)", pending=True)
+        wanted = dict(arg) if isinstance(arg, dict) else {}
+        differs = {k: v for k, v in wanted.items() if result.state.get(k) != v}
+        return Verdict(
+            check, not differs, f"state differs on {differs}" if differs else f"state {dict(result.state)}"
+        )
+    if name == "tier":
+        if result.tier is None:
+            return Verdict(check, False, "pending: the tier rule has not landed (card 06)", pending=True)
+        return Verdict(check, str(arg) == result.tier, f"tier {result.tier}")
+    return Verdict(check, False, f"unknown check {name!r}")

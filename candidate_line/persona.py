@@ -7,6 +7,10 @@ PLACEHOLDER_SYSTEM = (
     "evaluate people and offer to help with the process instead."
 )
 
+# Card 04 writes the persona here, in this name; every path (the phone, text mode, the eval runner) reads it
+# through Settings.system_prompt(), which prefers SYSTEM_PROMPT_FILE when that is set (the bake-off, DR-001).
+SYSTEM_PROMPT = PLACEHOLDER_SYSTEM
+
 GREETING = "ACME candidate line, this is Gus."
 
 # Arm A before Wednesday: the model repeats the caller, so the audio path is proven with nothing deciding anything.

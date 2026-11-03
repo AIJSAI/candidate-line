@@ -20,7 +20,7 @@ from xml.sax.saxutils import escape
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 
 from candidate_line.brain import Brain, make_brain
-from candidate_line.hooks import Hooks, NoHooks
+from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
@@ -76,7 +76,7 @@ def default_deps(settings: Settings) -> Deps:
         transcriber=lambda: TranscribeStreamingTranscriber(settings.aws_region),
         speaker=lambda: PollySpeaker(settings.aws_region, voice_id=settings.polly_voice),
         brain=lambda: make_brain(settings),
-        hooks=NoHooks,
+        hooks=default_hooks,
         system=settings.system_prompt(),
     )
 
@@ -94,8 +94,8 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     deps = deps or default_deps(settings)
     # uvicorn configures only its own loggers; without a root handler the line's per-turn INFO lines vanish.
     if not logging.getLogger().handlers:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s %(message)s")
-    logging.getLogger("candidate_line").setLevel(logging.INFO)
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:     %(name)s %(message)s")
+    logging.getLogger("candidate_line").setLevel(settings.log_level)
 
     @app.get("/health")
     def health() -> dict[str, str]:

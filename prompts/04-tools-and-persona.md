@@ -1,11 +1,11 @@
 # Prompt card 04: the tools and the persona
 
 Work item: give the brain its tools (the actions `spec.md` lists under May and Must ask first, over the synthetic data) and its persona, so a caller can get a real answer and a real action from the line; wire `on_tool` and the `cites` path.
-Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and are empty (DR-008); the persona file holds a placeholder (`candidate_line/persona.py`).
+Record: `docs/decisions/DR-019-tools-and-persona.md` (live). The hooks exist and are empty (`LineHooks` in `candidate_line/hooks.py`, DR-008); the persona file holds a placeholder (`SYSTEM_PROMPT` in `candidate_line/persona.py`, read by every path through `Settings.system_prompt()`).
 
 ## Paste this
 
-> Read `AGENTS.md`, `spec.md`, `candidate_line/hooks.py`, `candidate_line/turn.py`, `candidate_line/brain/provider.py`, `candidate_line/persona.py` and `data/`. Implement one tool per May and Must-ask-first line in `spec.md`, each a typed Python function over the files in `data/`, registered through `on_tool`, with the Must-ask-first tools returning a "needs a person" result instead of acting. Write the persona's system prompt in `candidate_line/persona.py` from the brief below, with the cite-or-refuse rule inside it. Run `make eval` and show me the cases that moved. Touch only the files named below.
+> Read `AGENTS.md`, `spec.md`, `candidate_line/hooks.py`, `candidate_line/turn.py`, `candidate_line/brain/provider.py`, `candidate_line/persona.py` and `data/`. Implement one tool per May and Must-ask-first line in `spec.md`, each a typed Python function over the files in `data/`, observed through `LineHooks.on_tool`, with the Must-ask-first tools returning a "needs a person" result instead of acting. The tool loop in `turn.py` fills `TurnResult.tools_called`, `cited` and `state`, which the eval checks read. Write the persona's system prompt as `SYSTEM_PROMPT` in `candidate_line/persona.py` from the brief below, with the cite-or-refuse rule inside it. Run `make eval` and show me the cases that moved. Touch only the files named below.
 
 ## The persona brief (Gus)
 
@@ -39,7 +39,7 @@ Each tool: a name, a one-line description the model reads, a typed signature, a 
 
 ## Files this card may touch
 
-`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the `on_tool` body only), `candidate_line/turn.py` (the tool loop only), `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
+`candidate_line/tools/` (new), `candidate_line/persona.py`, `candidate_line/hooks.py` (the body of `LineHooks.on_tool` only), `candidate_line/turn.py` (the tool loop only), `tests/test_tools.py`, `docs/decisions/DR-019-tools-and-persona.md`.
 
 ## Teach-back, after
 
