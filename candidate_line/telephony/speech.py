@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -22,6 +23,31 @@ log = logging.getLogger("candidate_line.speech")
 class Heard:
     text: str
     is_partial: bool
+    confidence: float | None = (
+        None  # on a final: the mean of the items' scores, when the transcriber gives them
+    )
+    final_lag_ms: int | None = (
+        None  # on a final: from the end of the speech, by the stream's clock, to its arrival
+    )
+
+
+def heard_from_result(result: Any, now: float, stream_started_at: float | None) -> Heard:
+    """A `Heard` from a Transcribe result. The stream's clock starts with the first audio chunk, so a final's lag
+    is the wall time since the moment that clock says the speech ended; both fields feed card 03's heard span."""
+    text = result.alternatives[0].transcript if result.alternatives else ""
+    is_partial = bool(result.is_partial)
+    confidence = lag = None
+    if not is_partial and result.alternatives:
+        scores = [
+            item.confidence
+            for item in (getattr(result.alternatives[0], "items", None) or [])
+            if getattr(item, "confidence", None) is not None
+        ]
+        confidence = round(sum(scores) / len(scores), 3) if scores else None
+        end_time = getattr(result, "end_time", None)
+        if stream_started_at is not None and end_time:
+            lag = max(0, round((now - (stream_started_at + float(end_time))) * 1000))
+    return Heard(text=text, is_partial=is_partial, confidence=confidence, final_lag_ms=lag)
 
 
 class Transcriber(Protocol):
@@ -63,6 +89,7 @@ class TranscribeStreamingTranscriber:
         self._client: Any = None
         self._dead = False
         self._in_flight = 0
+        self._stream_started_at: float | None = None  # the stream's clock: the first audio chunk fed
 
     async def start(self) -> None:
         from aws_sdk_transcribe_streaming.client import AsyncTranscribeStreamingClient
@@ -94,6 +121,8 @@ class TranscribeStreamingTranscriber:
 
         if self._dead or self._stream is None:
             return
+        if self._stream_started_at is None:
+            self._stream_started_at = time.monotonic()
         self._in_flight += 1
         if self._in_flight > 1:
             # Two senders on one event stream interleave frames and break its signature chain (DR-011); say so.
@@ -123,9 +152,9 @@ class TranscribeStreamingTranscriber:
             if not isinstance(event, TranscriptResultStreamTranscriptEvent):
                 continue
             for result in event.value.transcript.results:
-                text = result.alternatives[0].transcript if result.alternatives else ""
-                if text:
-                    yield Heard(text=text, is_partial=bool(result.is_partial))
+                heard = heard_from_result(result, time.monotonic(), self._stream_started_at)
+                if heard.text:
+                    yield heard
 
     async def stop(self) -> None:
         if self._stream is not None and not self._dead:

@@ -43,4 +43,5 @@ def cost_usd(reply: Reply) -> float | None:
         + reply.cached_input_tokens * rates[0] * CACHE_READ_FACTOR
         + reply.cache_write_input_tokens * rates[0] * CACHE_WRITE_FACTOR
     )
-    return (input_cost + reply.output_tokens * rates[1]) / 1_000_000
+    # Rounded so a span never carries float noise like 4.8299999999999995e-05 (card 03's dry run).
+    return round((input_cost + reply.output_tokens * rates[1]) / 1_000_000, 8)

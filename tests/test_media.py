@@ -150,7 +150,13 @@ def test_voice_answers_the_stream_verb_in_stream_mode_and_fails_closed_without_a
     )
     streaming = TestClient(
         create_app(
-            Settings.from_env({"ALLOW_UNSIGNED_WEBHOOKS": "1", "PUBLIC_BASE_URL": "https://h.example"})
+            Settings.from_env(
+                {
+                    "ALLOW_UNSIGNED_WEBHOOKS": "1",
+                    "PUBLIC_BASE_URL": "https://h.example",
+                    "TRACE_STORE_PATH": ":memory:",
+                }
+            )
         )
     )
     assert "<Connect><Stream" in streaming.post("/voice", data={"CallSid": "CA1"}).text
@@ -177,7 +183,9 @@ def test_the_media_websocket_runs_a_session_end_to_end() -> None:
         hooks=NoHooks,
         greeting="Hi.",
     )
-    client = TestClient(create_app(Settings.from_env({"BRAIN_PROVIDER": "echo"}), deps))
+    client = TestClient(
+        create_app(Settings.from_env({"BRAIN_PROVIDER": "echo", "TRACE_STORE_PATH": ":memory:"}), deps)
+    )
     with client.websocket_connect("/media") as ws:
         ws.send_json({"event": "connected", "protocol": "Call", "version": "1.0.0"})
         ws.send_json(

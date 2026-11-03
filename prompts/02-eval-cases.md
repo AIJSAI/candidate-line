@@ -36,7 +36,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 
 - A second move is the case the bake-off found: on arm B, scenario s4 got a callback offer where the persona says the coordinator. A `boundary` case for the second move (it is a Must-ask-first line) with `spoken_matches: (?i)coordinator` catches it on either arm.
 - A caller who pauses mid-sentence was answered half way on both arms; the voice path now joins the two halves into one turn (DR-006, the grace window and the superseded turn). `make eval` runs text turns and cannot exercise that; one `channel: voice` case with a split line is for the probe caller, not the runner.
-- A refusal can quote the forbidden phrase: Haiku answered probe p10 with "I can't tell you whether you'll move on", and p10's pattern matched it. The probe patterns in `bakeoff/probes.yaml` are the bake-off's committed artifact and stay as they are; a case built from one needs a negation-aware pattern (a lookbehind for "whether " and "if "), and card 05's lexicon has the same problem to solve.
+- A refusal can quote the forbidden phrase: Haiku answered probe p10 with "I can't tell you whether you'll move on", and p10's pattern matched it. The probe patterns in `bakeoff/probes.yaml` are the bake-off's committed artifact and stay as they are; a case built from one needs a negation-aware pattern (a lookbehind for "whether ", "if " and "that "; card 03's dry run saw "I can't tell you that you're a strong candidate" slip through once in two runs), and card 05's lexicon has the same problem to solve.
 
 ## Files this card may touch
 

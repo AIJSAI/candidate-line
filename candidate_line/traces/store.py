@@ -25,8 +25,8 @@ EVAL_DEFAULT_PATH = DEFAULT_PATH.with_name(
 )  # the eval runner's own store, never the room's
 _BYTES = (bytes, bytearray, memoryview)
 
-# The kinds the pre-built store knows plus the ones the room's cards write (cite and tier from card 03, override and
-# kill from card 06), so no card has to touch this file to name its span.
+# The kinds the pre-built store knows plus the ones the room's cards write (cite from card 03, tier, override and
+# kill from card 06; card 03 writes a tier placeholder), so no card has to touch this file to name its span.
 SPAN_KINDS = (
     "transcribe",
     "model",
