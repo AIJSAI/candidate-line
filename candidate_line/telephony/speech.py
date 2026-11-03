@@ -62,6 +62,7 @@ class TranscribeStreamingTranscriber:
         self._stream: Any = None
         self._client: Any = None
         self._dead = False
+        self._in_flight = 0
 
     async def start(self) -> None:
         from aws_sdk_transcribe_streaming.client import AsyncTranscribeStreamingClient
@@ -93,16 +94,26 @@ class TranscribeStreamingTranscriber:
 
         if self._dead or self._stream is None:
             return
+        self._in_flight += 1
+        if self._in_flight > 1:
+            # Two senders on one event stream interleave frames and break its signature chain (DR-011); say so.
+            log.warning("Transcribe feed overlap: %d sends in flight", self._in_flight)
         try:
             # A send to a stream AWS has already completed never returns on the CRT transport (2026-11-02, the
             # probe's call); two seconds is far longer than any live send, so a timeout means the stream is gone.
+            # The send is shielded: cancelling a CRT write mid-frame leaves a half frame on the wire, and the
+            # server answers the next one with a signature error (the probe's logs, 2026-11-02 17:30 CT).
             await asyncio.wait_for(
-                self._stream.input_stream.send(AudioStreamAudioEvent(value=AudioEvent(audio_chunk=pcm16))),
+                asyncio.shield(
+                    self._stream.input_stream.send(AudioStreamAudioEvent(value=AudioEvent(audio_chunk=pcm16)))
+                ),
                 2.0,
             )
         except (TimeoutError, Exception) as error:  # noqa: BLE001
             self._dead = True
             log.warning("Transcribe stream is gone; no more audio is fed (%s)", type(error).__name__)
+        finally:
+            self._in_flight -= 1
 
     async def events(self) -> AsyncIterator[Heard]:
         from aws_sdk_transcribe_streaming.models import TranscriptResultStreamTranscriptEvent
