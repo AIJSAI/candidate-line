@@ -44,7 +44,7 @@ cockpit:
 	uv run uvicorn --factory candidate_line.traces.cockpit:app --host 127.0.0.1 --port 8001
 
 probe:
-	. scripts/env.sh && uv run python -m candidate_line.probe.direct --case "$(CASE)" --url "$(or $(URL),ws://127.0.0.1:8000/media)"
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.direct --case "$(CASE)" --url "$(or $(URL),ws://127.0.0.1:8000/media)"
 
 probe-dial:
 	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.dial --case "$(CASE)" --public-url "$(PUBLIC)" --arm "$(or $(ARM),A)" --csv "$(or $(CSV),bakeoff/2026-11-01.csv)"
