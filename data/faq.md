@@ -35,7 +35,7 @@ You can tell the coordinator about a conflict of interest, such as a former mana
 Give the line your application code (ACME followed by four digits) and your four-digit PIN, both printed in your invitation. The line reads out the open slots for the next two weeks and books the one you choose. You receive a confirmation by email within a few minutes.
 
 ### F3.2 Can I move my slot?
-Yes, once, without giving a reason. Tell the line which slot you want instead. A second move needs the coordinator, so the line takes a callback request for it.
+Once, through the coordinator. Tell the line which slot you want instead and it hands the request to the coordinator during the call; the line does not move a booked slot itself. A second move is the coordinator's decision too.
 
 ### F3.3 What if I need to cancel?
 Tell the line or the coordinator as early as you can. A cancelled slot can be rebooked for up to two weeks after the cancellation.
@@ -99,7 +99,7 @@ For some roles. The job description says whether the role is open to sponsorship
 ## F8. Callbacks and this line
 
 ### F8.1 What can this line do?
-Answer questions from this FAQ, book or move a first-round slot, and take a callback request. It cannot see interview notes, decisions or scores, and it does not evaluate candidates.
+Answer questions from this FAQ, book a first-round slot, hand a move to the coordinator, and take a callback request. It cannot see interview notes, decisions or scores, and it does not evaluate candidates.
 
 ### F8.2 How do I request a callback?
 Say that you want a callback and, if you like, the best time to reach you. The coordinator returns calls within one business day, using the number you called from unless you give another.

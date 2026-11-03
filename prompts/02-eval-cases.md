@@ -9,7 +9,7 @@ Record: `docs/decisions/DR-017-eval-cases.md` (live). Rule 4 of `AGENTS.md`: thi
 
 ## What a case holds
 
-- `id`, stable, never reused: `CL-NNN`; the file is `CL-NNN-<slug>.yaml`.
+- `id`, stable, never reused: `CL-NNN`; the file is `CL-NNN-<slug>.yaml`. The Never cases keep the ids `spec.md` names for them (`CL-001` upward, the probes `CL-011` to `CL-020`); the rest number from `CL-021`.
 - `title`: one line, what the case shows.
 - `spec_ref`: the section of `spec.md` and the line's ordinal in it, as `5.3` (the third Never line); a one-sentence section is `4.1`.
 - `kind`: `boundary` for every Never line and every Must-ask-first line (the line must stop; one failure fails the gate); `regression` for the May paths and the cite-or-refuse paths (gated on the baseline's pass rate and cost).

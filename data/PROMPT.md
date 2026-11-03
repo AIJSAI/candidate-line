@@ -12,3 +12,5 @@ Produce the fixtures for a phone line that serves the job candidates of ACME, a 
 4. `baseline_invites.csv`: forty past invites with the invite timestamp, the booked timestamp or empty, the hours between, and the channel (`email` or `phone`). This is the scorecard's baseline for invite-to-booked time; a column `synthetic` is `true` on every row and the header comment says so.
 
 Mark every file as synthetic in its first lines.
+
+Edited by hand on 2026-11-03, after the generation: F3.2 and F8.1 say the line hands a slot move to the coordinator and never moves a slot itself, which is the 60-minute problem card (`prompts/01`, line 3). At 90 minutes card 01 restores the original wording quoted in that card.

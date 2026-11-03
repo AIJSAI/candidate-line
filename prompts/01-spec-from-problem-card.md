@@ -5,7 +5,7 @@ Record: `docs/decisions/DR-016-the-spec.md` (live). Rule 2 of `AGENTS.md`: no co
 
 ## Paste this
 
-> Read `AGENTS.md` and `docs/decisions/DR-000-how-decisions-are-recorded.md` in full. Then read the five-line problem card below and write `spec.md` at the repository root, following the shape in this card exactly, then `docs/decisions/DR-016-the-spec.md` from the DR-000 template with the open decisions and the answers given. Touch no other file. Before you write, ask me the open questions listed under "Decisions left open", one at a time, and wait for each answer. Narrate each file you write in one line. When both are written, stop.
+> Read `AGENTS.md` and `docs/decisions/DR-000-how-decisions-are-recorded.md` in full, then the file names under `data/`, the latency budget in `docs/decisions/DR-001-voice-path.md`, the case conventions and check names in `prompts/02-eval-cases.md`, and `bakeoff/probes.yaml`. Then read the five-line problem card below and write `spec.md` at the repository root, following the shape in this card exactly, then `docs/decisions/DR-016-the-spec.md` from the DR-000 template with the open decisions and the answers given. Touch no other file. Before you write, ask me the open questions listed under "Decisions left open", one at a time, and wait for each answer. Narrate each file you write in one line. When both are written, stop.
 >
 > Problem card (five lines, confirmed by the room):
 > 1. Who calls: ACME's job candidates who hold a first-round invitation, from their own phones, often outside office hours.
@@ -16,7 +16,7 @@ Record: `docs/decisions/DR-016-the-spec.md` (live). Rule 2 of `AGENTS.md`: no co
 
 The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` section 1. They are the room's to confirm or change, line by line, before the paste; a changed line changes `spec.md`, never a card.
 
-**The hour (sixty minutes, set 2026-11-03).** Line 3 above is the 60-minute card: a move is a hand-off to a person, so rescheduling, the first item on the room's cut list (KICKOFF.md section 6, rule 7), is out before the clock starts, and card 06's second-move question never arises. If the room says at minute 0 that it has 90 minutes, line 3 reads instead: "verify a caller by application code and PIN, book an open slot, move a booked slot once, answer a process question from the FAQ and name the section, and take a callback request; a second move is the coordinator's call."
+**The hour (sixty minutes, set 2026-11-03).** Line 3 above is the 60-minute card: a move is a hand-off to a person, so rescheduling, the first item on the room's cut list (KICKOFF.md section 6, rule 7), is out before the clock starts, and card 06's second-move question never arises. If the room says at minute 0 that it has 90 minutes, line 3 reads instead: "verify a caller by application code and PIN, book an open slot, move a booked slot once, answer a process question from the FAQ and name the section, and take a callback request; a second move is the coordinator's call." At 90 this card also restores two FAQ lines to agree (`data/faq.md`, edited 2026-11-03 for the 60-minute card): F3.2 "Yes, once, without giving a reason. Tell the line which slot you want instead. A second move needs the coordinator, so the line takes a callback request for it." and, in F8.1, "book or move a first-round slot"; the file list below gains `data/faq.md` for those two lines only.
 
 ## The shape of `spec.md`
 
@@ -26,13 +26,13 @@ The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` secti
 4. **Must ask first**: the actions that need a human's yes, and who the human is.
 5. **Never**: the list that binds every tool and every runtime path (Rule 5). Each line is testable: it names what the line never says or does, and how an eval case would catch it.
 6. **Cite or refuse**: which knowledge the line may answer from (the sections of `data/faq.md` by id), the refusal line it says when the answer is not there (Rule 6), and the fallback line it says when the guard replaces a sentence (card 05; it may be the same line).
-7. **The tiers**: what the line handles alone, what it hands to a person during the call, and what it writes up afterwards; one line each, boundaries only; and the closing line the line says when the kill switch is on. The mechanics come in cards 05 and 06.
+7. **The tiers**: what the line handles alone, what it hands to a person during the call, and what it writes up afterwards; one line each, boundaries only; and the closing line the line says when the kill switch is on. The mechanics come in cards 05 and 06, and where a guard hit sits is their question, not this card's.
 8. **Done means**: the acceptance criteria for the whole line, measurable, including the latency budget from DR-001, the eval gate from card 02 (every boundary case passes; the regression pass rate holds at or above the committed baseline), and the observability line that card 03 serves (every turn of every call leaves its spans in the trace store, readable by a recruiter).
 
 ## Acceptance criteria
 
-- `spec.md` exists, under 500 words by `wc -w`, with the eight sections above and nothing function-specific outside it.
-- Every Never line names the eval that would catch it, by a case id card 02 will create.
+- `spec.md` exists, under 600 words by `wc -w` (the four verbatim lines and the case ids cost about a hundred), with the eight sections above and nothing function-specific outside it and its record.
+- Every Never line names the eval that would catch it, by a case id card 02 will create: `CL-001` upward in section order, the ten probe sentences as `CL-011` to `CL-020`; card 02 keeps these ids and numbers the rest from `CL-021`.
 - Nothing in it names a real person, a real employer or client firm, or a phone number (a vendor such as AWS or Twilio may be named); the firm is the name James gives, ACME until then.
 - `make gate` still passes (the spec changes no code).
 
