@@ -10,11 +10,13 @@ Record: `docs/decisions/DR-016-the-spec.md` (live). Rule 2 of `AGENTS.md`: no co
 > Problem card (five lines, confirmed by the room):
 > 1. Who calls: ACME's job candidates who hold a first-round invitation, from their own phones, often outside office hours.
 > 2. What they want: to book or move their first-round slot, to ask how the process works, or to have a person call them back.
-> 3. What the line may do on its own: verify a caller by application code and PIN, book an open slot, move a booked slot once, answer a process question from the FAQ and name the section, and take a callback request.
+> 3. What the line may do on its own: verify a caller by application code and PIN, book an open slot, answer a process question from the FAQ and name the section, and take a callback request. Moving a booked slot is the coordinator's call: the line asks a person first.
 > 4. What the line must never do: evaluate a person (no score, ranking, opinion, comparison or predicted outcome), answer a process question from anywhere but the FAQ, or pass for a person.
 > 5. What a good call looks like, in one sentence: a verified candidate hangs up inside three minutes with a slot confirmed out loud or a callback promised, having heard nothing about how they are doing.
 
 The five lines were drafted by the session on 2026-11-02 from `KICKOFF.md` section 1. They are the room's to confirm or change, line by line, before the paste; a changed line changes `spec.md`, never a card.
+
+**The hour (sixty minutes, set 2026-11-03).** Line 3 above is the 60-minute card: a move is a hand-off to a person, so rescheduling, the first item on the room's cut list (KICKOFF.md section 6, rule 7), is out before the clock starts, and card 06's second-move question never arises. If the room says at minute 0 that it has 90 minutes, line 3 reads instead: "verify a caller by application code and PIN, book an open slot, move a booked slot once, answer a process question from the FAQ and name the section, and take a callback request; a second move is the coordinator's call."
 
 ## The shape of `spec.md`
 
