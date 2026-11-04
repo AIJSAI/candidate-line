@@ -2,7 +2,7 @@
 
 Status: DRAFT
 Built: pre-built (PREBUILT.md row 2, with DR-004)
-Commit: (filled when the item lands)
+Commit: c45159b, then 5ab9a33 (the number live)
 
 ## What it is
 

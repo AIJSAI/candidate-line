@@ -2,7 +2,7 @@
 
 Status: DRAFT
 Built: pre-built (PREBUILT.md row 4)
-Commit: (filled when the item lands)
+Commit: bc8b2f7
 
 ## What it is
 
@@ -31,7 +31,7 @@ Sonic failing DR-001's rule in the bake-off (then arm B is a measured footnote a
 - `package.json` read 2026-11-01: dependencies and scripts as above; no `engines` field.
 - `grep` over `src/` on 2026-11-01: `sampleRateHertz: 8000` and `voiceId: "matthew"` in `consts.ts`; `modelId: "amazon.nova-sonic-v1:0"` at `nova-client.ts:258`; `SYSTEM_PROMPT` at `server.ts:28`; `AWS_PROFILE ?? 'bedrock-test'` at `server.ts:40`; mu-law decode and encode around `server.ts:170` and `:220`.
 - `npm install` and `npm run build` were not run by the build session: its command runner refused installing third-party code ("Code from External"). James runs, in his own shell: `! npm --prefix ~/projects/sample-amazon-nova-sonic-twilio-integration install --ignore-scripts` then `! npm --prefix ~/projects/sample-amazon-nova-sonic-twilio-integration run build`, and the output lands here.
-- First call through arm B: (filled when James's phone rings it)
+- First call through arm B: 2026-11-02, 16:05 CT (PREBUILT.md, row 4)
 
 - **Built 2026-11-02, about 13:40 CT:** `npm --prefix ~/projects/sample-amazon-nova-sonic-twilio-integration install --ignore-scripts` (exit 0, an audit notice only) and `npm run build` (`tsc`, exit 0); `dist/` holds `server.js`, `nova-client.js`, `mock-tools.js`, `consts.js`, `types.js`. Both commands had been refused to the session the day before and ran after James approved them in permissions. Not yet run: it needs the Twilio values and an AWS profile name in its environment, which land with PREBUILT row 2.
 

@@ -25,7 +25,7 @@ Three things the second dry run settled (2026-11-03): when the FAQ tool finds no
 
 - Every May line has a tool; every Must-ask-first line has a tool that returns a hand-off, never an action.
 - The persona prompt is under 300 words (the FAQ text it carries is not counted), holds the Never list verbatim from `spec.md` (the rule sentences, without their case references), and the brevity rule.
-- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, read from `make eval`'s per-case brain figure (the summary's brain-latency line covers every turn; text mode measures the brain only, and the phone adds the speech hops). A tool turn is several model calls: fold their latency, tokens and cache counts into the one `Reply` the turn returns, so the latency and cost lines count the whole turn. A tool turn is two model calls; the reply cap and the prompt's size are the levers.
+- A turn with a tool stays inside the DR-001 budget at the median across the card 02 happy paths, read from `make eval`'s per-case brain figure (the summary's brain-latency line covers every turn; text mode measures the brain only, and the phone adds the speech hops). A tool turn is two model calls: fold their latency, tokens and cache counts into the one `Reply` the turn returns, so the latency and cost lines count the whole turn. The reply cap and the prompt's size are the levers.
 - The `cites` checks in `evals/` pass for the cases where the answer exists, and the refusal cases pass where it does not.
 - `make gate` passes.
 

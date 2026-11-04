@@ -22,7 +22,7 @@
   question: "Why is the caller's number masked inside the trace store rather than at the webhook?"
   answer: "The store is the only writer. start_call is the one function that accepts a number and it keeps the last four digits before the row is written, so no span can carry a number by accident. A span handed bytes is refused, so audio never lands in the store either."
   say_it: "I mask at the single chokepoint that writes, because two writers each have to remember and one cannot forget."
-  ref: "candidate_line/traces/store.py:138"
+  ref: "candidate_line/traces/store.py:162"
   source: "receipt 2026-11-01"
   box: 0
   next_due: 2026-11-02

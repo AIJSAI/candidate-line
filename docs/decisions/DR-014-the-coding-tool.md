@@ -2,7 +2,7 @@
 
 Status: DECIDED 2026-11-02
 Built: pre-built (PREBUILT.md row 13)
-Commit: (filled when the item lands)
+Commit: 82928f1
 
 ## What it is
 
