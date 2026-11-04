@@ -1,6 +1,6 @@
 # Candidate Line
 
-A phone line for the job candidates of ACME, a fictional firm, designed so that a voice agent called Gus books a first-round interview, answers process questions from an FAQ and names the section, takes a callback request, and never evaluates a person. What runs today is the plumbing: a real phone path, a text mode, the tests, an eval runner, a trace store (the call record in the picture) and the cockpit, the recruiter's page. Gus himself (the spec, the persona, the tools, the guard and the eval cases) was to be built in a one-hour live session on 4 November 2026 and was not, because the hour went to another topic, so text mode runs on a placeholder prompt (or repeats what you type with `BRAIN_PROVIDER=echo`) and `make eval` finds no cases. All data is synthetic. No account, key or phone number is in this repository.
+A phone line for the job candidates of ACME, a fictional firm, designed so that a voice agent called Gus books a first-round interview, answers process questions from an FAQ and names the section, takes a callback request, and never evaluates a person. What runs today is the plumbing: a real phone path, a text mode, the tests, an eval runner, a trace store (the call record in the picture) and the cockpit, the recruiter's page. Gus himself (the spec, the persona, the tools, the guard and the eval cases) was to be built in a one-hour live session on 4 November 2026 and was not, because the hour went to another topic, so the phone and text mode run on a placeholder prompt that carries only the rule never to evaluate a person, with no FAQ, no tools and no guard (text mode repeats what you type with `BRAIN_PROVIDER=echo`), and `make eval` finds no cases. All data is synthetic. No account, key or phone number is in this repository.
 
 The author is James Shehan; "James" in the files is him. The tree was built with Claude Code from the numbered items in `KICKOFF.md`, with every decision written down as it was made; the seven cards in `prompts/` were for the session, and were dry-run twice in scratch copies (`docs/decisions/DR-015`). The files call that live session "the room" or "the hour"; "the session" in this README means the same thing.
 
@@ -18,7 +18,7 @@ The records are long, so start here:
 4. [`prompts/01-spec-from-problem-card.md`](prompts/01-spec-from-problem-card.md): one of the seven cards. Each names its files, its acceptance criteria and the questions it asks before it writes anything.
 5. [`candidate_line/turn.py`](candidate_line/turn.py) and [`tests/`](tests/): the one turn loop that the phone, text mode and the evals share.
 
-`KICKOFF.md` is the plan for the build days of 1 to 3 November, kept as it was written. Where it and a decision record disagree, the record is newer. The teach-backs that its first rule required on the build days did not happen; the build ran faster than the lessons. They are scheduled after the session, so the records' Status lines say DRAFT and their "say it like this" lines are empty.
+`KICKOFF.md` is the plan for the build days of 1 to 3 November, kept as it was written. Where it and a decision record disagree, the record is newer. The records' Status lines say DRAFT: each is reviewed after the session.
 
 ## Run It
 
