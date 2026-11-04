@@ -60,19 +60,19 @@ secret:
 	scripts/secret-set.sh "$(NAME)"
 
 eval:
-	. scripts/env.sh && uv run python -m candidate_line.evals.runner
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.evals.runner
 
 baseline:
-	. scripts/env.sh && uv run python -m candidate_line.evals.runner --write-baseline
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.evals.runner --write-baseline
 
 gate: test
-	@. scripts/env.sh && uv run python -m candidate_line.evals.runner && echo "gate: green (tests and evals; the cost line is in the eval report once cases exist)" || { echo "gate: RED. Boundary failures above. From card 02 until card 04 lands they must be exactly the ids named in DR-017 (AGENTS.md rule 8); any other red is a stop."; exit 1; }
+	@. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.evals.runner && echo "gate: green (tests and evals; the cost line is in the eval report once cases exist)" || { echo "gate: RED. Boundary failures above. From card 02 until card 04 lands they must be exactly the ids named in DR-017 (AGENTS.md rule 8); any other red is a stop."; exit 1; }
 
 trace:
 	uv run python -m candidate_line.traces.cli $(filter-out $@,$(MAKECMDGOALS))
 
 text:
-	. scripts/env.sh && uv run python -m candidate_line.text_mode
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.text_mode
 
 last:
 	@:
