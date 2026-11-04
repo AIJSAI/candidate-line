@@ -2,7 +2,7 @@
 
 Status: DRAFT
 Built: pre-built (PREBUILT.md row 2, with DR-005)
-Commit: c45159b
+Commit: 3fa18f8
 
 ## What it is
 
@@ -22,7 +22,7 @@ The language, runtime, web framework, SDKs and secret store the line runs on, an
 - **Python 3.13 or 3.14 with a third-party mu-law codec.** One more dependency to carry for eight lines of standard library; the removal is the only thing 3.13 changes for this line.
 - **Node for arm A, because the AWS Sonic sample is Node.** The sample runs as its own process, unmodified (item 7), so arm B needs no port; a Node arm A would split one week's codebase across two runtimes.
 - **A `.env` file.** Rule 7, and the trace, the prompt and the logs are easier to keep clean when no file holds a value to leak.
-- **The 1Password CLI as the machine store.** The `op` service account on this Mac is scoped to another project's vault; James's personal vault is not reachable from the terminal, and widening a service account's scope is a security decision of its own. The keychain is the operating system's store and is already there.
+- **The 1Password CLI as the machine store.** The 1Password CLI on this Mac is not scoped to this project, and widening it is a security decision of its own. The keychain is the operating system's store and is already there.
 - **Flask.** No native WebSocket or ASGI; the media stream needs both.
 - **pydantic-settings.** Thirty lines of dataclass do the job and show every default in one screen; the schema validation the boundary needs is on Twilio's form and the model's output, not on six environment variables.
 

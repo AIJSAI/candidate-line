@@ -1,30 +1,30 @@
 # Candidate Line: kickoff
 
-Written Sunday 2026-11-01, 12:17 PM CT (18:17 UTC), so a fresh Claude Code or Codex session can start the build today. Read it in full before the first command. The plan it comes from is James's own (section 8 gives its path on this Mac); this file carries only what the repository needs, in neutral words.
+Written Sunday 2026-11-01, 12:17 PM CT (18:17 UTC), so a fresh Claude Code or Codex session can start the build today. Read it in full before the first command. The plan it comes from is James's own (section 8 says where it lives); this file carries only what the repository needs, in neutral words.
 
 ## 1. What this is
 
-Candidate Line is a phone line for the job candidates of ACME, a fictional engineering-services firm of about 400 people hiring about 30 roles at once. Its voice is Gus: dry, unhurried, and automated, which he says in his first sentence. He verifies a caller by application code and PIN, books or moves a first-round interview, answers process questions from the firm's FAQ and names the section he used, takes a callback, and hands everything else to a person. The line never evaluates a person: no score, ranking, opinion or predicted outcome, ever. The function is real; the humor is in the persona, always at Gus's own expense ("I do calendars. Opinions about people are above my pay grade, and I don't have a pay grade."). It runs on AWS Bedrock and is built for a 90-minute live session on Wednesday 2026-11-04, in which the people in the room may change the requirements mid-way.  What exists before that session is plumbing and one measurement, declared in `PREBUILT.md`; everything that decides anything about a caller is built in the room. ACME is a placeholder until James names the firm and checks the name against real firms, and Gus's name and lines are his to change. All data is synthetic.
+Candidate Line is a phone line for the job candidates of ACME, a fictional engineering-services firm of about 400 people hiring about 30 roles at once. Its voice is Gus: dry, unhurried, and automated, which he says in his first sentence. He verifies a caller by application code and PIN, books or moves a first-round interview, answers process questions from the firm's FAQ and names the section he used, takes a callback, and hands everything else to a person. The line never evaluates a person: no score, ranking, opinion or predicted outcome, ever. The function is real; the humor is in the persona, always at Gus's own expense ("I do calendars. Opinions about people are above my pay grade, and I don't have a pay grade."). It runs on AWS Bedrock (the live turn later moved to the Anthropic API, DR-003). It is built for a one-hour live build session on 2026-11-04, in which the people in the room may change the requirements mid-way. What exists before that session is plumbing and one measurement, declared in `PREBUILT.md`; everything that decides anything about a caller is built in the room. ACME is a placeholder until James names the firm and checks the name against real firms, and Gus's name and lines are his to change. All data is synthetic.
 
 ## 2. Rule 1: the learning rule
 
 James must be able to explain every pre-built component, and every engineering, prompting and guardrail decision inside it, in his own words and under questioning. Building it is not enough: this rule is how the build teaches him. It is the first rule of this repository, it binds every session and every coding tool working here, and it outranks speed.
 
-**Pace (his ruling of 2026-11-01):** the session runs the mechanical commands itself and narrates each in one line; it stops to ask James only at a real decision (anything that earns a decision record), at anything that spends money or touches one of his accounts (AWS, Twilio, model access, a subscription), and at anything that could not be undone. Approving every command is not the rule; understanding every decision is.
+**Pace (his ruling of 2026-11-01):** the session runs the mechanical commands itself and narrates each in one line; it stops to ask James only at a real decision (anything that earns a decision record), at anything that spends money or touches one of his accounts (AWS, Twilio, model access, a subscription), and at anything that could not be undone. The rule is that James understands every decision. He does not have to approve every command.
 
 1. **A decision record for every pre-built component.** `docs/decisions/DR-NNN-<slug>.md`, from the template in `docs/decisions/DR-000-how-decisions-are-recorded.md`: what it is, the alternative rejected, why, what would change the decision, and the one-line "say it like this". It is written inside the block that builds the component, before the block closes.
-2. **A teach-back at the end of every build block.** James explains the component closed book, in his own words, as if to a reviewer, in about two minutes; the session interrupts once or twice ("Wait, who decides that?"). The session grades each point right, partly or wrong against the code, with file and line references (or the exact command, for account and CLI work), writes the "say it like this" line into the record in his words as corrected, and logs every miss as a card in `docs/learn/cards.yaml` for the next day's grill. The format is in `docs/learn/README.md`.
+2. **A teach-back at the end of every build block.** James explains the component closed book, in his own words, as if to a reviewer, in about two minutes; the session interrupts once or twice ("Wait, who decides that?"). The session grades each point right, partly or wrong against the code, with file and line references (or the exact command, for account and CLI work), writes the "say it like this" line into the record in his words as corrected, and logs every miss as a card in `docs/learn/cards.yaml` for the next day's review. The format is in `docs/learn/README.md`.
 3. **Teach while doing.** Before each command or diff, the session says in a sentence or two what it does and why, and waits for James's approval. At each real choice it first asks which option James would pick and why, then gives its own view and the alternative it rejects. A persona line, a refusal, a lexicon entry or a tier boundary is explained the way a module is.
-4. **Each day starts with a grill** on the previous day's cards: one question at a time, no hint, his confidence from 1 to 3.
-5. **Wednesday morning, the review covers the whole `PREBUILT.md` list**: at least one question per row, whatever a card's box.
-6. **Each build day ends with a receipt**: the tutor skill's receipt mode writes the private notebook, and its three questions join `docs/learn/cards.yaml`, so one deck holds the build.
+4. **Each day starts with a review** of the previous day's cards: one question at a time, no hint, his confidence from 1 to 3.
+5. **Before the session, the review covers the whole `PREBUILT.md` list**: at least one question per row, whatever a card's box.
+6. **Each build day ends with a receipt**: the tutor skill's receipt mode writes it into the private notebook (section 8), and its three questions join `docs/learn/cards.yaml`, so one deck holds the build.
 7. **Scope.** The rule governs the build days, Sunday to Tuesday. In Wednesday's live session, records are written as decisions land, and teach-backs and cards wait until afterward.
 
 ## 3. Decided, and the one open decision
 
 **Decided** (James's rulings of 2026-10-31 and the plan's standing choices):
 - **AWS Bedrock is the platform.** Claude Haiku 5.5 on the live turn, because the caller is waiting; Claude Sonnet 5.5 only for the callback summary nobody waits on; Amazon Nova 2.5 Sonic as the speech-to-speech arm. Region us-east-1, with us-west-2 the spare.
-- **A voice agent with a story**, which the two people in the room call from their own phones. The story runs: the problem, the setup, the execution, the prompts pasted, the output, they talk to it, and a little observability.
+- **A voice agent with a story**, which callers in the room call from their own phones. The story runs: the problem, the setup, the execution, the prompts pasted, the output, they talk to it, and a little observability.
 - **The CLI, not the consoles**, wherever the CLI can do the job. Any console step taken (model access, turning on IAM Identity Center) is declared.
 - **Synthetic data only.** Nothing from James's employer, in any form.
 - **The voice path has a prior, not a verdict**: cascaded (arm A), tested in Sunday's bake-off against a rule written before measuring (`docs/decisions/DR-001-voice-path.md`).
@@ -130,35 +130,32 @@ Each item names the decision it forces and where its record goes. Each block end
 - [ ] **16. Both coding tools signed in.** Codex (`brew install --cask codex` if missing, `codex login`, `codex login status`; a ChatGPT plan or an API key is James's call) and Claude Code.
   *Forces:* nothing today; Monday's scratch task decides the tool.
   *Record:* DR-014, on Monday.
-- [ ] **17. Close the day.** The tutor's receipt for Sunday into the private notebook, with its three questions in `docs/learn/cards.yaml`; each landed row of `PREBUILT.md` filled with its commit date; switch rule 1 checked.
+- [ ] **17. Close the day.** The tutor's receipt for Sunday into the private notebook (section 8), with its three questions in `docs/learn/cards.yaml`; each landed row of `PREBUILT.md` filled with its commit date; switch rule 1 checked.
 
 **If the day runs long, cut in this order** (plan section 7):
 1. Barge-in polish past a basic `clear` on new speech (0.5).
 2. The bake-off shrinks to three calls per arm and five probes, with the n written into DR-001 (0.5).
 3. Arm B's measurement: DR-001 then stands on documented facts and arm A's numbers, said plainly (1.5). Per section 3.9, arm B's measurement shrinks before the probe caller goes.
-4. On Monday, the rehearsal shrinks to its first 60 minutes and five interruptions (0.75).
 
 **Never cut:** the first Bedrock call, arm A on a real phone, text mode, synthetic data, the Twilio upgrade, and (on Tuesday) the screen setup.
 
 ## 5. Monday and Tuesday, in brief
 
-**Monday 2026-11-02** (about 4.5 hours, ; plan section 7)
-- [ ] The grill on Sunday's cards, before anything else.
+**Monday 2026-11-02** (about 4.5 hours; plan section 7)
+- [ ] The review of Sunday's cards, before anything else.
 - [ ] The architecture study in the plan's section 7 (outside this repository).
 - [ ] `prompts/01`, drafted function-neutral, then **the scratch task that decides the coding tool** (section 3 above; plan sections 9 and 3.3). Record: DR-014.
 - [ ] **`AGENTS.md` and the seven prompt cards** drafted: one work item each, with acceptance criteria and its decisions left open; the function's specifics live only in `spec.md`, so a new function changes the spec, not the work items. The seven (plan section 3.8): 01 the spec from a five-line problem card; 02 the eval cases; 03 tracing; 04 the tools and the persona; 05 and 06 the guard with its red-proof, the tiers and the observer; 07 the scorecard. Record: `docs/decisions/DR-015-agents-md-and-prompt-cards.md`.
-- [ ] Evening: **a timed rehearsal** (`a private file`, beside the plan), on a function drawn from a sealed list, in a scratch repository. Nothing built in the mock comes into this one.
 - [ ] Switch rule 2 at 6 PM CT (plan section 4.2). Teach-backs; the day's receipt.
 
-**Tuesday 2026-11-03** (about 3.0 hours, ; plan section 7)
-- [ ] The grill on Monday's cards.
-- [ ] Read the rehearsal notes; fix the tooling it exposed, never the session's decisions.
+**Tuesday 2026-11-03** (about 3.0 hours; plan section 7)
+- [ ] The review of Monday's cards.
 - [ ] Finish `AGENTS.md` and `prompts/01` to `07`; complete **`PREBUILT.md`** with every commit date; **tag `prebuilt-2026-11-03`** (plan section 3.4).
 - [ ] **The failure drills**, once each (plan sections 7 and 4.3): kill the tunnel and go to text mode, then bring the tunnel back and re-point the Twilio webhook with one command (`make webhook`) or a named tunnel; switch Sonic to us-west-2 and Haiku to the global profile; switch from the chosen coding tool to the other.
 - [ ] James's open answers (plan section 9) and the screen setup.
 - [ ] Switch rule 3 at noon CT: if neither arm completes a phone call, text mode is the build (plan section 4.2). Teach-backs; the day's receipt.
 
-**Wednesday 2026-11-04, morning:** the grill over the whole `PREBUILT.md` list (Rule 1), then the hour before, as the plan's section 8 sets it out.
+**Wednesday 2026-11-04, morning:** the review of the whole `PREBUILT.md` list (Rule 1), then the hour before, as the plan's section 8 sets it out.
 
 ## 6. The rules of the room
 
@@ -174,7 +171,7 @@ From the plan's sections 3.4, 3.8 and 4.3.
 
 ## 7. The first message to type
 
-Open a fresh session (Claude Code or Codex) in `the repository root` and type this, verbatim:
+Open a fresh session (Claude Code or Codex) in the repository root and type this, verbatim:
 
 ```
 Read KICKOFF.md, AGENTS.md and docs/decisions/DR-000-how-decisions-are-recorded.md in full. Then start TODAY at item 1, the AWS CLI sign-in with no long-lived key in a file. Follow Rule 1: run the mechanical commands yourself and narrate each in one line; stop and ask me only at a real decision, at anything that spends money or touches one of my accounts, and at anything that could not be undone; at each real decision, ask me which option I would pick before you give yours. If aws sts get-caller-identity already succeeds on a named profile, tell me and move to the next unchecked item. When block 1 is done, write DR-002 and DR-003 from the DR-000 template, then run my teach-back: I explain closed book, you interrupt once or twice, grade each point right, partly or wrong against the commands we ran, write the say-it-like-this line into each record, and log my misses as cards in docs/learn/cards.yaml. Never copy an account id, a start URL or a credential into this repository.
@@ -182,4 +179,4 @@ Read KICKOFF.md, AGENTS.md and docs/decisions/DR-000-how-decisions-are-recorded.
 
 ## 8. Sources
 
-The plan this build followed, the mock of the session and the coding-tool notes live outside this repository, on James's own machine. None was opened in the session, and nothing from them is copied here beyond what the build needs. The learning side (teach-backs, grills, receipts) runs from a private notebook, also outside this tree.
+The plan this build followed and the coding-tool notes live outside this repository, on James's own machine. Neither was opened in the session, and nothing from them is copied here beyond what the build needs. The learning side (teach-backs, reviews, receipts) runs from a private notebook, also outside this tree.

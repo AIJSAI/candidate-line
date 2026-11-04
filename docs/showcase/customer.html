@@ -49,6 +49,7 @@
     <div>
       <h1>The Candidate Line</h1>
       <p class="promise">Candidates book their first interview by phone, any hour, and never hear a word about how they're doing.</p>
+      <p class="promise">A proposal. The plumbing runs today; the parts that decide what Gus says are not built yet.</p>
     </div>
     <div class="runs">Runs on AWS for speech, Claude by Anthropic for the conversation, and Twilio for the phone number.</div>
   </header>
@@ -70,7 +71,7 @@
         <ul>
           <li>No score, ranking, opinion or prediction about any candidate, ever.</li>
           <li>Nothing from outside your FAQ. When the FAQ has no answer, it says so and offers a callback.</li>
-          <li>Never pretends to be a person. It says it is automated in its first sentence.</li>
+          <li>Never pretends to be a person. It is designed to say it is automated in its first sentence.</li>
           <li>Every move and every judgment stays with your people.</li>
         </ul>
         <p class="law">Designed with the hiring-law pages on automated tools in view (New York City's Local Law 144 and two Illinois acts). It makes no hiring decision.</p>
@@ -99,7 +100,7 @@
       <section>
         <h2>How We'd Roll It Out</h2>
         <ol>
-          <li><strong>Proof of concept, this week.</strong> Synthetic candidates, slots and FAQ. Your team calls it and tries to break it.</li>
+          <li><strong>Proof of concept.</strong> Synthetic candidates, slots and FAQ. Your team calls it and tries to break it.</li>
           <li><strong>Pilot.</strong> One role family on your real FAQ and calendar, a person on every hand-off, measured against your past invite-to-booked hours.</li>
           <li><strong>Production.</strong> Runs in your AWS account, on your calendar and your FAQ, with the call record in your database.</li>
         </ol>
@@ -115,7 +116,7 @@
           <tr><td>Handled alone, handed to a person, written up afterwards</td><td class="pilot">Measured in the pilot</td></tr>
           <tr><td>Hours from invite to booked, against your past baseline</td><td class="pilot">Measured in the pilot</td></tr>
           <tr><td>FAQ answers with the section named, and refusals</td><td class="pilot">Measured in the pilot</td></tr>
-          <tr><td>Response delay, from the caller's last word to the reply</td><td class="v">Budget: 2 seconds for the median. Measured 2.1 seconds median by call recording, 2026-11-02, over 23 turns in 16 calls.</td></tr>
+          <tr><td>Response delay, from the caller's last word to the reply</td><td class="v">Budget: 2 seconds for the median. Measured 2.1 seconds median by call recording, 2026-11-02, over 23 turns in 16 calls; 2.6 seconds on the latest call, after Gus began waiting for the caller to finish a sentence.</td></tr>
           <tr><td>Cost per call</td><td class="v">About 18 cents per five-minute call, estimated 2026-11-02 from the bake-off calls and the price lists read 2026-11-01.</td></tr>
           <tr><td>Spend limits during the proof of concept</td><td class="v">A 50-dollar monthly cap on the conversation model (set 2026-11-02) and a 50-dollar monthly alarm on AWS (set 2026-11-01).</td></tr>
         </table>

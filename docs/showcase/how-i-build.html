@@ -86,12 +86,12 @@
     <span><i class="sw me"></i>Me</span>
     <span><i class="sw agent"></i>AI agents</span>
     <span><i class="sw gate"></i>Code that decides</span>
-    <span><i class="sw walk"></i>Checked like a person would</span>
-    <span><i class="sw side"></i>Around it</span>
+    <span><i class="sw walk"></i>Checked as a person would</span>
+    <span><i class="sw side"></i>Supporting tools</span>
   </div>
 </header>
 
-<svg viewBox="0 0 1200 492" role="img" aria-label="Eleven numbered steps, read left to right by row: my rulings, the wave plan, one builder per work item, local proof, required checks, AI review, bounded review, a human-style walk, the merge gate, shipping and checking live, and learning into tools, with Shipyard and the alert feed beside them and a return arrow to the next wave.">
+<svg viewBox="0 0 1200 492" role="img" aria-label="Eleven numbered steps, read left to right by row: my rulings, the wave plan, one builder per work item, local proof, required checks, AI review, bounded review, a human-style walk, the merge gate, shipping and checking live, and learning into tools, with A template repo and the alert feed beside them and a return arrow to the next wave.">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
       <path d="M0,0 L10,5 L0,10 z" fill="var(--arrow)"/>
@@ -133,9 +133,9 @@
     <circle cx="746" cy="36" r="10" fill="#ffffff" stroke="var(--gate-edge)" stroke-width="1.5"/>
     <text class="n" x="746" y="40" text-anchor="middle">4</text>
     <text class="t" x="764" y="41">Prove It Locally</text>
-    <text class="c" x="738" y="64">Pre-push hook</text>
-    <text class="d" x="738" y="85">Lint, types and tests, all</text>
-    <text class="d" x="738" y="102">green before any push.</text>
+    <text class="c" x="738" y="64">Before the push</text>
+    <text class="d" x="738" y="85">Lint and tests, run by the</text>
+    <text class="d" x="738" y="102">agent; the hook is off for it.</text>
   </g>
   <g>
     <rect x="960" y="14" width="216" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
@@ -175,7 +175,7 @@
     <text class="d" x="504" y="235">Walk the real product, with</text>
     <text class="d" x="504" y="252">screenshots, before it's done.</text>
     <rect x="590" y="154" width="116" height="20" rx="10" fill="var(--walk-edge)"/>
-    <text class="pill" x="648" y="168" text-anchor="middle">Mine Also Requires</text>
+    <text class="pill" x="648" y="168" text-anchor="middle">Added in Mine</text>
   </g>
   <g>
     <rect x="726" y="164" width="216" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
@@ -209,7 +209,7 @@
   <g>
     <rect x="726" y="314" width="216" height="118" rx="9" fill="var(--side-fill)" stroke="var(--side-edge)" stroke-width="1.5" stroke-dasharray="6 4"/>
     <text class="t" x="738" y="341">Spread to My Other Repos</text>
-    <text class="c" x="738" y="364">Shipyard</text>
+    <text class="c" x="738" y="364">A template repo</text>
     <text class="d" x="738" y="385">Templates, a drift check that</text>
     <text class="d" x="738" y="402">never merges, a weekly sweep.</text>
   </g>
@@ -255,21 +255,21 @@
         </ul>
       </div>
       <div>
-        <h3>Mine Also Requires</h3>
+        <h3>Added in Mine</h3>
         <ul class="adds">
           <li>A screenshot walk of the real product before done.</li>
         </ul>
         <h3>Where We Differ</h3>
         <ul>
           <li>They watch reverts and incidents; I watch round cost and the walk.</li>
-          <li>They run a merge queue; I merge in series by hand, since my private repo has none.</li>
+          <li>They run a merge queue; I merge in series, one at a time, after the gate.</li>
           <li>Neither has an automatic brake when things go wrong.</li>
         </ul>
       </div>
     </div>
   </div>
   <div class="panel">
-    <h2>This Session, in Miniature</h2>
+    <h2>This Repository, in Miniature</h2>
     <ul>
       <li>One prompt card is one work item with its own files.</li>
       <li>The rules first, then the tests, then the code.</li>

@@ -6,7 +6,7 @@ Commit: a96ebad
 
 ## What it is
 
-`make eval` and `make gate`: the harness that runs case files through the same turn loop as the phone and says pass or fail in a way no one can argue with. Today it has zero cases, on purpose.
+`make eval` and `make gate`: the runner that sends case files through the same turn loop as the phone and prints pass or fail for each. It has zero cases, because the cases come from the spec.
 
 ## The decision
 

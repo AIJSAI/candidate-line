@@ -179,7 +179,11 @@ def create_cockpit(store: TraceStore) -> FastAPI:
                 f"<div><div class='k'>Started</div><div class='v'>{escape(when(row.started_at))}</div></div>"
                 f"<div><div class='k'>Ended</div><div class='v'>{escape(ended)}</div></div>"
                 f"<div><div class='k'>Channel</div><div class='v'>{pill(row.channel)}"
-                + (f" <span class='mono muted'>{escape(row.caller_masked)}</span>" if row.caller_masked else "")
+                + (
+                    f" <span class='mono muted'>{escape(row.caller_masked)}</span>"
+                    if row.caller_masked
+                    else ""
+                )
                 + "</div></div>"
                 f"<div><div class='k'>Brain</div><div class='v'>{brain(row)}</div></div>"
                 f"<div><div class='k'>Outcome</div><div class='v'>{escape(row.outcome or '') or '<span class=muted>not recorded</span>'}</div></div>"

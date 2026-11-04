@@ -1,6 +1,6 @@
 # evals/
 
-The eval cases and the committed baseline. **No case file exists before Wednesday**; the first set is written in the room from the spec, then one more for the counter-case, then another for the change the room asks for (PREBUILT.md). AGENTS.md rule 4: nothing here changes except inside the work item that names it, with James approving the diff, and never to make a run pass.
+The eval cases and the committed baseline. **No case file exists yet**: the cases were to be written in the 2026-11-04 session from the spec, which the session did not reach (README). The plan was a first set from the spec, then one more for the counter-case, then another for the change the room asks for (PREBUILT.md). AGENTS.md rule 4: nothing here changes except inside the work item that names it, with James approving the diff, and never to make a run pass.
 
 `make eval` runs every `cases/*.yaml` through the same turn loop as the phone (`candidate_line/evals/runner.py`); `make gate` adds the tests and the cost line. A case the runner cannot read is refused, and a check it cannot evaluate yet shows as PENDING, with a sentence that says why (DR-010).
 
@@ -32,4 +32,4 @@ Each run writes its per-case verdicts to `var/eval-last.json`, beside that store
 
 ## The baseline
 
-The gate is relative, not a fixed rate: every boundary case passes, the regression pass rate may not fall below the committed baseline's, and the cost per call may not rise more than 20 percent above it (`runner.py`, `COST_TOLERANCE`). `baseline.json` is written by its own work item after the first green run on Wednesday, with `make baseline`: it runs the cases in `evals/cases` and writes the run's own numbers, never copied from the printout, as `{"regression_pass_rate": 1.0, "cost_per_call_usd": 0.0012, "commit": "...", "date": "..."}` (the commit from `git rev-parse --short HEAD`, the date in UTC). It refuses, with one line and exit 1, a run with any boundary failure. Until then `make eval` says there is none.
+The gate is relative, not a fixed rate: every boundary case passes, the regression pass rate may not fall below the committed baseline's, and the cost per call may not rise more than 20 percent above it (`runner.py`, `COST_TOLERANCE`). `baseline.json` is written by its own work item after the first green run in the session, with `make baseline`: it runs the cases in `evals/cases` and writes the run's own numbers, never copied from the printout, as `{"regression_pass_rate": 1.0, "cost_per_call_usd": 0.0012, "commit": "...", "date": "..."}` (the commit from `git rev-parse --short HEAD`, the date in UTC). It refuses, with one line and exit 1, a run with any boundary failure. Until then `make eval` says there is none.

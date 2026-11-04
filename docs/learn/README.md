@@ -1,6 +1,6 @@
 # docs/learn: what James must be able to explain
 
-This folder holds the teach-back format and the card deck for the Candidate Line build (KICKOFF.md, Rule 1). It follows the tutor skill (`a private file`: its teach-back, grill and receipt modes) and the tutor's card format, so a tutor session can read this deck as it reads any project's.
+This folder holds the teach-back format and the card deck for the Candidate Line build (KICKOFF.md, Rule 1). It follows the tutor skill (its teach-back, review and receipt modes, kept in the private notebook outside this repository) and the tutor's card format, so a tutor session can read this deck as it reads any project's.
 
 ## The teach-back, at the end of every build block
 
@@ -13,7 +13,7 @@ This folder holds the teach-back format and the card deck for the Candidate Line
 
 The engineering, the prompting and the guardrails are taught alike: a persona line, a refusal, a lexicon entry or a tier boundary is explained the way a module is.
 
-## The grill, the next morning (10 to 15 minutes)
+## The review, the next morning (10 to 15 minutes)
 
 One question at a time, and the message ends with the question: no hint before the answer. James answers with a confidence from 1 (guessing) to 3 (sure). The session grades the idea, not the wording: **right**, **partly** or **wrong**, then the correct answer in two or three sentences with its reference and its "say it like this" line. Due cards come first, and a miss at confidence 3 comes before anything else.
 
@@ -22,7 +22,7 @@ One question at a time, and the message ends with the question: no hint before t
 - A miss goes to box 1, due the next session; a miss at confidence 3 also sets `priority: true`.
 - A right answer moves the card up one box: box 2 after 3 days, box 3 after 7, box 4 after 21. A right answer in box 4 retires it.
 - A right answer at confidence 1 counts as partly. Partly keeps the box and makes the card due next session.
-- Before Wednesday the calendar overrides the boxes: Wednesday morning's grill asks at least one question per row of `PREBUILT.md`, whatever a card's box.
+- Before the session the calendar overrides the boxes: the last review before it asks at least one question per row of `PREBUILT.md`, whatever a card's box.
 
 ## The card format
 
@@ -32,7 +32,7 @@ One question at a time, and the message ends with the question: no hint before t
   answer: "Two to four sentences: the correct answer."
   say_it: "One line, first person."
   ref: "path/to/file.py:120"       # or the command, for CLI work
-  source: "teach-back DR-002 2026-11-01"   # or: grill 2026-11-02, receipt 2026-11-01
+  source: "teach-back DR-002 2026-11-01"   # or: review 2026-11-02, receipt 2026-11-01
   box: 1
   next_due: 2026-11-02
   history: ["2026-11-01 partly c2"]        # c = his confidence, 1 guessing to 3 sure
@@ -40,7 +40,7 @@ One question at a time, and the message ends with the question: no hint before t
 
 ## The daily receipt
 
-At the end of each build day, the tutor skill's receipt mode writes the private notebook from its template. Its three questions are added to this deck, so one deck holds the whole build.
+At the end of each build day, the tutor skill's receipt mode writes a dated receipt into the private notebook outside this repository, from its template. Its three questions are added to this deck, so one deck holds the whole build.
 
 ## What a line here never says
 

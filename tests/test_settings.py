@@ -6,7 +6,9 @@ from candidate_line.settings import Settings
 def test_defaults_match_dr003() -> None:
     s = Settings.from_env({})
     assert s.brain_provider == "anthropic"  # decided 2026-11-02: the live brain is on the Anthropic API
-    assert s.bedrock_model_id == "us.anthropic.claude-haiku-4-5-20251001-v1:0"  # the Bedrock fallback with a quota; the dated profile id is the one Bedrock accepts (DR-003, 2026-11-03)
+    assert (
+        s.bedrock_model_id == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    )  # the Bedrock fallback with a quota; the dated profile id is the one Bedrock accepts (DR-003, 2026-11-03)
     assert s.anthropic_model_id == "claude-haiku-5-5"
     assert s.aws_region == "us-east-1"
     assert s.twilio_auth_token is None

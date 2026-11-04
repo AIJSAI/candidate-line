@@ -2,6 +2,8 @@
 
 Every fact a decision record relies on comes from a page saved here, text only, with the read date (Central time, the build calendar's clock; the exact UTC instant is the second line of each file) in the file name. No rate, quota or model fact is said from memory (DR-000). Re-read a page before saying its fact aloud if the date is older than the day you say it.
 
+The files whose Source line is on docs.aws.amazon.com are copies of AWS documentation, copyright Amazon Web Services, Inc. or its affiliates, licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), converted to plain text on the date in each file's Read line and otherwise unchanged. The Illinois statute texts are public law. The repository's own code, data and prose are under the MIT license in LICENSE; this folder is the exception. The price-list JSON is the filtered output of `aws pricing get-products`. The other files in this folder are stubs: the vendor's own copyright does not allow the page to be copied here, so each keeps its source line and the few facts the records cite.
+
 | Read | File | Page | Used by |
 | - | - | - | - |
 | 2026-11-01 | `2026-11-01-aws-identity-center-instances.txt` | IAM Identity Center: organization and account instances | DR-002 |
@@ -12,23 +14,23 @@ Every fact a decision record relies on comes from a page saved here, text only, 
 | 2026-11-01 | `2026-11-01-aws-bedrock-model-card-claude-sonnet-5-5.txt` | Bedrock model card: Claude Sonnet 5.5 | DR-003 |
 | 2026-11-01 | `2026-11-01-aws-bedrock-model-card-nova-2-5-sonic.txt` | Bedrock model card: Amazon Nova 2.5 Sonic | DR-001, DR-003, DR-007 |
 | 2026-11-01 | `2026-11-01-aws-polly-api-synthesize-speech.txt` | Polly API: SynthesizeSpeech (output formats and sample rates) | DR-003, DR-006 |
-| 2026-11-01 | `2026-11-01-claude-platform-pricing-docs.txt` | Claude Platform docs: pricing (first-party rates for Haiku 5.5, Sonnet 5.5, Haiku 4.5) | DR-003 |
-| 2026-11-01 | `2026-11-01-anthropic-pricing.txt` | anthropic.com/pricing (plans; the API rates are on the docs page above) | DR-003 |
-| 2026-11-01 | `2026-11-01-aws-bedrock-pricing.txt` | Bedrock pricing page as served (its tables render in the browser; see the price-list file and the rendered excerpt) | DR-003 |
+| 2026-11-01 | `2026-11-01-claude-platform-pricing-docs.txt` | Claude Platform docs: pricing. Stub: quotes the first-party rate rows for Haiku 5.5, Sonnet 5.5 and Haiku 4.5 and the prompt-caching multipliers | DR-003 |
+| 2026-11-01 | `2026-11-01-anthropic-pricing.txt` | anthropic.com/pricing (plans). Stub: quotes nothing, because the page holds no API rate; the rates are on the docs page above | DR-003 |
+| 2026-11-01 | `2026-11-01-aws-bedrock-pricing.txt` | Bedrock pricing page. Stub: quotes nothing, because its rate tables render only in a browser; the Nova 2.5 Sonic rates are in the price-list file below | DR-003 |
 | 2026-11-01 | `2026-11-01-aws-price-list-api-us-east-1.json` | AWS Price List API (`aws pricing get-products`), us-east-1: Nova 2.5 Sonic, Transcribe, Polly | DR-003, DR-006, DR-007 |
-| 2026-11-01 | `2026-11-01-aws-transcribe-pricing.txt` | Transcribe pricing page | DR-006 |
-| 2026-11-01 | `2026-11-01-aws-polly-pricing.txt` | Polly pricing page | DR-006 |
+| 2026-11-01 | `2026-11-01-aws-transcribe-pricing.txt` | Transcribe pricing page. Stub: quotes streaming at 0.01 USD a minute in US East (N. Virginia), billed by the second | DR-006 |
+| 2026-11-01 | `2026-11-01-aws-polly-pricing.txt` | Polly pricing page. Stub: quotes neural voices at 16.00 USD per million characters | DR-006 |
 | 2026-11-01 | `2026-11-01-aws-bedrock-quotas.md` | Bedrock user guide: quotas (overview; the reduced-quota sentence) | DR-003 |
 | 2026-11-01 | `2026-11-01-aws-bedrock-quotas-runtime.md` | Bedrock user guide: quotas for the bedrock-runtime endpoint | DR-003 |
 | 2026-11-01 | `2026-11-01-aws-bedrock-quota-increase.md` | Bedrock user guide: request a quota increase | DR-003 |
 | 2026-11-01 | `2026-11-01-aws-general-reference-transcribe-quotas.md` | AWS General Reference: Transcribe endpoints and quotas (concurrent streams) | DR-006 |
 | 2026-11-01 | `2026-11-01-aws-general-reference-polly-quotas.md` | AWS General Reference: Polly endpoints and quotas (requests per second) | DR-006 |
 | 2026-11-01 | `2026-11-01-aws-polly-quotas.txt` | Polly developer guide: quotas | DR-006 |
-| 2026-11-01 | `2026-11-01-twilio-twiml-stream.txt` | Twilio TwiML: `<Stream>` (bidirectional with `<Connect>`; ends only with the call) | DR-005 |
-| 2026-11-01 | `2026-11-01-twilio-media-streams-websocket-messages.txt` | Twilio Media Streams: WebSocket messages (`audio/x-mulaw` 8000 base64; the `clear` message) | DR-005, DR-006 |
-| 2026-11-01 | `2026-11-01-twilio-free-trial.txt` | Twilio docs: how the free trial works (verified recipients, 30 days, upgrade) | DR-005 |
-| 2026-11-01 | `2026-11-01-twilio-voice-pricing-us.txt` | Twilio voice pricing, US | DR-005 |
-| 2026-11-01 | `2026-11-01-twilio-security-request-validation.txt` | Twilio docs: security, request validation (the signature scheme and its worked example) | DR-005 |
-| 2026-11-01 | `2026-11-01-nyc-dcwp-automated-employment-decision-tools.txt` | NYC DCWP: Automated Employment Decision Tools, Local Law 144 of 2021 | the spec's Never list |
+| 2026-11-01 | `2026-11-01-twilio-twiml-stream.txt` | Twilio TwiML: `<Stream>`. Stub: quotes bidirectional with `<Connect>`, ends only with the call, `wss` only | DR-005 |
+| 2026-11-01 | `2026-11-01-twilio-media-streams-websocket-messages.txt` | Twilio Media Streams: WebSocket messages. Stub: quotes the fields the line uses in `connected`, `start`, `media`, `stop`, `mark` and `clear` (`audio/x-mulaw` 8000 base64) | DR-005, DR-006 |
+| 2026-11-01 | `2026-11-01-twilio-free-trial.txt` | Twilio docs: how the free trial works. Stub: quotes verified recipients only (up to five), 30 days, the same credentials after the upgrade | DR-005 |
+| 2026-11-01 | `2026-11-01-twilio-voice-pricing-us.txt` | Twilio voice pricing, US. Stub: quotes local inbound at 0.0085 USD a minute, a local number at 1.15 USD a month, recording at 0.0025 USD a minute | DR-005 |
+| 2026-11-01 | `2026-11-01-twilio-security-request-validation.txt` | Twilio docs: security, request validation. Stub: quotes the six signature steps and the worked example | DR-005 |
+| 2026-11-01 | `2026-11-01-nyc-dcwp-automated-employment-decision-tools.txt` | NYC DCWP: Automated Employment Decision Tools, Local Law 144 of 2021. Stub: quotes the bias-audit sentence and links the law text | the spec's Never list |
 | 2026-11-01 | `2026-11-01-illinois-820-ilcs-42-ai-video-interview-act.txt` | 820 ILCS 42, Artificial Intelligence Video Interview Act (ilga.gov) | the spec's Never list |
 | 2026-11-01 | `2026-11-01-illinois-public-act-103-0804.txt` | Illinois Public Act 103-0804 (775 ILCS 5/2-102(L), AI in employment, effective 2026-01-01) | the spec's Never list |

@@ -2,6 +2,7 @@
 name = "candidate-line"
 version = "0.0.1"
 description = "The Candidate Line: a phone line for ACME's job candidates, built for a live build session."
+license = { text = "MIT" }
 # 3.12 and not 3.13: audioop, the simplest mu-law codec, left the standard library in 3.13 (DR-004).
 requires-python = ">=3.12,<3.13"
 dependencies = [

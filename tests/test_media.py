@@ -518,7 +518,16 @@ def test_a_failed_turn_speaks_the_recovery_line_instead_of_silence(caplog) -> No
         sent.append(message)
 
     session = MediaSession(
-        send, transcriber, speaker, RaisingBrain(), NoHooks(), "sys", "CA1", SID, greeting=GREETING, grace_ms=(50, 150)
+        send,
+        transcriber,
+        speaker,
+        RaisingBrain(),
+        NoHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=GREETING,
+        grace_ms=(50, 150),
     )
 
     async def script(*_):

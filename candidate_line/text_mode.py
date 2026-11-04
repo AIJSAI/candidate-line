@@ -1,7 +1,7 @@
 """Text mode: the line without a phone. `make text`.
 
 Why it exists: the failure drill (kill the tunnel, keep talking), a check that costs no call, and the eval
-runner's harness. It runs the same brain and the same hooks as the voice path; only the ears and mouth differ.
+runner's fixture. It runs the same brain and the same hooks as the voice path; only the ears and mouth differ.
 Commands: `/silence N` runs the silence hook as if N seconds passed; `/quit` ends it.
 """
 

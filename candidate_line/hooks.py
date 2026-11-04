@@ -1,4 +1,4 @@
-"""Four hooks the turn loop calls, and one the call's end calls, empty today, filled live on Wednesday.
+"""Four hooks the turn loop calls, and one the call's end calls, empty today, to be filled in the live session.
 
 Why hooks and not subclasses: the guard, the observer, the kill switch and the override log are written in the
 room, each as one small object that plugs into a loop nobody rewrites. Each hook may return None (no change) or
@@ -34,7 +34,7 @@ class Hooks(Protocol):
 
 
 class NoHooks:
-    """The hooks, doing nothing. The default until Wednesday."""
+    """The hooks, doing nothing. The default until the live session."""
 
     def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
         return None
@@ -53,11 +53,12 @@ class NoHooks:
 
 
 class LineHooks:
-    """The line's own hooks: empty bodies the room fills on Wednesday (card 04 `on_tool`, card 05 `before_speak`,
-    card 06 the tiers' observer on `on_tool`, the kill switch on `on_turn`, the holding line on `on_silence` and the
-    summary on `on_call_end`). Every runtime path gets one through `default_hooks()`, so a body written here runs on
-    the phone, in text mode and in the eval runner alike; `on_call_end` alone runs only on the phone and in text
-    mode, where a call really ends. `NoHooks` above stays truly empty, for the tests."""
+    """The line's own hooks: empty bodies to be filled in the live session (card 04 `on_tool`, card 05
+    `before_speak`, card 06 the tiers' observer on `on_tool`, the kill switch on `on_turn`, the holding line
+    on `on_silence` and the summary on `on_call_end`). Every runtime path gets one through `default_hooks()`,
+    so a body written here runs on the phone, in text mode and in the eval runner alike; `on_call_end` alone
+    runs only on the phone and in text mode, where a call really ends. `NoHooks` above stays truly empty, for
+    the tests."""
 
     def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
         return None

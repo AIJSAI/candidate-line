@@ -128,7 +128,6 @@ This site is maintained for the Illinois General Assembly by the Legislative Inf
 
   ILGA.gov uses cookies to ensure you get the best experience on our website. By continuing to browse ILGA.gov you consent to our use of cookies. Read About Cookies
 ILGA.GOV
-2026 ILGA.gov | All Rights Reserved | ADA | Disclaimers | Learn
 
 This site is maintained for the Illinois General Assembly by the Legislative Information System, 705 Stratton Building, Springfield, Illinois 62706. Contact ILGA Webmaster
 
@@ -136,4 +135,3 @@ This site is maintained for the Illinois General Assembly by the Legislative Inf
 
 ILGA.GOV
 
-2026 ILGA.gov | All Rights Reserved | ADA | Disclaimers | Learn
