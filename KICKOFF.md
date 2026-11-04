@@ -180,11 +180,6 @@ Open a fresh session (Claude Code or Codex) in `the repository root` and type th
 Read KICKOFF.md, AGENTS.md and docs/decisions/DR-000-how-decisions-are-recorded.md in full. Then start TODAY at item 1, the AWS CLI sign-in with no long-lived key in a file. Follow Rule 1: run the mechanical commands yourself and narrate each in one line; stop and ask me only at a real decision, at anything that spends money or touches one of my accounts, and at anything that could not be undone; at each real decision, ask me which option I would pick before you give yours. If aws sts get-caller-identity already succeeds on a named profile, tell me and move to the next unchecked item. When block 1 is done, write DR-002 and DR-003 from the DR-000 template, then run my teach-back: I explain closed book, you interrupt once or twice, grade each point right, partly or wrong against the commands we ran, write the say-it-like-this line into each record, and log my misses as cards in docs/learn/cards.yaml. Never copy an account id, a start URL or a credential into this repository.
 ```
 
-## 8. Sources on this Mac
+## 8. Sources
 
-For James's reading. None is opened on Wednesday, and nothing from them is copied here beyond what the build needs.
-- **The plan:** `a private path plan`, the only file of that name (the wildcard keeps the package's folder name out of this repository). Sections 3.1 to 3.9, 4, 5, 7, 8 and 9.
-- **The mock:** `a private file`, beside the plan.
-- **The coding-tool facts:** `a private file`, beside the plan (read 2026-10-31; lines it marks "summary only" are checked on the page before use).
-- **The tutor:** `a private file` (the teach-back, grill and receipt modes); the notebook is the private notebook, where this project is the `candidate-line` row of `projects.yaml`.
-- Lines in the plan about James's own record are said in words only and are never written into this repository.
+The plan this build followed, the mock of the session and the coding-tool notes live outside this repository, on James's own machine. None was opened in the session, and nothing from them is copied here beyond what the build needs. The learning side (teach-backs, grills, receipts) runs from a private notebook, also outside this tree.

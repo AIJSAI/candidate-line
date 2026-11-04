@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Candidate Line Architecture</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #1D2430;
+    --muted: #5B6573;
+    --line: #7A8494;
+    --frame: #A3ABB7;
+    --grey: #F3F4F6;
+    --orange: #B85C00;
+    --orange-ink: #8F4700;
+    --orange-fill: #FFF6E8;
+    --pill-fill: #FFE9CC;
+    --arrow: #4A5361;
+  }
+  html, body { margin: 0; background: #FFFFFF; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .page { width: 1280px; box-sizing: border-box; margin: 0 auto; padding: 14px 24px 10px; }
+
+  h1 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+
+  .call {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 112px 20px 112px 20px 112px 26px 150px 20px 150px 20px 150px 20px 150px 20px 150px;
+    grid-template-rows: 26px auto 14px auto 14px auto;
+    align-items: stretch;
+  }
+  .frame { grid-column: 7 / 16; grid-row: 1 / 7; margin: -8px -12px -12px -12px;
+    background: #FAFBFC; border: 1.5px solid var(--frame); border-radius: 12px; z-index: 0; }
+  .frame-label { grid-column: 7 / 16; grid-row: 1; align-self: start; z-index: 1;
+    font-size: 14px; font-weight: 600; line-height: 1.2; }
+  .frame-label span { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 10px; }
+
+  .box { position: relative; z-index: 1; box-sizing: border-box; padding: 11px 12px 12px;
+    background: var(--grey); border: 1.5px solid var(--line); border-radius: 8px;
+    display: flex; flex-direction: column; gap: 3px; }
+  .box.live { background: var(--orange-fill); border: 1.5px dashed var(--orange); }
+  .box h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.2; }
+  .box .cap { font-size: 12px; line-height: 1.3; color: var(--muted); }
+  .box p { margin: 3px 0 0; font-size: 13px; line-height: 1.35; }
+  .box ul { margin: 3px 0 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.45; }
+  .inner { margin-top: auto; padding: 7px 9px 8px; border-radius: 6px; font-size: 12px; line-height: 1.3; }
+  .inner b { display: block; font-size: 12px; font-weight: 600; margin-bottom: 1px; }
+  .inner.pre { background: var(--grey); border: 1.2px solid var(--line); }
+  .inner.live { background: var(--orange-fill); border: 1.2px dashed var(--orange); color: var(--orange-ink); font-weight: 600; }
+
+  .callout { grid-column: 9 / 12; grid-row: 4; z-index: 1; box-sizing: border-box; padding: 8px 12px 9px;
+    background: var(--grey); border: 1.2px solid var(--frame); border-radius: 8px; font-size: 13px; line-height: 1.4; }
+  .callout b { display: block; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+
+  .arrow { align-self: center; justify-self: center; display: block; z-index: 1; }
+  .arrow.left { transform: scaleX(-1); }
+
+  .beside-label { margin: 14px 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .beside { display: grid; grid-template-columns: 1fr 22px 1fr 22px 1fr 22px 1fr 22px 1fr; align-items: stretch; }
+  .beside .box { padding-top: 30px; padding-bottom: 10px; }
+  .pill { position: absolute; top: 9px; right: 9px; font-size: 11px; font-weight: 600; line-height: 1;
+    color: var(--orange-ink); background: var(--pill-fill); border: 1px solid var(--orange);
+    border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+
+  .legend { margin-top: 10px; display: flex; align-items: center; gap: 26px; font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { display: inline-block; width: 26px; height: 16px; border-radius: 4px; box-sizing: border-box; }
+  .sw.pre { background: var(--grey); border: 1.4px solid var(--line); }
+  .sw.live { background: var(--orange-fill); border: 1.4px dashed var(--orange); }
+  .legend .pill { position: static; }
+
+  .footer { margin-top: 8px; padding-top: 7px; border-top: 1px solid #E1E4E9;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 24px; font-size: 12.5px; }
+  .footer .date { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+  @page { size: landscape; margin: 8mm; }
+  @media print {
+    html, body { background: #FFFFFF; }
+    .page { zoom: 0.76; padding: 0; }
+    .box, .frame, .callout, .pill, .sw, .inner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>How a Call to Gus Works</h1>
+  <p class="sub">The call comes in along the top row and Gus's answer goes back along the bottom. The phone, text mode and the tests share one turn loop.</p>
+
+  <div class="call">
+    <div class="frame"></div>
+    <div class="frame-label">The Line on James's Mac <span>One Python app, reached through the tunnel; speech and the brain are cloud calls</span></div>
+
+    <div class="box" style="grid-column:1; grid-row:2/7">
+      <h3>Caller</h3>
+      <div class="cap">A candidate's own phone</div>
+      <p>Calls the number and talks to Gus.</p>
+    </div>
+    <svg class="arrow" style="grid-column:2; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+    <svg class="arrow left" style="grid-column:2; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box" style="grid-column:3; grid-row:2/7">
+      <h3>The Phone Number</h3>
+      <div class="cap">Twilio</div>
+      <p>Owns the number. Carries the audio both ways.</p>
+    </div>
+    <svg class="arrow" style="grid-column:4; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+    <svg class="arrow left" style="grid-column:4; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box" style="grid-column:5; grid-row:2/7">
+      <h3>Internet Tunnel</h3>
+      <div class="cap">Cloudflare</div>
+      <p>Gives the Mac a public address, so Twilio can reach it.</p>
+    </div>
+    <svg class="arrow" style="grid-column:6; grid-row:2" width="26" height="12" viewBox="0 0 26 12" aria-hidden="true"><path d="M0 6H19" stroke="#4A5361" stroke-width="2"/><path d="M18 1L25 6L18 11Z" fill="#4A5361"/></svg>
+    <svg class="arrow left" style="grid-column:6; grid-row:6" width="26" height="12" viewBox="0 0 26 12" aria-hidden="true"><path d="M0 6H19" stroke="#4A5361" stroke-width="2"/><path d="M18 1L25 6L18 11Z" fill="#4A5361"/></svg>
+
+    <div class="box" style="grid-column:7; grid-row:2/7">
+      <h3>Front Door</h3>
+      <div class="cap">The line's web app</div>
+      <p>Checks each call came from Twilio. Opens the two-way audio stream.</p>
+    </div>
+    <svg class="arrow" style="grid-column:8; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+    <svg class="arrow left" style="grid-column:8; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box" style="grid-column:9; grid-row:2">
+      <h3>Speech to Text</h3>
+      <div class="cap">Amazon Transcribe, streaming</div>
+      <p>Turns the caller's voice into words.</p>
+    </div>
+    <svg class="arrow" style="grid-column:10; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box live" style="grid-column:11; grid-row:2">
+      <h3>Before Gus Thinks</h3>
+      <div class="cap">Hook, filled live</div>
+      <p>Reads the off switch. Fixes misheard words.</p>
+    </div>
+    <svg class="arrow" style="grid-column:12; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box" style="grid-column:13; grid-row:2/7">
+      <h3>Gus's Brain</h3>
+      <div class="cap">Claude Haiku 5.5, Anthropic API</div>
+      <p>Reads the call so far. Writes Gus's next line.</p>
+      <p>Spare: Claude Haiku 4.5 on Amazon Bedrock, one setting away.</p>
+      <div class="inner live">Persona: built live</div>
+    </div>
+    <svg class="arrow" style="grid-column:14; grid-row:2" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+    <svg class="arrow left" style="grid-column:14; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box live" style="grid-column:15; grid-row:2/7">
+      <h3>Gus's Tools</h3>
+      <div class="cap">Called mid-turn</div>
+      <ul>
+        <li>Verify the caller</li>
+        <li>List open slots</li>
+        <li>Book a slot</li>
+        <li>Answer from the FAQ</li>
+        <li>Hand off a move</li>
+        <li>Take a callback</li>
+      </ul>
+      <div class="inner pre"><b>Synthetic Data</b>8 candidates, 2 weeks of slots, the FAQ</div>
+    </div>
+
+    <div class="callout">
+      <b>Two Timing Rules</b>
+      Gus waits a beat after the caller stops.<br>
+      If the caller talks over Gus, Gus stops.
+    </div>
+
+    <div class="box" style="grid-column:9; grid-row:6">
+      <h3>Text to Speech</h3>
+      <div class="cap">Amazon Polly</div>
+      <p>Gus's voice, one sentence at a time.</p>
+    </div>
+    <svg class="arrow left" style="grid-column:10; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+
+    <div class="box live" style="grid-column:11; grid-row:6">
+      <h3>Safety Filter</h3>
+      <div class="cap">Hook, filled live</div>
+      <p>Swaps a forbidden sentence for a safe line.</p>
+    </div>
+    <svg class="arrow left" style="grid-column:12; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
+  </div>
+
+  <div class="beside-label">Beside the Call</div>
+  <div class="beside">
+    <div class="box" style="grid-column:1">
+      <span class="pill">Live: the wiring</span>
+      <h3>Call Record</h3>
+      <div class="cap">SQLite, one file on the Mac</div>
+      <p>Every step of every call, with timings and token counts. Numbers and PINs masked, no audio.</p>
+    </div>
+    <svg class="arrow" style="grid-column:2" width="22" height="12" viewBox="0 0 22 12" aria-hidden="true"><path d="M0 6H15" stroke="#4A5361" stroke-width="2"/><path d="M14 1L21 6L14 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:3">
+      <span class="pill">Live: tiers, off switch</span>
+      <h3>Recruiter's Cockpit</h3>
+      <div class="cap">A web page, on the Mac only</div>
+      <p>Lists the calls and opens one call's steps. A reply box logs what a person did.</p>
+    </div>
+    <div class="box" style="grid-column:5">
+      <span class="pill">Live: when it posts</span>
+      <h3>Hand-Off to a Person</h3>
+      <div class="cap">Slack, or the on-screen log</div>
+      <p>Posted from a queue, so the call never waits. Carries the masked number and a link to the call.</p>
+    </div>
+    <div class="box" style="grid-column:7">
+      <span class="pill">Live: the test cases</span>
+      <h3>Tests Without a Phone</h3>
+      <div class="cap">Test runner and text mode</div>
+      <p>Same turn loop, rules and brain. A scripted test caller can also phone in.</p>
+    </div>
+    <div class="box" style="grid-column:9">
+      <h3>Sign-In and Keys</h3>
+      <div class="cap">AWS IAM Identity Center</div>
+      <p>Short-lived credentials, no long-lived key in a file. API keys come from the Mac's keychain.</p>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw pre"></i>Built before the session, listed with dates in PREBUILT.md</span>
+    <span><i class="sw live"></i>Built live in the session</span>
+    <span><span class="pill">Live</span>The live part of a pre-built piece</span>
+  </div>
+
+  <div class="footer">
+    <div>Built live, in order: the rules page, the tests, the call-record wiring, the tools and persona, the safety filter; then, if the clock allows, the tiers, the hand-off rule and the off switch.</div>
+    <div class="date">From the code, 2026-11-03</div>
+  </div>
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 A phone line for the job candidates of ACME, a fictional firm. A voice agent called Gus books a first-round interview, answers process questions from an FAQ and names the section, takes a callback request, and never evaluates a person. It was built with Claude Code from prompt cards, with every decision written down as it was made. All data is synthetic. No account, key or phone number is in this repository.
 
-![The architecture: the phone path, the brain, the records and the cockpit](docs/images/architecture.png)
+![The architecture: the phone path, the brain, the records and the cockpit](docs/showcase/architecture.png)
 
 Grey boxes were built before the session, each with its commit date in `PREBUILT.md`. Orange boxes are what the session's cards build.
 
@@ -30,9 +30,13 @@ The phone path (`make up`, `make dev`, `make probe-dial`) needs an AWS account f
 
 ## How It Was Built
 
-![How the build runs: plan, build, review, verify as a user, record](docs/images/factory.png)
+![How the build runs: plan, build, review, verify as a user, record](docs/showcase/how-i-build.png)
 
 The picture is the system every build of mine runs under. In this repository it shows as: each change landed with its tests and its decision record; the pre-built list was declared before the session and tagged; the phone path was proven by a real call before anything was called done (`docs/decisions/DR-006`); and the choice of coding tool was itself a recorded decision (`docs/decisions/DR-014`). The pattern is close to the one the Claude Code team described for their own code review in October 2026, with one addition: a person walks the result the way a user would before it counts.
+
+## The Pages
+
+Everything made for the session is in [`docs/showcase/`](docs/showcase/README.md): the architecture above, [how I build](docs/showcase/README.md#how-i-build-one-change-from-plan-to-main), [the one-page version for a business lead](docs/showcase/README.md#the-candidate-line-for-the-business-lead) and [the recruiting lead's screen](docs/showcase/README.md#the-recruiting-leads-screen), each as a picture, a page and the notes that trace every line on it to a file in this tree. The pre-built list is [`PREBUILT.md`](PREBUILT.md); the decision records are in [`docs/decisions/`](docs/decisions/); the seven cards are in [`prompts/`](prompts/); the plan for the hour, minute by minute, is [`docs/room.md`](docs/room.md).
 
 ## The Session Of 4 November 2026
 

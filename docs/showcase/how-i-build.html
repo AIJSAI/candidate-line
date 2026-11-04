@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How I Build</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --ink: #1c2430;
+    --muted: #5f6b7a;
+    --arrow: #7a8595;
+    --me-fill: #fff6e0;
+    --me-edge: #c98a12;
+    --agent-fill: #eaf1fc;
+    --agent-edge: #3f6fbf;
+    --gate-fill: #e9f6ee;
+    --gate-edge: #2f8a55;
+    --walk-fill: #fff1e8;
+    --walk-edge: #d9620f;
+    --side-fill: #f5f6f8;
+    --side-edge: #a3abb6;
+    --panel: #f8f9fb;
+    --rule: #e1e5ea;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.4;
+    padding: 16px 28px 20px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; font-weight: 700; }
+  .lede { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 16px; height: 12px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+  .sw.me { background: var(--me-fill); border-color: var(--me-edge); }
+  .sw.agent { background: var(--agent-fill); border-color: var(--agent-edge); }
+  .sw.gate { background: var(--gate-fill); border-color: var(--gate-edge); }
+  .sw.walk { background: var(--walk-fill); border-color: var(--walk-edge); }
+  .sw.side { background: var(--side-fill); border-color: var(--side-edge); border-style: dashed; }
+  svg { width: 100%; height: auto; display: block; margin-top: 8px; }
+  svg text { font-family: inherit; fill: var(--ink); }
+  .t { font-size: 15.5px; font-weight: 600; }
+  .c { font-size: 12px; fill: var(--muted); }
+  .d { font-size: 13px; fill: #2c3644; }
+  .n { font-size: 11px; font-weight: 700; fill: var(--muted); }
+  .pill { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .loop { font-size: 12px; fill: var(--muted); }
+  .panels { display: grid; grid-template-columns: 2.1fr 1fr; gap: 16px; margin-top: 8px; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 16px 10px; }
+  .panel h2 { font-size: 15.5px; font-weight: 600; margin: 0 0 4px; }
+  .panel h2 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .panel h3 { font-size: 11px; margin: 8px 0 3px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .panel ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  .panel li { margin: 2px 0; }
+  .cols { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 16px; }
+  .adds li::marker { color: var(--walk-edge); }
+  footer { margin-top: 10px; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; column-gap: 18px; row-gap: 3px; flex-wrap: wrap; border-top: 1px solid var(--rule); padding-top: 8px; }
+  footer b { color: var(--ink); font-weight: 600; }
+  @media (max-width: 900px) {
+    .panels, .cols { grid-template-columns: 1fr; }
+  }
+  @media print {
+    @page { size: landscape; margin: 10mm; }
+    html, body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    body { padding: 0; max-width: none; zoom: 0.7; }
+    .panels { grid-template-columns: 2.1fr 1fr; }
+    .cols { grid-template-columns: 0.85fr 1.15fr; }
+    .panel, svg { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>How I Build: One Change, From Plan to Main</h1>
+    <p class="lede">An agent's own word never counts as proof. Code and checks decide; I make the calls that matter.</p>
+  </div>
+  <div class="legend" aria-label="Legend">
+    <span><i class="sw me"></i>Me</span>
+    <span><i class="sw agent"></i>AI agents</span>
+    <span><i class="sw gate"></i>Code that decides</span>
+    <span><i class="sw walk"></i>Checked like a person would</span>
+    <span><i class="sw side"></i>Around it</span>
+  </div>
+</header>
+
+<svg viewBox="0 0 1200 492" role="img" aria-label="Eleven numbered steps, read left to right by row: my rulings, the wave plan, one builder per work item, local proof, required checks, AI review, bounded review, a human-style walk, the merge gate, shipping and checking live, and learning into tools, with Shipyard and the alert feed beside them and a return arrow to the next wave.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--arrow)"/>
+    </marker>
+  </defs>
+
+  <!-- Row 1 -->
+  <g>
+    <rect x="24" y="14" width="216" height="118" rx="9" fill="var(--me-fill)" stroke="var(--me-edge)" stroke-width="1.5"/>
+    <circle cx="44" cy="36" r="10" fill="#ffffff" stroke="var(--me-edge)" stroke-width="1.5"/>
+    <text class="n" x="44" y="40" text-anchor="middle">1</text>
+    <text class="t" x="62" y="41">I Set Direction and</text>
+    <text class="t" x="62" y="60">Make the Rulings</text>
+    <text class="c" x="36" y="80">Me</text>
+    <text class="d" x="36" y="101">The scope, the direction and</text>
+    <text class="d" x="36" y="118">the money calls stay mine.</text>
+  </g>
+  <g>
+    <rect x="258" y="14" width="216" height="118" rx="9" fill="var(--agent-fill)" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <circle cx="278" cy="36" r="10" fill="#ffffff" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <text class="n" x="278" y="40" text-anchor="middle">2</text>
+    <text class="t" x="296" y="41">Plan the Wave</text>
+    <text class="c" x="270" y="64">Orchestrator session</text>
+    <text class="d" x="270" y="85">Work items own their files.</text>
+    <text class="d" x="270" y="102">A second session reviews it.</text>
+  </g>
+  <g>
+    <rect x="492" y="14" width="216" height="118" rx="9" fill="var(--agent-fill)" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <circle cx="512" cy="36" r="10" fill="#ffffff" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <text class="n" x="512" y="40" text-anchor="middle">3</text>
+    <text class="t" x="530" y="41">One Builder per</text>
+    <text class="t" x="530" y="60">Work Item</text>
+    <text class="c" x="504" y="80">Builder agent</text>
+    <text class="d" x="504" y="101">Its own repo copy. A push into</text>
+    <text class="d" x="504" y="118">another item's files is refused.</text>
+  </g>
+  <g>
+    <rect x="726" y="14" width="216" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <circle cx="746" cy="36" r="10" fill="#ffffff" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <text class="n" x="746" y="40" text-anchor="middle">4</text>
+    <text class="t" x="764" y="41">Prove It Locally</text>
+    <text class="c" x="738" y="64">Pre-push hook</text>
+    <text class="d" x="738" y="85">Lint, types and tests, all</text>
+    <text class="d" x="738" y="102">green before any push.</text>
+  </g>
+  <g>
+    <rect x="960" y="14" width="216" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <circle cx="980" cy="36" r="10" fill="#ffffff" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <text class="n" x="980" y="40" text-anchor="middle">5</text>
+    <text class="t" x="998" y="41">Required Checks</text>
+    <text class="c" x="972" y="64">GitHub Actions</text>
+    <text class="d" x="972" y="85">Every required check is green</text>
+    <text class="d" x="972" y="102">before the change can merge.</text>
+  </g>
+
+  <!-- Row 2 -->
+  <g>
+    <rect x="24" y="164" width="216" height="118" rx="9" fill="var(--agent-fill)" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <circle cx="44" cy="186" r="10" fill="#ffffff" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <text class="n" x="44" y="190" text-anchor="middle">6</text>
+    <text class="t" x="62" y="191">AI Review</text>
+    <text class="c" x="36" y="214">Claude Review, Copilot</text>
+    <text class="d" x="36" y="235">Reviewers from two vendors; a</text>
+    <text class="d" x="36" y="252">second lens for risky changes.</text>
+  </g>
+  <g>
+    <rect x="258" y="164" width="216" height="118" rx="9" fill="var(--agent-fill)" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <circle cx="278" cy="186" r="10" fill="#ffffff" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <text class="n" x="278" y="190" text-anchor="middle">7</text>
+    <text class="t" x="296" y="191">Bounded Review</text>
+    <text class="c" x="270" y="214">The orchestrator decides</text>
+    <text class="d" x="270" y="235">Two rounds, then a decision.</text>
+    <text class="d" x="270" y="252">Never a third round.</text>
+  </g>
+  <g>
+    <rect x="492" y="164" width="216" height="118" rx="9" fill="var(--walk-fill)" stroke="var(--walk-edge)" stroke-width="1.5"/>
+    <circle cx="512" cy="186" r="10" fill="#ffffff" stroke="var(--walk-edge)" stroke-width="1.5"/>
+    <text class="n" x="512" y="190" text-anchor="middle">8</text>
+    <text class="t" x="530" y="191">Verify Like a Human</text>
+    <text class="c" x="504" y="214">Scripted walk, screenshots</text>
+    <text class="d" x="504" y="235">Walk the real product, with</text>
+    <text class="d" x="504" y="252">screenshots, before it's done.</text>
+    <rect x="590" y="154" width="116" height="20" rx="10" fill="var(--walk-edge)"/>
+    <text class="pill" x="648" y="168" text-anchor="middle">Mine Also Requires</text>
+  </g>
+  <g>
+    <rect x="726" y="164" width="216" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <circle cx="746" cy="186" r="10" fill="#ffffff" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <text class="n" x="746" y="190" text-anchor="middle">9</text>
+    <text class="t" x="764" y="191">The Merge Gate</text>
+    <text class="c" x="738" y="214">Readiness script</text>
+    <text class="d" x="738" y="235">Reads GitHub's record, never an</text>
+    <text class="d" x="738" y="252">approval. It names what's risky.</text>
+  </g>
+  <g>
+    <rect x="960" y="164" width="216" height="118" rx="9" fill="var(--agent-fill)" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <circle cx="980" cy="186" r="10" fill="#ffffff" stroke="var(--agent-edge)" stroke-width="1.5"/>
+    <text class="n" x="980" y="190" text-anchor="middle">10</text>
+    <text class="t" x="998" y="191">Ship It and Check</text>
+    <text class="t" x="998" y="210">It Live</text>
+    <text class="c" x="972" y="230">Orchestrator session</text>
+    <text class="d" x="972" y="251">Deploy, then check it live.</text>
+  </g>
+
+  <!-- Row 3 -->
+  <g>
+    <rect x="24" y="314" width="684" height="118" rx="9" fill="var(--gate-fill)" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <circle cx="44" cy="336" r="10" fill="#ffffff" stroke="var(--gate-edge)" stroke-width="1.5"/>
+    <text class="n" x="44" y="340" text-anchor="middle">11</text>
+    <text class="t" x="62" y="341">Learn Into Tools</text>
+    <text class="c" x="36" y="364">CI guards, scripts, receipts</text>
+    <text class="d" x="36" y="385">A repeated problem becomes a guard, shipped with the fix.</text>
+    <text class="d" x="36" y="402">Each wave closes with a short learning receipt.</text>
+  </g>
+  <g>
+    <rect x="726" y="314" width="216" height="118" rx="9" fill="var(--side-fill)" stroke="var(--side-edge)" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text class="t" x="738" y="341">Spread to My Other Repos</text>
+    <text class="c" x="738" y="364">Shipyard</text>
+    <text class="d" x="738" y="385">Templates, a drift check that</text>
+    <text class="d" x="738" y="402">never merges, a weekly sweep.</text>
+  </g>
+  <g>
+    <rect x="960" y="314" width="216" height="118" rx="9" fill="var(--side-fill)" stroke="var(--side-edge)" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text class="t" x="972" y="341">Watch Everything</text>
+    <text class="c" x="972" y="364">Alert feed</text>
+    <text class="d" x="972" y="385">One feed: CI, checks, errors.</text>
+    <text class="d" x="972" y="402">Every session reads it first.</text>
+  </g>
+
+  <!-- Arrows within rows -->
+  <g stroke="var(--arrow)" stroke-width="1.6" fill="none">
+    <line x1="240" y1="73" x2="256" y2="73" marker-end="url(#arrow)"/>
+    <line x1="474" y1="73" x2="490" y2="73" marker-end="url(#arrow)"/>
+    <line x1="708" y1="73" x2="724" y2="73" marker-end="url(#arrow)"/>
+    <line x1="942" y1="73" x2="958" y2="73" marker-end="url(#arrow)"/>
+    <line x1="240" y1="223" x2="256" y2="223" marker-end="url(#arrow)"/>
+    <line x1="474" y1="223" x2="490" y2="223" marker-end="url(#arrow)"/>
+    <line x1="708" y1="223" x2="724" y2="223" marker-end="url(#arrow)"/>
+    <line x1="942" y1="223" x2="958" y2="223" marker-end="url(#arrow)"/>
+    <!-- Row 1 to row 2, and row 2 to row 3 -->
+    <path d="M1068,132 L1068,148 L132,148 L132,162" marker-end="url(#arrow)"/>
+    <path d="M1068,282 L1068,298 L132,298 L132,312" marker-end="url(#arrow)"/>
+    <!-- Back to the next wave -->
+    <path d="M366,432 L366,458 L10,458 L10,73 L22,73" marker-end="url(#arrow)"/>
+  </g>
+  <text class="loop" x="60" y="476">The next wave starts with the guard in place.</text>
+</svg>
+
+<section class="panels">
+  <div class="panel">
+    <h2>Same Idea as Anthropic's Claude Code Team<small>their code review write-up, October 15, 2026</small></h2>
+    <div class="cols">
+      <div>
+        <h3>Shared</h3>
+        <ul>
+          <li>Review depth follows the blast radius.</li>
+          <li>Capped rounds; later ones look only at the diff.</li>
+          <li>Approval is tied to one exact commit.</li>
+          <li>Repeated problems are fixed at their source.</li>
+          <li>Whoever lands it owns it.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Mine Also Requires</h3>
+        <ul class="adds">
+          <li>A screenshot walk of the real product before done.</li>
+        </ul>
+        <h3>Where We Differ</h3>
+        <ul>
+          <li>They watch reverts and incidents; I watch round cost and the walk.</li>
+          <li>They run a merge queue; I merge in series by hand, since my private repo has none.</li>
+          <li>Neither has an automatic brake when things go wrong.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>This Session, in Miniature</h2>
+    <ul>
+      <li>One prompt card is one work item with its own files.</li>
+      <li>The rules first, then the tests, then the code.</li>
+      <li>The gate decides done: tests green, test run read.</li>
+      <li>The agent runs scoped by its card; the diff, the tests and the commit are the checks.</li>
+      <li>One commit per work item; the log is the decision trail.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <span><b>Weak points, named in my own map:</b> part of the merge chain still runs from scripts outside the repo, and the done check can turn a pull request red without blocking the merge.</span>
+  <span>From my system map, verified 2026-10-31. Personal projects.</span>
+</footer>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Candidate Line</title>
+<style>
+  :root { --ink: #1d1d1f; --muted: #5f6368; --line: #d9dce1; --accent: #b45309; --tint: #fff7ed; --paper: #ffffff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .page { width: 1280px; height: 720px; margin: 0 auto; padding: 22px 40px 16px; display: flex; flex-direction: column; }
+  header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+  .promise { font-size: 15px; color: var(--muted); margin: 4px 0 0; }
+  .runs { font-size: 12px; color: var(--muted); text-align: right; max-width: 360px; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 0 28px; padding-top: 10px; }
+  section { margin-bottom: 10px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 0 0 6px; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  ol { margin: 0; padding-left: 20px; }
+  ol li { margin: 4px 0; }
+  .law { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td.v { color: var(--ink); }
+  .pilot { color: var(--muted); }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  footer { border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  @page { size: letter portrait; margin: 10mm 12mm; }
+  @media print {
+    html, body { background: #fff; font-size: 12px; }
+    .page { width: auto; height: auto; padding: 0; display: block; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+    .wide { grid-column: 1 / -1; }
+    section { break-inside: avoid; }
+    footer { margin-top: 6px; }
+    th, td { padding: 3px 6px; }
+    section { margin-bottom: 10px; }
+    h2 { color: var(--accent); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>The Candidate Line</h1>
+      <p class="promise">Candidates book their first interview by phone, any hour, and never hear a word about how they're doing.</p>
+    </div>
+    <div class="runs">Runs on AWS for speech, Claude by Anthropic for the conversation, and Twilio for the phone number.</div>
+  </header>
+
+  <main>
+    <div>
+      <section>
+        <h2>What It Does</h2>
+        <ul>
+          <li>Checks who is calling by application code and PIN.</li>
+          <li>Books an open first-round slot once the caller confirms it out loud.</li>
+          <li>Answers process questions from your FAQ and names the section it used.</li>
+          <li>Takes a callback request for anything else.</li>
+          <li>Hands a request to move a slot to your coordinator.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>What It Never Does</h2>
+        <ul>
+          <li>No score, ranking, opinion or prediction about any candidate, ever.</li>
+          <li>Nothing from outside your FAQ. When the FAQ has no answer, it says so and offers a callback.</li>
+          <li>Never pretends to be a person. It says it is automated in its first sentence.</li>
+          <li>Every move and every judgment stays with your people.</li>
+        </ul>
+        <p class="law">Designed with the hiring-law pages on automated tools in view (New York City's Local Law 144 and two Illinois acts). It makes no hiring decision.</p>
+      </section>
+      <section>
+        <h2>What ACME Provides</h2>
+        <ul>
+          <li>The FAQ, the interview calendar, a phone number and a Slack channel; for production, an AWS account and a database.</li>
+          <li>A coordinator who takes the hand-offs.</li>
+          <li>Sign-off on the list of what the line never does.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>What You See</h2>
+        <ul>
+          <li>A page for your recruiters with every call's record: what was heard, what was said, which FAQ section, who handled it, and what it cost.</li>
+          <li>Hand-offs are posted to your team's channel (Slack) the moment the line decides it needs a person, with a link to the call.</li>
+          <li>A reply box on each hand-off, so your coordinator's answer is logged against the call.</li>
+          <li>An off switch. Flip it and every live call ends politely within one exchange.</li>
+          <li>Callers' numbers are masked before anything is stored. No audio is kept.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>How We'd Roll It Out</h2>
+        <ol>
+          <li><strong>Proof of concept, this week.</strong> Synthetic candidates, slots and FAQ. Your team calls it and tries to break it.</li>
+          <li><strong>Pilot.</strong> One role family on your real FAQ and calendar, a person on every hand-off, measured against your past invite-to-booked hours.</li>
+          <li><strong>Production.</strong> Runs in your AWS account, on your calendar and your FAQ, with the call record in your database.</li>
+        </ol>
+      </section>
+    </div>
+
+    <div class="wide">
+      <section>
+        <h2>The Numbers You'll Get</h2>
+        <table>
+          <tr><th>Measure</th><th>Where it stands</th></tr>
+          <tr><td>Calls handled, and turns per call</td><td class="pilot">Measured in the pilot</td></tr>
+          <tr><td>Handled alone, handed to a person, written up afterwards</td><td class="pilot">Measured in the pilot</td></tr>
+          <tr><td>Hours from invite to booked, against your past baseline</td><td class="pilot">Measured in the pilot</td></tr>
+          <tr><td>FAQ answers with the section named, and refusals</td><td class="pilot">Measured in the pilot</td></tr>
+          <tr><td>Response delay, from the caller's last word to the reply</td><td class="v">Budget: 2 seconds for the median. Measured 2.1 seconds median by call recording, 2026-11-02, over 23 turns in 16 calls.</td></tr>
+          <tr><td>Cost per call</td><td class="v">About 18 cents per five-minute call, estimated 2026-11-02 from the bake-off calls and the price lists read 2026-11-01.</td></tr>
+          <tr><td>Spend limits during the proof of concept</td><td class="v">A 50-dollar monthly cap on the conversation model (set 2026-11-02) and a 50-dollar monthly alarm on AWS (set 2026-11-01).</td></tr>
+        </table>
+        <p class="note">Each measured number names its method, its date and its count.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>Synthetic data only. ACME is a fictional firm.</span>
+    <span>2026-11-04</span>
+  </footer>
+</div>
+</body>
+</html>

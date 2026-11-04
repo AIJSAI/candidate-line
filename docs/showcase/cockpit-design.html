@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACME Candidate Line</title>
+<style>
+  :root {
+    --ink: #15171c;
+    --text: #2c3038;
+    --muted: #6a707b;
+    --line: #e2e5ea;
+    --track: #e8eaee;
+    --page: #f5f6f8;
+    --card: #ffffff;
+    --banner: #eceef2;
+    --accent: #2f5bd3;
+    --shadow: 0 1px 2px rgba(17, 24, 39, 0.05), 0 4px 12px rgba(17, 24, 39, 0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  p, h1, h2 { margin: 0; }
+  button, input { font: inherit; color: inherit; }
+  .wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Top bar */
+  .bar { background: var(--card); border-bottom: 1px solid var(--line); }
+  .bar .wrap {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    height: 60px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+  .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--ink); display: grid; place-items: center; flex: none; }
+  .nav { display: flex; gap: 28px; height: 60px; }
+  .nav a {
+    display: flex; align-items: center; color: var(--muted); text-decoration: none; font-weight: 550;
+    border-bottom: 2px solid transparent; padding-top: 2px;
+  }
+  .nav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .right { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
+  .line-switch { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .switch {
+    position: relative; width: 40px; height: 22px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
+    background: #c3c7ce; transition: background 0.15s;
+  }
+  .switch[aria-checked="true"] { background: var(--ink); }
+  .switch .knob {
+    position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s;
+  }
+  .switch[aria-checked="true"] .knob { transform: translateX(18px); }
+  .switch:focus-visible, .btn:focus-visible, .slot:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .state { font-weight: 600; min-width: 92px; }
+  .sep { width: 1px; height: 24px; background: var(--line); }
+  .user { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-weight: 550; }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--banner); color: var(--text);
+    display: grid; place-items: center; font-size: 12px; font-weight: 650;
+  }
+
+  /* The one banner: what on this page is real. */
+  .banner { background: var(--banner); border-bottom: 1px solid var(--line); color: var(--text); font-size: 13px; }
+  .banner .wrap { padding: 6px 0; }
+
+  main { padding: 24px 0 40px; }
+  section + section { margin-top: 32px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .head h2 { font-size: 18px; font-weight: 650; letter-spacing: -0.005em; }
+  .count {
+    min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--ink); color: #fff;
+    font-size: 13px; font-weight: 650; display: inline-grid; place-items: center;
+  }
+  .head .muted { margin-left: 4px; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
+    padding: 20px;
+  }
+  .card + .card { margin-top: 24px; }
+
+  /* Needs a person now */
+  .c-top { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .c-who { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .c-who b { font-weight: 650; }
+  .hold { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .track { width: 140px; height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
+  .fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .hold-num { font-size: 13px; font-weight: 600; color: var(--text); min-width: 64px; text-align: right; }
+  .c-ask { margin-top: 6px; color: var(--text); }
+  .c-act { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+  .slots { display: flex; gap: 8px; }
+  .slot {
+    height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+    font-size: 14px; color: var(--text); white-space: nowrap; cursor: pointer;
+  }
+  .slot:hover { border-color: #b9bec7; }
+  .say {
+    flex: 1; min-width: 120px; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); font-size: 15px;
+  }
+  .say::placeholder { color: #8b919b; }
+  .say:focus { outline: none; border-color: var(--ink); }
+  .btn {
+    height: 36px; padding: 0 16px; border-radius: 8px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.quiet { background: var(--card); color: var(--text); border-color: var(--line); }
+  .paused-line { display: none; margin-bottom: 16px; padding: 14px 20px; border-radius: 10px; background: var(--banner); color: var(--ink); font-weight: 550; }
+  body.paused .paused-line { display: block; }
+  body.paused .caller { opacity: 0.45; filter: grayscale(1); pointer-events: none; }
+  body.paused .now-sub { display: none; }
+
+  /* Today */
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .tiles .card + .card { margin-top: 0; }
+  .t-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); font-weight: 550; }
+  .t-num { margin-top: 6px; font-size: 36px; line-height: 1.1; font-weight: 650; letter-spacing: -0.02em; }
+  .t-num small { font-size: 20px; font-weight: 600; color: var(--text); letter-spacing: 0; margin-left: 5px; }
+  .t-sub { margin-top: 4px; }
+  .cost { margin-top: 12px; }
+  /* Paused, the two held callers join Callbacks owed. */
+  .when-paused { display: none; }
+  body.paused .when-paused { display: inline; }
+  body.paused .when-on { display: none; }
+
+  /* Latest calls */
+  .table-card { padding: 8px 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 13px; font-weight: 600; color: var(--muted);
+    padding: 12px 12px 10px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 13px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; color: var(--text); }
+  tbody tr:last-child td { border-bottom: 0; }
+  th:first-child, td:first-child { padding-left: 4px; }
+  .col-time { width: 112px; white-space: nowrap; }
+
+  /* One landscape page: scale the whole screen down instead of reflowing it. */
+  @media print {
+    @page { size: landscape; margin: 0.4in; }
+    body { background: #fff; zoom: 0.66; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .card { box-shadow: none; }
+  }
+
+  @media screen and (max-width: 900px) {
+    /* Narrow: brand and user on the first row, the nav and the line switch on the second. */
+    .bar .wrap { grid-template-columns: 1fr auto; grid-template-areas: "brand user" "nav sw"; height: auto; padding-top: 10px; row-gap: 2px; }
+    .brand { grid-area: brand; font-size: 19px; }
+    .right { display: contents; }
+    .user { grid-area: user; justify-self: end; }
+    .c-top { row-gap: 8px; }
+    .c-who { row-gap: 2px; }
+    .line-switch { grid-area: sw; }
+    .nav { grid-area: nav; height: 44px; gap: 22px; }
+    .user span:last-child, .sep, .line-switch .muted { display: none; }
+    .head { flex-wrap: wrap; row-gap: 2px; }
+    .head .muted { margin-left: 0; flex-basis: 100%; }
+    .c-top, .c-act { flex-wrap: wrap; }
+    .slots { flex-wrap: wrap; }
+    .say { flex-basis: 100%; }
+    .tiles { grid-template-columns: 1fr; }
+    .table-card { overflow-x: auto; }
+    table { min-width: 720px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+      </span>
+      ACME Candidate Line
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a aria-current="page">Today</a>
+      <a>Calls</a>
+      <a>Settings</a>
+    </nav>
+    <div class="right">
+      <div class="line-switch">
+        <span class="muted">Phone line</span>
+        <button type="button" class="switch" id="line-switch" role="switch" aria-checked="true" aria-label="Phone line"><span class="knob"></span></button>
+        <span class="state" id="line-state">Taking calls</span>
+      </div>
+      <span class="sep" aria-hidden="true"></span>
+      <div class="user"><span class="avatar" aria-hidden="true">JE</span><span>Jordan E.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="banner">
+  <div class="wrap"><b>Sample data</b> for ACME, a fictional firm. Only figures marked measured or estimated are real.</div>
+</div>
+
+<main class="wrap">
+
+  <section aria-labelledby="h-now">
+    <div class="head"><h2 id="h-now">Needs a person now</h2><span class="count">2</span><span class="muted now-sub">Gus, the voice assistant answering your line, is holding these callers. Reply before time runs out, or Gus promises a callback.</span></div>
+    <p class="paused-line">Gus told both callers someone will call them back. Both are now under Callbacks owed.</p>
+
+    <article class="card caller">
+      <div class="c-top">
+        <div class="c-who"><b>Platform Engineer, first round</b><span class="muted">ending 0142</span><span class="muted">called 11:40 AM</span></div>
+        <div class="hold"><span class="muted">On hold</span><span class="track"><span class="fill" style="width: 16%"></span></span><span class="hold-num num">7 s left</span></div>
+      </div>
+      <p class="c-ask">Wants to move Thursday's 10:00 AM interview to next week.</p>
+      <div class="c-act">
+        <div class="slots">
+          <button type="button" class="slot">Mon Nov 9, 3:30 PM</button>
+          <button type="button" class="slot">Tue Nov 10, 2:00 PM</button>
+          <button type="button" class="slot">Wed Nov 11, 9:30 AM</button>
+        </div>
+        <input class="say" type="text" placeholder="Or type what Gus should say" aria-label="Reply for the caller ending 0142">
+        <button type="button" class="btn primary">Send reply</button>
+        <button type="button" class="btn quiet">Call back instead</button>
+      </div>
+    </article>
+
+    <article class="card caller">
+      <div class="c-top">
+        <div class="c-who"><b>Data Engineer, first round</b><span class="muted">ending 7720</span><span class="muted">called 11:41 AM</span></div>
+        <div class="hold"><span class="muted">On hold</span><span class="track"><span class="fill" style="width: 73%"></span></span><span class="hold-num num">33 s left</span></div>
+      </div>
+      <p class="c-ask">Asks for a captioned call for Friday's interview.</p>
+      <div class="c-act">
+        <input class="say" type="text" placeholder="Type what Gus should say" aria-label="Reply for the caller ending 7720">
+        <button type="button" class="btn primary">Send reply</button>
+        <button type="button" class="btn quiet">Call back instead</button>
+      </div>
+    </article>
+  </section>
+
+  <section aria-labelledby="h-today">
+    <div class="head"><h2 id="h-today">Today</h2></div>
+    <div class="tiles">
+      <div class="card">
+        <div class="t-label">Booked without a person</div>
+        <div class="t-num num">15</div>
+        <div class="t-sub muted">of 25 calls</div>
+      </div>
+      <div class="card">
+        <div class="t-label">Callbacks owed</div>
+        <div class="t-num num"><span class="when-on">3</span><span class="when-paused">5</span></div>
+        <div class="t-sub muted">oldest due Thu 7:52 AM</div>
+      </div>
+      <div class="card">
+        <div class="t-label">Pause before Gus answers</div>
+        <div class="t-num num">2.6<small>s</small></div>
+        <div class="t-sub muted">measured, target 2 s</div>
+      </div>
+    </div>
+    <p class="cost muted">Estimated cost to run Gus: about 18 cents per five-minute call.</p>
+  </section>
+
+  <section aria-labelledby="h-calls">
+    <div class="head"><h2 id="h-calls">Latest calls</h2><span class="muted">Newest first.</span></div>
+    <div class="card table-card">
+      <table>
+        <thead>
+          <tr><th class="col-time">Time</th><th>Who</th><th>Wanted</th><th>Outcome</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="col-time num">11:12 AM</td>
+            <td>Site Reliability Engineer</td>
+            <td>Phone screen feedback, then a slot</td>
+            <td>Booked by Gus; one reply reworded</td>
+          </tr>
+          <tr>
+            <td class="col-time num">10:05 AM</td>
+            <td>Platform Engineer</td>
+            <td>The pay range for the role</td>
+            <td>Gus had no answer; add it to the FAQ</td>
+          </tr>
+          <tr>
+            <td class="col-time num">9:20 AM</td>
+            <td>Backend Engineer II</td>
+            <td>Move Friday's interview</td>
+            <td>Moved by a person; invite sent</td>
+          </tr>
+          <tr>
+            <td class="col-time num">6:48 AM</td>
+            <td>Data Engineer</td>
+            <td>A first-round slot</td>
+            <td>Booked by Gus for Thu Nov 5, 9:30 AM</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // The page's one interaction: pausing the line, so a viewer sees what a pause does to the queue.
+  (function () {
+    var sw = document.getElementById("line-switch");
+    var state = document.getElementById("line-state");
+    sw.addEventListener("click", function () {
+      var on = sw.getAttribute("aria-checked") !== "true";
+      sw.setAttribute("aria-checked", String(on));
+      state.textContent = on ? "Taking calls" : "Paused";
+      document.body.classList.toggle("paused", !on);
+    });
+  })();
+</script>
+</body>
+</html>

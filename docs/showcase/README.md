@@ -1,0 +1,27 @@
+# The Pages Made For The Session
+
+Four pages drawn from this repository's code and records on 2026-11-03, for the people in the session. Each is here three ways: the picture, the page itself (open the `.html` file in a browser), and notes that say where every line on it comes from, with file and line references into this repository.
+
+## How a Call to Gus Works
+
+![How a call to Gus works: the phone path, the brain, the records and the cockpit](architecture.png)
+
+The phone path, the brain, the records and the cockpit. Grey boxes were built before the session; orange boxes are what the session's cards build. Page: [architecture.html](architecture.html). Notes: [architecture-notes.md](architecture-notes.md).
+
+## How I Build: One Change, From Plan to Main
+
+![How I build: eleven numbered steps from plan to main](how-i-build.png)
+
+The system every build of mine runs under, numbered one to eleven, with what proves each box, and how it compares with the Claude Code team's own code review write-up of October 2026. Page: [how-i-build.html](how-i-build.html).
+
+## The Candidate Line, For The Business Lead
+
+![The one-page, non-technical version of the line](customer.png)
+
+The one-page, non-technical version: what it does, what it never does, what the client gets, what it costs, how it rolls out. Page: [customer.html](customer.html). Notes: [customer-notes.md](customer-notes.md).
+
+## The Recruiting Lead's Screen
+
+![The recruiting lead's morning screen, with sample data](cockpit-design.png)
+
+The design of the screen the recruiting lead opens in the morning: who needs a person now, three numbers for the day, the latest calls. Sample data. The live cockpit in `candidate_line/traces/cockpit.py` reads the real call record. Page: [cockpit-design.html](cockpit-design.html). Notes: [cockpit-design-notes.md](cockpit-design-notes.md).
