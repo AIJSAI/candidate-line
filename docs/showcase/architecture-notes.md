@@ -1,6 +1,6 @@
 # Architecture page: where each box comes from
 
-The page is `architecture.html` beside this file, drawn from this repository at commit 117bad0 on 2026-11-03 (the cockpit's pages restyled in that commit) and relaid on the same evening (titles in Title Case, one caption and at most two lines per box, a "Two Timing Rules" callout, a "Live" pill on a pre-built box whose live part is named after the colon). Each box below names the code or record that proves it. Paths are relative to that repository.
+The page is `architecture.html` beside this file, drawn from this repository at commit 3919773 on 2026-11-03 (the cockpit's pages restyled in that commit) and relaid on the same evening (titles in Title Case, one caption and at most two lines per box, a "Two Timing Rules" callout, a "Live" pill on a pre-built box whose live part is named after the colon). Each box below names the code or record that proves it. Paths are relative to that repository.
 
 ## Top row: the call coming in
 

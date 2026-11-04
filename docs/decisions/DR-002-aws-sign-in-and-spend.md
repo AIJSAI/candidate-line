@@ -2,7 +2,7 @@
 
 Status: DRAFT
 Built: pre-built (PREBUILT.md row 1)
-Commit: 462381a (the line on the profile; the console and CLI steps are commands, not code)
+Commit: a9c143e (the line on the profile; the console and CLI steps are commands, not code)
 
 ## What it is
 

@@ -2,7 +2,7 @@
 
 Status: DECIDED 2026-11-02
 Built: pre-built (PREBUILT.md row 13)
-Commit: 82928f1
+Commit: bd0eda9
 
 ## What it is
 

@@ -191,7 +191,7 @@
   history: []
 - id: candidate-line-0022
   question: "The tag is called prebuilt-2026-11-03 but sits on a commit from the night before. How would someone in the room check what existed before the session and what came after?"
-  answer: "The tag marks the line between plumbing built beforehand and judgment built live: it points at 8ad137b, 2026-11-02 at 22:00 CT, and PREBUILT.md, shown at minute 2, lists every pre-built item with its date, sha and record. git log prebuilt-2026-11-03..HEAD lists every commit after it, and row 15 says those are records, the room's hour and make restart, declared in row 14. At e5b3c5e three later commits also change the FAQ (8ce9d6a), the eval runner (3aae326) and the probe caller (e5b3c5e), and the list does not yet name them, so they need a line before minute 2."
+  answer: "The tag marks the line between plumbing built beforehand and judgment built live: it points at 7a0f977, 2026-11-02 at 22:00 CT, and PREBUILT.md, shown at minute 2, lists every pre-built item with its date, sha and record. git log prebuilt-2026-11-03..HEAD lists every commit after it, and row 15 says those are records, the room's hour and make restart, declared in row 14. At fe8efcc three later commits also change the FAQ (1e2e084), the eval runner (4fa076a) and the probe caller (fe8efcc), and the list does not yet name them, so they need a line before minute 2."
   say_it: "The room should see exactly what existed before it, so I tagged the pre-built state, and every commit after the tag has to be declared in the list."
   ref: "PREBUILT.md:26"
   source: "review 2026-11-03"

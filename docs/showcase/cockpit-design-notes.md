@@ -4,7 +4,7 @@
 
 Rebuilt from scratch on 2026-11-03 after James's verdict on the first version: "a jumble of stranger-unfriendly data and a bombardment of information." The facts were kept and the layout thrown away. A fresh Claude session that had not seen the page then read the rebuild cold the same day; their five changes are applied (see "The stranger's pass"). The page is now four things: a top bar, the callers waiting for a person, three numbers, the latest calls. Everything cut from the page is below, under "Kept for the pilot's second screen".
 
-Records read in this repository at commit 117bad0 (2026-11-03), read-only. References are `path:line` at that commit.
+Records read in this repository at commit 3919773 (2026-11-03), read-only. References are `path:line` at that commit.
 
 ## The four kinds of value
 
@@ -191,4 +191,4 @@ The same unanswered questions, sent to whoever keeps the FAQ ("Send to FAQ Owner
 - Print to PDF: one landscape page on Letter and on A4.
 - 390 px wide (through a wrapper frame): bar on two rows, cards and tiles stack, the table scrolls inside its card.
 - No em-dash or en-dash in either file; one inline script; no external assets; no sentence over twelve words on the page; ACME is the only firm named; no real person, phone number, account id or secret; no cloud or chat product named on the page; every number on the page is sample or one of the two real figures.
-- Every slot on the page checked against `data/slots.yaml` at 117bad0: all open, none used twice.
+- Every slot on the page checked against `data/slots.yaml` at 3919773: all open, none used twice.
