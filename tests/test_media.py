@@ -11,7 +11,7 @@ from candidate_line.persona import GREETING
 from candidate_line.settings import Settings
 from candidate_line.telephony.app import Deps, create_app, twiml_stream
 from candidate_line.telephony.audio import MULAW_FRAME_BYTES, mulaw_to_pcm16, pcm16_to_mulaw, split_sentences
-from candidate_line.telephony.media import MediaSession
+from candidate_line.telephony.media import RECOVERY_LINE, MediaSession
 from candidate_line.telephony.speech import FakeSpeaker, ScriptedTranscriber
 from candidate_line.traces.store import TraceStore
 
@@ -499,3 +499,42 @@ def test_a_silence_hook_that_asks_for_the_hang_up_ends_the_call_after_its_line_h
     assert speaker.said == [GREETING, "I'll let you go.", "Call back any time."]  # spoken by sentence
     assert frames_after_close["n"] < 50  # the loop ended before the stream did
     assert "hang_up" not in session.ctx.data
+
+
+class RaisingBrain:
+    """A brain whose every reply raises, standing in for a model error or a tool that blew up on a turn."""
+
+    model = "raising"
+
+    def reply(self, *args, **kwargs):
+        raise RuntimeError("the model is down")
+
+
+def test_a_failed_turn_speaks_the_recovery_line_instead_of_silence(caplog) -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, RaisingBrain(), NoHooks(), "sys", "CA1", SID, greeting=GREETING, grace_ms=(50, 150)
+    )
+
+    async def script(*_):
+        yield frame()
+        await settle(lambda: any(m["event"] == "mark" for m in sent))
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        await settle(lambda: not session.speaking)
+        transcriber.hear("book me thursday", is_partial=False)
+        await settle(lambda: len(speaker.said) == 3)  # the greeting, then the recovery line's two sentences
+        yield {"event": "stop", "streamSid": SID}
+
+    async def incoming():
+        async for message in script():
+            yield message
+
+    asyncio.run(session.run(incoming()))
+    assert speaker.said[0] == GREETING and " ".join(speaker.said[1:]) == RECOVERY_LINE
+    assert "turn failed for CA1" in caplog.text and "the model is down" in caplog.text

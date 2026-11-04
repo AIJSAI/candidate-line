@@ -30,6 +30,9 @@ from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, run_silence, run_turn
 
 log = logging.getLogger("candidate_line.media")
+
+# Said when a turn raises and the caller is still on the line; the exception is logged, the call goes on.
+RECOVERY_LINE = "Sorry, I lost that. Could you say it again?"
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 
@@ -237,6 +240,13 @@ class MediaSession:
                 log.info("turn dropped after the stop for %s (%s)", self.ctx.call_id, type(error).__name__)
             else:
                 log.exception("turn failed for %s", self.ctx.call_id)
+                # A failed turn (a model error, a tool raising on an argument it did not expect) used to leave the
+                # caller in silence until they spoke again, with the only trace in the log. One fixed line keeps the
+                # call alive; the exception is still logged above. Added 2026-11-03 night, before the room.
+                try:
+                    await self.speak(RECOVERY_LINE)
+                except Exception:
+                    log.exception("recovery line failed for %s", self.ctx.call_id)
 
     async def handle_utterance(self, text: str) -> None:
         async with self._utterance_lock:
