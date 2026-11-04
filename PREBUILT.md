@@ -2,7 +2,7 @@
 
 Everything committed before the tag `prebuilt-2026-11-03` is listed here with its commit date. No hidden finished branch exists. Nothing on this list decides anything about a caller: the spec, the eval cases, the guard, the tiers, the persona and the tools are built live.
 
-Fill each row as its item lands: the commit date and short sha, its decision record, and the date of James's teach-back (KICKOFF.md, Rule 1).
+Each row carries the commit date and short sha, its decision record, and the date of the teach-back (KICKOFF.md, Rule 1).
 
 ## Pre-built and declared
 
@@ -30,7 +30,7 @@ The teach-backs that Rule 1 required on the build days did not happen; the build
 
 ## After the tag, 2026-11-03
 
-The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of the session and a second dry run of the cards followed (DR-015). Everything after the tag is pre-built plumbing or a record, never a decision about a caller, and it is listed here so minute 2 shows it with the table:
+The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of the session and a second dry run of the cards followed (DR-015). Everything after the tag is pre-built plumbing or a record, never a decision about a caller, and it is listed here with the table:
 
 - the hour sized to sixty minutes and the 60-minute problem card (3c83ab9, 1e2e084); `data/faq.md` F3.2 and F8.1 say the line hands a move to the coordinator, to agree with that card (1e2e084);
 - `make restart`, so a card's code reaches the phone without touching the tunnel or the webhook (49f7005);
@@ -45,13 +45,13 @@ The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of 
 - the hand-off message names the caller, the store looks up one call, the trace link has a setting (`COCKPIT_BASE_URL`), the log poster shows `[hand-off]` on screen, a hook fires when a call ends, and the silence path and a turn hook can ask for the hang-up through the context (a56b5c7, 328f605);
 - the amendments to the cards after each card's second dry run, named in DR-015's second table;
 - `make down` waits for the port before it lists what is left (3eeec7f);
-- the room notes say who types the tunnel commands, give the one-line bring-up, and record the 2026-11-03 drill on the committed head in their section "The line, the hour before" (0000000);
+- the room notes say who types the tunnel commands, give the one-line bring-up, and record the 2026-11-03 drill on the committed head in their section "The line, the hour before" (that commit touched only the run sheet and is not in the published history);
 - the read-only commands are allowlisted for the room's tool in `.claude/settings.json` (a1150c9);
 - DR-011's live note closes with the direct and dialled probe runs of 15:01 and 15:03 CT, both PASS (733464f);
 - the Bedrock fallback's default model id is the dated Haiku 4.5 profile, found when the first fallback turn was refused, and Haiku 5.5 on Bedrock is still closed to the account (7d5c822);
-- the Identity Center session raised to 7 days so no sign-in stands between the room and the phone (0000000);
+- the Identity Center session raised to 7 days so no sign-in stands between the room and the phone (that commit touched only the run sheet and is not in the published history);
 - `make text`, `make eval`, `make baseline` and `make gate` run on the line's AWS profile like the phone and the probe targets, so the Bedrock spare answers a text turn with nothing set in the shell, proven with one Haiku 4.5 turn (fe2abb2);
-- the minute-2 line in the room notes states the problem as the plan (0000000);
+- the minute-2 line in the room notes states the problem as the plan (that commit touched only the run sheet and is not in the published history);
 - the cockpit's two pages restyled so a recruiter can read them, rendering only, with the routes, the reply form and the store untouched (3919773);
 - a turn that raises now speaks one fixed recovery line instead of leaving the caller in silence, the exception still logged, found by the readiness check (03d5f8e).
 

@@ -4,7 +4,7 @@
 
 Rebuilt from scratch on 2026-11-03 after James's verdict on the first version: "a jumble of stranger-unfriendly data and a bombardment of information." The facts were kept and the layout thrown away. A fresh Claude session that had not seen the page then read the rebuild cold the same day; their five changes are applied (see "The stranger's pass"). The page is now four things: a top bar, the callers waiting for a person, three numbers, the latest calls. Everything cut from the page is below, under "Kept for the pilot's second screen".
 
-Records read in this repository at commit 3919773 (2026-11-03), read-only. References are `path:line` at that commit.
+Records read in this repository at commit 3919773 (2026-11-03), read-only. References are `path:line` at that commit. Line numbers in this file are as of that commit; a few lines moved on main afterwards, so open a file at that commit to match them exactly.
 
 ## The four kinds of value
 
@@ -16,7 +16,7 @@ Records read in this repository at commit 3919773 (2026-11-03), read-only. Refer
 ## Where the page departs from the brief, and why
 
 1. **The cost reads "Estimated", never "measured", and the banner says "measured or estimated".** `docs/decisions/DR-001-voice-path.md:65` gives arm A (the Wednesday build) "about 0.18 USD" per five-minute call, computed from list prices read 2026-11-01 and a call scaled from the bake-off. The same row reserves "measured" for arm B's 0.10, which came from metered token counts. Calling 0.18 measured would be a false record; leaving it unmarked would make the banner call it sample. "A call" became "per five-minute call", the unit DR-001 prices.
-2. **The 11:12 AM row reads "Booked by Gus; one reply reworded".** The guard swapped one reply for its fallback line before it was spoken (card 01 (prompts/01, decision 5)); "reworded" is the stranger's plain word for that swap. The guard hit also set tier 3, a note for the recruiter (card 05 (prompts/05, decision 2) and 06.3, `the session plan:51-52`); with the pills gone the row no longer shows that note.
+2. **The 11:12 AM row reads "Booked by Gus; one reply reworded".** The guard swapped one reply for its fallback line before it was spoken (card 01 (prompts/01, decision 5)); "reworded" is the stranger's plain word for that swap. The guard hit also set tier 3, a note for the recruiter (card 05 (prompts/05, decision 2) and 06.3, `the session's run plan (not in this tree)`); with the pills gone the row no longer shows that note.
 3. **The bottom row reads "Booked by Gus for Thu Nov 5, 9:30 AM".** That is the first version's 6:48 AM booking (slot S1105-0930). The brief's example, Mon 11-09 3:30 PM, is one of the open slots offered in the queue, so using it twice would double-book it.
 4. **Each hold reads "N s left" after a muted "On hold", and the bar shows time left.** 7 s and 33 s are 45 minus 38 and 45 minus 12; the fills, 16% and 73%, are 7/45 and 33/45, so the bar empties as the count falls.
 5. **The second caller's field reads "Type what Gus should say".** That card has no slot chips, so "Or" had nothing to follow.
@@ -57,7 +57,7 @@ Left open. Each would add a number or a behavior: the page shows no date; the pa
 | "Platform Engineer, first round", "Data Engineer, first round" | **sample**; the synthetic candidates carry a role and a stage (`DR-009:15`; `data/candidates.yaml` lists both roles) |
 | "ending 0142", "ending 7720" | the last four kept by the masking in `docs/decisions/DR-012-trace-store-and-cockpit.md:15`; the digits are **sample** (0142 is DR-012's own example) |
 | "called 11:40 AM", "called 11:41 AM" | **sample** |
-| The asks: a move, a captioned call | **sample** rows. At 60 minutes every move is a hand-off (the session plan; `prompts/06:34`; `data/faq.md:37`, F3.2); accommodations go to the coordinator (`data/faq.md:68`, F5.2) |
+| The asks: a move, a captioned call | **sample** rows. At 60 minutes every move is a hand-off (the session's run plan (not in this tree); `prompts/06:34`; `data/faq.md:37`, F3.2); accommodations go to the coordinator (`data/faq.md:68`, F5.2) |
 | Hold bar, "7 s left", "33 s left" | the 45-second limit is card 06 (prompts/06, decision 2); the held seconds, 38 and 12, are **sample**. Bar fill 16% and 73% is 7/45 and 33/45, time left |
 | Slot chips "Mon Nov 9, 3:30 PM", "Tue Nov 10, 2:00 PM", "Wed Nov 11, 9:30 AM" | S1109-1530, S1110-1400 and S1111-0930, each `status: open` in `data/slots.yaml` (lines 71, 89, 101). Offering them is **sample** design |
 | Field "Or type what Gus should say", "Send reply" | today's reply form logs a typed reply with who and when (`cockpit.py:119-140`; `DR-013:16`). A caller on hold is silent, so Gus says the reply at the next silence tick, six quiet seconds (`candidate_line/telephony/media.py:50`, `:164-181`) |
@@ -147,7 +147,7 @@ The same unanswered questions, sent to whoever keeps the FAQ ("Send to FAQ Owner
 - **Last time a person stepped in:** who, when, what, said at the caller's next pause (`prompts/06:19`, "Every override is a span with who, when and what; the trail is the point"; `cockpit.py:119-140`; `DR-013:16`). Sample entry: Sam K., coordinator, 9:21 AM CT, caller ***-***-3381, typed "Moved to Tuesday 11-10 at 10:00 AM. Your new invite is on its way."
 - **Last time the line was paused:** `prompts/06:20`. Sample entry: Jordan E., 2026-11-03 5:08 PM CT, back on after 6 minutes off for an FAQ update. With no live call, card 06 writes only a log line with no name, so this needs a flip record (one store row per flip with who and when).
 
-### Lines Gus says, verbatim (card 01 (prompts/01), the session plan)
+### Lines Gus says, verbatim (card 01, prompts/01)
 
 - Holding (01.7): "I have asked the coordinator to pick this up. Please stay on the line a moment."
 - At the hold limit (01.8): "The coordinator has your request and will call you back within a business day."

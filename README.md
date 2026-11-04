@@ -1,6 +1,6 @@
 # Candidate Line
 
-A phone line for the job candidates of ACME, a fictional firm, designed so that a voice agent called Gus books a first-round interview, answers process questions from an FAQ and names the section, takes a callback request, and never evaluates a person. What runs today is the plumbing: a real phone path, a text mode, the tests, an eval runner, a trace store (the call record in the picture) and the cockpit, the recruiter's page. Gus himself (the spec, the persona, the tools, the guard and the eval cases) was to be built in a one-hour live session on 4 November 2026 and was not, so text mode runs on a placeholder prompt (or repeats what you type with `BRAIN_PROVIDER=echo`) and `make eval` finds no cases. All data is synthetic. No account, key or phone number is in this repository.
+A phone line for the job candidates of ACME, a fictional firm, designed so that a voice agent called Gus books a first-round interview, answers process questions from an FAQ and names the section, takes a callback request, and never evaluates a person. What runs today is the plumbing: a real phone path, a text mode, the tests, an eval runner, a trace store (the call record in the picture) and the cockpit, the recruiter's page. Gus himself (the spec, the persona, the tools, the guard and the eval cases) was to be built in a one-hour live session on 4 November 2026 and was not, because the hour went to another topic, so text mode runs on a placeholder prompt (or repeats what you type with `BRAIN_PROVIDER=echo`) and `make eval` finds no cases. All data is synthetic. No account, key or phone number is in this repository.
 
 The author is James Shehan; "James" in the files is him. The tree was built with Claude Code from the numbered items in `KICKOFF.md`, with every decision written down as it was made; the seven cards in `prompts/` were for the session, and were dry-run twice in scratch copies (`docs/decisions/DR-015`). The files call that live session "the room" or "the hour"; "the session" in this README means the same thing.
 
@@ -12,11 +12,11 @@ Grey boxes were built before the session, each with its commit in `PREBUILT.md`.
 
 The records are long, so start here:
 
-1. `PREBUILT.md`: what existed before the session, with the commit of each item, and what landed after the tag `prebuilt-2026-11-03`.
-2. `docs/decisions/DR-001-voice-path.md`: the rule written before measuring, the numbers, and why arm A was kept when the rule picked arm B.
-3. `AGENTS.md`: the rules every coding agent here follows. `.claude/settings.json` lists the commands it may run without asking: the tests, the evals (a few cents of model calls), lint checks and git reads.
-4. `prompts/01-spec-from-problem-card.md`: one of the seven cards. Each names its files, its acceptance criteria and the questions it asks before it writes anything.
-5. `candidate_line/turn.py` and `tests/`: the one turn loop that the phone, text mode and the evals share.
+1. [`PREBUILT.md`](PREBUILT.md): what existed before the session, with the commit of each item, and what landed after the tag `prebuilt-2026-11-03`.
+2. [`docs/decisions/DR-001-voice-path.md`](docs/decisions/DR-001-voice-path.md): the rule written before measuring, the numbers, and why arm A was kept when the rule picked arm B.
+3. [`AGENTS.md`](AGENTS.md): the rules every coding agent here follows. `.claude/settings.json` lists the commands it may run without asking: the tests, the evals (a few cents of model calls), lint checks and git reads.
+4. [`prompts/01-spec-from-problem-card.md`](prompts/01-spec-from-problem-card.md): one of the seven cards. Each names its files, its acceptance criteria and the questions it asks before it writes anything.
+5. [`candidate_line/turn.py`](candidate_line/turn.py) and [`tests/`](tests/): the one turn loop that the phone, text mode and the evals share.
 
 `KICKOFF.md` is the plan for the build days of 1 to 3 November, kept as it was written. Where it and a decision record disagree, the record is newer. The teach-backs that its first rule required on the build days did not happen; the build ran faster than the lessons. They are scheduled after the session, so the records' Status lines say DRAFT and their "say it like this" lines are empty.
 
@@ -41,7 +41,7 @@ The picture is how I run builds across my own repositories. Here only steps 1 an
 
 ## The Pages
 
-Everything made for the session is in [`docs/showcase/`](docs/showcase/README.md): the architecture above, [how I build](docs/showcase/README.md#how-i-build-one-change-from-plan-to-main), [the one-page version for a business lead](docs/showcase/README.md#the-candidate-line-for-the-business-lead) and [the cockpit redesigned for the recruiting lead](docs/showcase/README.md#the-cockpit-redesigned-for-the-recruiting-lead), each as a picture and as a page; three of the four have notes that trace every line on them to a file in this tree. The pre-built list is [`PREBUILT.md`](PREBUILT.md); the decision records are in [`docs/decisions/`](docs/decisions/); the seven cards are in [`prompts/`](prompts/).
+Everything made for the session is in [`docs/showcase/`](docs/showcase/README.md): the architecture above, [how I build](docs/showcase/README.md#how-i-build-one-change-from-plan-to-main), [the one-page version for a business lead](docs/showcase/README.md#the-candidate-line-for-the-business-lead) and [the cockpit redesigned for the recruiting lead](docs/showcase/README.md#the-cockpit-redesigned-for-the-recruiting-lead), each as a picture and as a page; three of the four have notes that trace every line on them to a file in this tree, at the commit the notes name. The pre-built list is [`PREBUILT.md`](PREBUILT.md); the decision records are in [`docs/decisions/`](docs/decisions/); the seven cards are in [`prompts/`](prompts/).
 
 ## The Session of 4 November 2026
 
