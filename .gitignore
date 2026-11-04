@@ -35,7 +35,7 @@ bakeoff/recordings/
 # macOS
 .DS_Store
 
-# The trace store's path is added here when DR-012 picks it.
+# The trace store (var/) is below; DR-012 picked the path.
 
 # The trace store (DR-012): text and metadata of every call, never audio, never committed.
 var/

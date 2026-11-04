@@ -6,6 +6,9 @@ Fill each row as its item lands: the commit date and short sha, its decision rec
 
 ## Pre-built and declared
 
+The Teach-back column is empty on purpose: the lessons on each item come after the session, not before it, so no row can claim one yet.
+
+
 | # | Item | Landed (date, sha) | Record | Teach-back |
 | - | - | - | - | - |
 | 0 | The repository skeleton: `KICKOFF.md`, `AGENTS.md` (draft), DR-000, DR-001 with its rule (draft), `docs/learn/`, this file, the `Makefile` stub, `.gitignore` | 2026-11-01, the first commit | DR-000, DR-001 | |

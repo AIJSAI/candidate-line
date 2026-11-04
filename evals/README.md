@@ -2,7 +2,7 @@
 
 The eval cases and the committed baseline. **No case file exists before Wednesday**; the first set is written in the room from the spec, then one more for the counter-case, then another for the change the room asks for (PREBUILT.md). AGENTS.md rule 4: nothing here changes except inside the work item that names it, with James approving the diff, and never to make a run pass.
 
-`make eval` runs every `cases/*.yaml` through the same turn loop as the phone (`candidate_line/evals/runner.py`); `make gate` adds the tests and the cost line. A case the runner cannot read is refused, and a check it cannot evaluate yet fails with a sentence that says so (DR-010).
+`make eval` runs every `cases/*.yaml` through the same turn loop as the phone (`candidate_line/evals/runner.py`); `make gate` adds the tests and the cost line. A case the runner cannot read is refused, and a check it cannot evaluate yet shows as PENDING, with a sentence that says why (DR-010).
 
 ## A case
 

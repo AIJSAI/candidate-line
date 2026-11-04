@@ -1,5 +1,4 @@
-# Candidate Line. The targets the build plan names. Each is a stub that says "not yet" and
-# exits non-zero, so no tool can read a stub as a pass, until its Sunday item replaces it.
+# Candidate Line. The targets the build plan names; each one is real now (see PREBUILT.md for when it landed).
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
 .PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate trace text last

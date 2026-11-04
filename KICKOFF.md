@@ -34,7 +34,7 @@ James must be able to explain every pre-built component, and every engineering, 
 - The scratch task runs in a throwaway repository on a different function, so no `spec.md` lands here before Wednesday.
 - For the tool that wins, two checks (plan section 3.3): whether it reads `AGENTS.md` on its own (if not, it is pasted at the start), and whether its sandbox lets a command reach Bedrock (if not, James runs `make eval` and `make gate` in his own pane, and `AGENTS.md` tells the tool to ask him).
 - Codex runs in its git-folder default, workspace-write with on-request approvals; Claude Code runs with approvals on. Neither ever runs with approvals off.
-- Whichever loses, Claude Code or Codex, stays open in a second pane as the fallback. The record is `docs/decisions/DR-014-coding-tool.md`.
+- Whichever loses, Claude Code or Codex, stays open in a second pane as the fallback. The record is `docs/decisions/DR-014-the-coding-tool.md`.
 
 ## 4. Today, Sunday 2026-11-01
 
