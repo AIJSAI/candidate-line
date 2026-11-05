@@ -2,7 +2,8 @@
 
 Why an overlay: data/ is a committed synthetic fixture and is never rewritten, while a booking, a move request or a
 callback must outlive the call that made it (var/state.json, spec.md section 3). Every change is written through at
-once under one lock per file, so two calls on the phone never book the same slot.
+once under one lock per file, so two calls on the phone never book the same slot. The same file keeps the count of
+voice calls started each Central-time day, so the daily call cap (DR-021) holds across a restart.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ CANDIDATES_PATH = DATA / "candidates.yaml"
 SLOTS_PATH = DATA / "slots.yaml"
 # Six slots is about as many as a caller can hold in their head from one spoken list.
 MAX_LISTED = 6
+# The day the daily call cap counts in: the line's slots and its coordinator keep Central time (data/slots.yaml).
+CENTRAL = ZoneInfo("America/Chicago")
 
 log = logging.getLogger("candidate_line.ledger")
 
@@ -246,7 +249,7 @@ def _load_slots(path: Path) -> dict[str, Slot]:
 
 
 def _empty_overlay() -> dict[str, Any]:
-    return {"bookings": {}, "moves": [], "callbacks": []}
+    return {"bookings": {}, "moves": [], "callbacks": [], "calls": {}}
 
 
 _PATH_LOCKS: dict[str, threading.RLock] = {}
@@ -393,6 +396,16 @@ class Ledger:
             self._refresh()
             return copy.deepcopy(self._overlay["callbacks"])
 
+    def today(self) -> str:
+        """The Central-time date now, as an ISO date: the day the daily call cap counts."""
+        return self._now().astimezone(CENTRAL).date().isoformat()
+
+    def calls_today(self) -> int:
+        """The voice calls counted so far on today's Central-time date."""
+        with self._lock:
+            self._refresh()
+            return int(self._overlay["calls"].get(self.today(), 0))
+
     # Changes, each written through before it returns.
 
     def book(self, code: str, slot_id: object, call_id: str | None = None) -> Slot:
@@ -444,6 +457,14 @@ class Ledger:
         with self._exclusive():
             self._commit(lambda overlay: overlay["moves"].append(record))
         return dict(record)
+
+    def count_call(self, day: str) -> int:
+        """Counts one voice call started on `day` (an ISO date, Central time) and returns the day's count with it.
+        Written through like a booking and under the same lock, so two calls at one moment get two numbers."""
+        with self._exclusive():
+            count = int(self._overlay["calls"].get(day, 0)) + 1
+            self._commit(lambda overlay: overlay["calls"].__setitem__(day, count))
+            return count
 
     def request_callback(
         self, code: str | None, best_time: str | None, reason: str | None, call_id: str | None = None
@@ -539,6 +560,14 @@ class Ledger:
             items = raw.get(key)
             if isinstance(items, list):
                 overlay[key] = [dict(item) for item in items if isinstance(item, dict)]
+        calls = raw.get("calls")
+        if isinstance(calls, dict):
+            # bool is an int in Python; a count is a whole number and nothing else.
+            overlay["calls"] = {
+                str(day): n
+                for day, n in calls.items()
+                if isinstance(n, int) and not isinstance(n, bool) and n >= 0
+            }
         return overlay
 
     def _set_aside(self, why: str) -> dict[str, Any]:

@@ -20,7 +20,8 @@ from typing import Any
 from candidate_line.brain import Brain
 from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import Hooks
-from candidate_line.persona import RECOVERY_LINE
+from candidate_line.persona import RECOVERY_LINE, length_line
+from candidate_line.settings import DEFAULT_MAX_CALL_SECONDS
 from candidate_line.telephony.audio import (
     decode_twilio_payload,
     encode_twilio_payload,
@@ -120,6 +121,7 @@ class MediaSession:
         escalations: EscalationQueue | None = None,
         silence_after_s: float = SILENCE_AFTER_S,
         ledger: Ledger | None = None,
+        max_call_seconds: float = DEFAULT_MAX_CALL_SECONDS,
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -137,6 +139,10 @@ class MediaSession:
             ledger=ledger,
         )
         self._silence_after = silence_after_s
+        # The per-call length cap (DR-021). The clock is the call's own, from ctx.started_at, and it is read only
+        # between turns, so the cap never cuts Gus or the caller off mid-sentence.
+        self._max_call_s = float(max_call_seconds)
+        self._capped = False  # the length line has been said, so it is said once
         self._last_activity = time.monotonic()  # the caller's last words or the end of Gus's last line
         self._hang_up = (
             asyncio.Event()
@@ -211,6 +217,8 @@ class MediaSession:
             await asyncio.sleep(0.25)
             if self.speaking or self._thinking or self._pending or self._hang_up.is_set():
                 continue
+            if not self._mid_turn() and await self._end_at_length_cap():
+                continue
             quiet_for = time.monotonic() - self._last_activity
             if quiet_for < self._silence_after:
                 continue
@@ -224,6 +232,33 @@ class MediaSession:
                 log.info("silence hang-up %s", self.ctx.call_id)
                 self._hang_up.set()
 
+    def _mid_turn(self) -> bool:
+        """A turn is being made or said, or the caller is mid-sentence (a partial armed the grace with no final
+        yet). The length cap waits for neither, so it never talks over the caller."""
+        return self._utterance_lock.locked() or (self._grace is not None and not self._grace.done())
+
+    async def _end_at_length_cap(self) -> bool:
+        """Once the call has run past its cap, says the length line and asks for the hang-up, as the hold-limit
+        line does: the loop ends when its marks come back. True when it did."""
+        if self._capped or self._hang_up.is_set():
+            return False
+        elapsed = time.monotonic() - self.ctx.started_at
+        if elapsed < self._max_call_s:
+            return False
+        self._capped = True
+        log.info("length cap %s after %.0f s", self.ctx.call_id, elapsed)
+        # A hook span and not a kill span: the line is open, and only this call has run its length.
+        self._trace(
+            "hook",
+            "length-cap",
+            text=f"the call passed its {self._max_call_s:.0f} s cap, so the line said goodbye between turns",
+            seconds=round(elapsed, 1),
+            meta={"max_call_seconds": self._max_call_s},
+        )
+        await self.speak(length_line(self._max_call_s))
+        self._hang_up.set()
+        return True
+
     async def _listen(self) -> None:
         try:
             async for heard in self._transcriber.events():
@@ -233,7 +268,9 @@ class MediaSession:
                     # a dead call open past the hold limit.
                     if not is_filler(heard.text):
                         self._last_activity = time.monotonic()
-                        if self.speaking:
+                        # Once the length line is queued the goodbye plays whole: a clear would empty it from
+                        # Twilio's buffer, and the hang-up would then drop the caller mid-sentence, nothing said.
+                        if self.speaking and not self._capped:
                             await self.barge_in()
                         elif self._thinking:
                             self._superseded = True
@@ -339,6 +376,11 @@ class MediaSession:
 
     async def handle_utterance(self, text: str) -> None:
         async with self._utterance_lock:
+            if self._capped or self._hang_up.is_set():
+                # The closing line is out or on its way; words after it get no turn and no model call, and the
+                # loop ends when its marks come back.
+                log.info("turn after the closing line dropped %s", self.ctx.call_id)
+                return
             if self._carry:
                 text = f"{self._carry} {text}"
                 self._carry = ""
@@ -374,6 +416,10 @@ class MediaSession:
                 await self.speak(result.spoken)
             if getattr(result, "hang_up", False):
                 self._hang_up.set()
+            elif not self._interrupted.is_set():
+                # The reply is out in full before the length line is queued behind it, so Twilio plays both whole.
+                # A reply the caller cut into is left to the silence watcher, which waits for them to finish.
+                await self._end_at_length_cap()
 
     async def speak(self, text: str) -> None:
         async with self._speak_lock:

@@ -4,14 +4,18 @@ import time
 import pytest
 
 from candidate_line.escalation import (
+    SNS_SUBJECT,
     Escalation,
     EscalationQueue,
     LogPoster,
     SlackWebhookPoster,
+    SnsPoster,
+    default_poster,
+    default_queue,
     format_message,
     trace_link,
 )
-from candidate_line.settings import DEFAULT_COCKPIT_BASE_URL
+from candidate_line.settings import DEFAULT_COCKPIT_BASE_URL, Settings
 from candidate_line.traces import TraceStore
 
 E = Escalation(
@@ -141,3 +145,99 @@ def test_default_queue_posts_to_the_log_without_a_webhook_and_drains_before_exit
     q.drain()
     [row] = store.escalations("CA1")
     assert row.posted_at is not None and q._poster.posted  # type: ignore[attr-defined]
+
+
+# A synthetic topic: the zero account id belongs to nobody, and us-west-2 is not the line's region, so a client
+# built for it shows the region came from the ARN.
+TOPIC = "arn:aws:sns:us-west-2:000000000000:candidate-line-hand-offs"
+
+
+class FakeSns:
+    """Stands in for boto3's SNS client: records each publish, or raises what it is given. No network."""
+
+    def __init__(self, raises: Exception | None = None) -> None:
+        self.published: list[dict[str, str]] = []
+        self._raises = raises
+
+    def publish(self, **kwargs: str) -> dict[str, str]:
+        if self._raises is not None:
+            raise self._raises
+        self.published.append(kwargs)
+        return {"MessageId": "m-1"}
+
+
+def test_the_sns_poster_publishes_the_hand_off_to_the_topic_with_its_subject() -> None:
+    client = FakeSns()
+    poster = SnsPoster(TOPIC, client=client)
+    poster.post(format_message(E))
+    assert poster.channel == "sns"
+    assert client.published == [
+        {"TopicArn": TOPIC, "Subject": "Candidate Line hand-off", "Message": format_message(E)}
+    ]
+    assert SNS_SUBJECT == "Candidate Line hand-off"
+
+
+def test_the_sns_poster_refuses_a_missing_or_wrong_topic_without_echoing_it() -> None:
+    for bad in (None, "", "not-an-arn", "arn:aws:s3:::a-bucket", "arn:aws:sns::000000000000:t"):
+        with pytest.raises(ValueError, match="SNS_TOPIC_ARN") as caught:
+            SnsPoster(bad, client=FakeSns())
+        assert "000000000000" not in str(caught.value)
+
+
+class ClientError(Exception):
+    """Shaped as botocore's: a message that names the account, and the error code in `response`."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "User: arn:aws:sts::000000000000:assumed-role/line/task is not authorized to perform: SNS:Publish "
+            f"on resource: {TOPIC}"
+        )
+        self.response = {"Error": {"Code": "AuthorizationError", "Message": str(self)}}
+
+
+def test_a_failed_publish_is_recorded_by_its_code_and_never_with_the_account_id() -> None:
+    store = TraceStore(":memory:")
+    q = EscalationQueue(store, SnsPoster(TOPIC, client=FakeSns(raises=ClientError())))
+    assert q.submit(E) is True
+    q.drain()
+    [row] = store.escalations("c1")
+    assert row.channel == "sns" and row.posted_at is None
+    assert row.post_error == "RuntimeError: SNS publish failed: AuthorizationError"
+    q.close()
+    with pytest.raises(RuntimeError, match="SNS publish failed: TimeoutError"):
+        SnsPoster(TOPIC, client=FakeSns(raises=TimeoutError("connect to sns.us-west-2"))).post("x")
+
+
+def test_the_sns_client_is_built_for_the_topics_own_region(monkeypatch: pytest.MonkeyPatch) -> None:
+    import boto3
+
+    built: list[tuple[str, str | None]] = []
+
+    def client(service: str, region_name: str | None = None) -> FakeSns:
+        built.append((service, region_name))
+        return FakeSns()
+
+    monkeypatch.setattr(boto3, "client", client)
+    SnsPoster(TOPIC)
+    assert built == [("sns", "us-west-2")]
+
+
+def test_default_poster_picks_sns_then_slack_then_the_log(monkeypatch: pytest.MonkeyPatch) -> None:
+    import boto3
+
+    monkeypatch.setattr(boto3, "client", lambda service, region_name=None: FakeSns())
+    hook = "https://hooks.example/T0/B0/x"
+    assert isinstance(default_poster(None, TOPIC), SnsPoster)
+    assert isinstance(default_poster(hook, TOPIC), SnsPoster)  # both set: SNS, the deployment's channel
+    assert isinstance(default_poster(hook, None), SlackWebhookPoster)
+    assert isinstance(default_poster(hook), SlackWebhookPoster)  # text mode's call, unchanged
+    assert isinstance(default_poster(None, None), LogPoster)
+    q = default_queue(TraceStore(":memory:"), hook, TOPIC)
+    assert q._poster.channel == "sns"  # type: ignore[attr-defined]
+    q.close()
+
+
+def test_the_sns_topic_comes_from_settings() -> None:
+    assert Settings.from_env({}).sns_topic_arn is None
+    assert Settings.from_env({"SNS_TOPIC_ARN": ""}).sns_topic_arn is None
+    assert Settings.from_env({"SNS_TOPIC_ARN": TOPIC}).sns_topic_arn == TOPIC

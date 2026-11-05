@@ -13,6 +13,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -37,6 +38,12 @@ HELLO_LINE = (
     "Thanks for calling the ACME candidate line. This is Gus. "
     "The line is still being built. Please call back in a day or two."
 )
+# Said by Twilio, not by Gus, once the day's calls pass Settings.max_calls_per_day (DR-021): no stream is opened,
+# so a call past the cap costs no transcriber, voice or model time.
+CLOSED_LINE = "This is the ACME candidate line. The line is closed for the moment. Please try again later."
+CLOSED_OUTCOME = "closed: daily cap"
+# Twilio opens the stream a second or two after it reads the TwiML; a token older than this is refused.
+STREAM_TOKEN_TTL_S = 60
 
 
 def twilio_signature(auth_token: str, url: str, form: Mapping[str, str]) -> str:
@@ -53,13 +60,43 @@ def twiml_say(text: str) -> str:
     )
 
 
-def twiml_stream(public_base_url: str) -> str:
-    """`<Connect><Stream>`: the bidirectional stream (DR-005). The greeting comes through the stream so barge-in applies."""
+def twiml_closed() -> str:
+    return twiml_say(CLOSED_LINE)
+
+
+def _stream_mac(auth_token: str, call_sid: str, expires: int) -> str:
+    message = f"stream|{call_sid}|{expires}".encode()
+    return hmac.new(auth_token.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def stream_token(auth_token: str, call_sid: str, now: float | None = None) -> str:
+    """The token that opens one call's media stream: its expiry and an HMAC over the call and the expiry, keyed by
+    the auth token. /voice mints it after the signature check and the daily count. It is keyed and not kept in a
+    table so the probe, which holds the same auth token, can mint its own for `make probe` (DR-011), and a second
+    process or task can check one the first minted."""
+    expires = int((time.time() if now is None else now) + STREAM_TOKEN_TTL_S)
+    return f"{expires}.{_stream_mac(auth_token, call_sid, expires)}"
+
+
+def stream_token_ok(auth_token: str, call_sid: str, token: str, now: float | None = None) -> bool:
+    """True when the token was minted with this auth token for this call and has not expired."""
+    expires_text, _, mac = token.partition(".")
+    if not expires_text.isdigit() or not mac:
+        return False
+    if int(expires_text) < (time.time() if now is None else now):
+        return False
+    return hmac.compare_digest(_stream_mac(auth_token, call_sid, int(expires_text)), mac)
+
+
+def twiml_stream(public_base_url: str, token: str | None = None) -> str:
+    """`<Connect><Stream>`: the bidirectional stream (DR-005). The greeting comes through the stream so barge-in applies.
+    The token rides as a custom parameter, because Twilio takes no query string on a stream URL."""
     wss = public_base_url.rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<Response><Connect><Stream url="{escape(wss)}/media" /></Connect></Response>'
-    )
+    url = f"{escape(wss)}/media"
+    stream = f'<Stream url="{url}" />'
+    if token:
+        stream = f'<Stream url="{url}"><Parameter name="token" value="{escape(token)}" /></Stream>'
+    return f'<?xml version="1.0" encoding="UTF-8"?><Response><Connect>{stream}</Connect></Response>'
 
 
 @dataclass(frozen=True)
@@ -77,10 +114,15 @@ class Deps:
     # The room's trace store, one per process; None in tests that do not trace. The call row starts at /voice
     # (the number is masked by the store) and ends when the stream stops.
     store: TraceStore | None = None
-    escalations: EscalationQueue | None = None  # built over the store; Slack when SLACK_WEBHOOK_URL is set
+    # Built over the store: SNS when SNS_TOPIC_ARN is set, Slack when SLACK_WEBHOOK_URL is, the log otherwise.
+    escalations: EscalationQueue | None = None
     # The tools' ledger for each call. Ledger.default is one shared ledger over var/state.json per process, so two
     # calls never book one slot; None leaves it to the first tool of the call (the tests).
     ledger: Callable[[], Ledger] | None = None
+    # Open the speech clients once at startup, before the first caller: on a fresh task the first call paid about
+    # twenty seconds of silence before the greeting for their first connections (the operator's call of
+    # 2026-11-04, 20:14 CT, DR-023). The tests pass fakes and leave this off.
+    warm_up: bool = False
 
 
 def default_deps(settings: Settings) -> Deps:
@@ -91,8 +133,9 @@ def default_deps(settings: Settings) -> Deps:
         hooks=default_hooks,
         system=settings.system_prompt(),
         store=(store := TraceStore(settings.trace_store_path or DEFAULT_PATH)),
-        escalations=default_queue(store, settings.slack_webhook_url),
+        escalations=default_queue(store, settings.slack_webhook_url, settings.sns_topic_arn),
         ledger=Ledger.default,
+        warm_up=settings.brain_provider != "echo",
     )
 
 
@@ -104,11 +147,33 @@ def public_url(request: Request, settings: Settings) -> str:
     return str(request.url)
 
 
+async def _warm_up(deps: Deps) -> None:
+    """One short synthesis and one opened and closed transcription stream, so their connections exist before
+    /health answers and the load balancer sends the first call. A failure here is logged and never stops the
+    line: a cold first call is slower, not broken."""
+    started = time.perf_counter()
+    try:
+        await asyncio.to_thread(deps.speaker().say, "Warming up.")
+        polly_ms = int((time.perf_counter() - started) * 1000)
+        transcriber = deps.transcriber()
+        await asyncio.wait_for(transcriber.start(), timeout=20)
+        await asyncio.wait_for(transcriber.stop(), timeout=10)
+        log.info(
+            "warm-up: polly %d ms, transcribe %d ms",
+            polly_ms,
+            int((time.perf_counter() - started) * 1000) - polly_ms,
+        )
+    except Exception:
+        log.warning("warm-up failed; the first call pays the cold start", exc_info=True)
+
+
 def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     deps = deps or default_deps(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if deps.warm_up:
+            await _warm_up(deps)
         yield
         # A hand-off still queued when the process stops would die with the daemon worker (DR-013). Text mode
         # and the eval runner drain before they exit; the phone, which `make restart` stops mid-day, does too.
@@ -116,6 +181,44 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             await asyncio.to_thread(deps.escalations.drain, 5.0)
 
     app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    # The daily cap counts on one ledger for the life of the process. A file-backed Ledger.default is shared
+    # anyway; an in-memory one is new on every call, and counting on a fresh one would never pass the cap.
+    counter: list[Ledger] = []
+    # /media is a public WebSocket, and Twilio does not sign its handshake (the Stream TwiML and WebSocket messages
+    # pages, read 2026-11-04). With the auth token set (every real deployment) a stream opens only with the token
+    # /voice minted for that call, so a client that learns the wss URL cannot step around the signature check or the
+    # daily count and spend on Transcribe, Polly and the model. Each token opens one stream in this process.
+    used_tokens: dict[str, float] = {}
+
+    def stream_allowed(meta: Mapping[str, Any]) -> bool:
+        if not settings.twilio_auth_token:
+            # As /voice does: no auth token means local curl only, and only when unsigned requests are allowed.
+            return settings.allow_unsigned_webhooks
+        params = meta.get("customParameters")
+        given = str(params.get("token") or "") if isinstance(params, Mapping) else ""
+        now = time.time()
+        for stale in [t for t, expires in used_tokens.items() if expires < now]:
+            del used_tokens[stale]
+        call_sid = str(meta.get("callSid") or "")
+        if given in used_tokens or not stream_token_ok(settings.twilio_auth_token, call_sid, given, now):
+            return False
+        used_tokens[given] = float(given.partition(".")[0])
+        return True
+
+    def count_this_call() -> int | None:
+        """The day's count with this call in it, or None when it could not be counted. The call then goes
+        through: the cap bounds the bill, and a fault in the state file must not close the line to a candidate."""
+        if deps.ledger is None:
+            return None
+        try:
+            if not counter:
+                counter.append(deps.ledger())
+            ledger = counter[0]
+            return ledger.count_call(ledger.today())
+        except Exception:
+            log.exception("the daily call count failed; the call goes through uncounted")
+            return None
+
     # uvicorn configures only its own loggers; without a root handler the line's per-turn INFO lines vanish.
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:     %(name)s %(message)s")
@@ -141,11 +244,26 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=503, detail="PUBLIC_BASE_URL is not set; the stream needs a public wss host"
             )
-        if deps.store is not None and form.get("CallSid"):
+        call_sid = form.get("CallSid")
+        if deps.store is not None and call_sid:
             deps.store.start_call(
-                form["CallSid"], "voice", caller=form.get("From"), provider=settings.brain_provider
+                call_sid, "voice", caller=form.get("From"), provider=settings.brain_provider
             )
-        return Response(content=twiml_stream(settings.public_base_url), media_type="text/xml")
+        # In a thread, because the count takes the state file's lock and the live calls' audio shares this loop.
+        count = await asyncio.to_thread(count_this_call)
+        if count is not None and count > settings.max_calls_per_day:
+            log.warning(
+                "daily cap: call %d today is past the cap of %d; answered closed",
+                count,
+                settings.max_calls_per_day,
+            )
+            if deps.store is not None and call_sid:
+                deps.store.end_call(call_sid, CLOSED_OUTCOME)
+            return Response(content=twiml_closed(), media_type="text/xml")
+        token = (
+            stream_token(settings.twilio_auth_token, call_sid or "") if settings.twilio_auth_token else None
+        )
+        return Response(content=twiml_stream(settings.public_base_url, token), media_type="text/xml")
 
     @app.websocket("/media")
     async def media(ws: WebSocket) -> None:
@@ -160,8 +278,15 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
                     return
         except WebSocketDisconnect:
             return
+        meta = start.get("start")
+        meta = meta if isinstance(meta, Mapping) else {}
+        if not stream_allowed(meta):
+            # Refused before any ears, mouth or brain is built, so a refused stream costs nothing.
+            log.warning("media stream refused: no live stream token for this call")
+            await ws.close(code=1008)
+            return
         stream_sid = str(start["streamSid"])
-        call_id = str(start.get("start", {}).get("callSid") or stream_sid)
+        call_id = str(meta.get("callSid") or stream_sid)
 
         async def incoming() -> AsyncIterator[dict[str, Any]]:
             while True:
@@ -193,6 +318,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             store=deps.store,
             escalations=deps.escalations,
             ledger=ledger,
+            max_call_seconds=settings.max_call_seconds,
         )
         try:
             await session.run(incoming())

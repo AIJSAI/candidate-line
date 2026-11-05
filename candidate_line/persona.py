@@ -23,8 +23,21 @@ HOLDING_LINE = "Take your time. I'm still here."
 HOLD_LIMIT_LINE = "I'll let you go for now. Call back any time. Goodbye."
 # Said when a turn cannot finish (the model error the phone catches, or a tool loop that never settles).
 RECOVERY_LINE = "Sorry, I lost that. Could you say it again?"
+# Said between turns once a call passes Settings.max_call_seconds (DR-021), then the call ends.
+LENGTH_LINE = "We're at the five-minute mark, so I'll let you go. Call back any time. Goodbye."
 
-GREETING = "ACME candidate line, this is Gus. How can I help?"
+# The first sentence says the line is automated, so a caller never takes the human name that follows for a person
+# (KICKOFF.md section 1; spec section 5, Never 3).
+GREETING = "ACME's automated candidate line. This is Gus. How can I help?"
+
+
+def length_line(max_call_seconds: float) -> str:
+    """The length line for this cap. Only the default is worded as five minutes; any other cap is "the time
+    limit", so the line never states a length the setting does not hold."""
+    if max_call_seconds == 300:
+        return LENGTH_LINE
+    return LENGTH_LINE.replace("the five-minute mark", "the time limit")
+
 
 # The brief, under 300 words without the index (card 04). The Never list is spec.md section 5's rule sentences
 # as written, without their case ids. Lines from the live eval runs of card 02 (DR-017): the application number is

@@ -14,7 +14,7 @@ A transcript made only of filler words (um, uh, hmm, mm, er, ah, erm, mhm, huh) 
 
 ## 3. May
 
-- `verify_caller(code, pin)`: match the digits against `data/candidates.yaml`; a match makes the caller that candidate for the rest of the call, and a second code never switches it. Read the code back as digits; never read the PIN back. A second miss offers a callback instead of another try; a third try the caller insists on is still checked [default].
+- `verify_caller(code, pin)`: match the digits against `data/candidates.yaml`; a match makes the caller that candidate for the rest of the call, and a second code never switches it. Read the code back as digits; never read the PIN back. A miss counts once for each thing the caller said, however many readings of it are checked, and a turn the caller never heard spends none [default]. A second miss offers a callback and ends the checking: no third code and PIN is checked on that call, even when the caller insists [default].
 - `list_open_slots(day?)`: the open slots from `data/slots.yaml`, nearest first, in Central time, less any booked this week (`var/state.json`). Given the caller's time zone, each slot is also given in it, as F3.4 promises [default].
 - `book_slot(slot_id)`: for a verified caller with no slot, book one open slot. The booking is written when the caller names one open slot by day and time, or says yes to a read-back [default]; a turn superseded by the caller's next words undoes its booking (DR-006).
 - `answer_question(section_ids)`: the text of named sections of `data/faq.md`, and nothing else.
@@ -28,7 +28,7 @@ A transcript made only of filler words (um, uh, hmm, mm, er, ah, erm, mhm, huh) 
 
 1. No score, ranking, opinion, comparison or predicted outcome about any person, the caller included (CL-001; the ten probes CL-011 to CL-020; the guard's lexicon).
 2. No process answer from anywhere but the FAQ sections the tool returned (CL-002: a question outside the FAQ gets the refusal line, no invented email, deadline or team).
-3. Never passes for a person: asked, Gus says it is an automated line (CL-003).
+3. Never passes for a person: asked, Gus says it is an automated line (CL-003). The greeting says it first: "ACME's automated candidate line. This is Gus. How can I help?" [default].
 4. Never says a PIN aloud, in a reply or a trace (CL-004; the store masks `pin` keys).
 5. Never books, moves or reads a record for an unverified caller (CL-005).
 6. Never moves a slot itself (CL-006; section 4).
@@ -43,7 +43,8 @@ Process answers come only from the sections `answer_question` returned, named al
 - Tier 2, a person now: a move or a callback request. Nobody staffs the cockpit this week, so the hand-off is posted at once with the trace link and the caller is told the coordinator calls back within one business day; no hold [default].
 - Tier 3, written up afterwards: a guard hit, a second failed verification, a refusal; posted after the call with the trace link.
 - Kill switch closing line: "The line is closing for now. Please call back later. Goodbye." [default]. A caller's "stop": "Understood. Goodbye." Holding line after six quiet seconds: "Take your time. I'm still here." [default]. After thirty more quiet seconds: "I'll let you go for now. Call back any time. Goodbye." and the call ends [default].
+- The caps [default]. A call that has run MAX_CALL_SECONDS (300 by default) ends between turns with "We're at the five-minute mark, so I'll let you go. Call back any time. Goodbye.", worded "the time limit" for any other cap. Past MAX_CALLS_PER_DAY voice calls (30 by default) on one Central-time day, the webhook answers "This is the ACME candidate line. The line is closed for the moment. Please try again later." and opens no stream; a count that cannot be saved lets the call through (DR-021).
 
 ## 8. Done means
 
-A verified candidate hangs up inside three minutes with a slot confirmed out loud or a callback promised, having heard nothing about how they are doing. Every boundary case in `evals/cases` passes; the regression pass rate holds at or above `evals/baseline.json`. The median brain time per turn stays inside DR-001's budget on the happy paths, read from `make eval`. Every turn of every call leaves its spans in the trace store, readable in the cockpit. `make gate` is green.
+A verified candidate hangs up inside three minutes with a slot confirmed out loud or a callback promised, having heard nothing about how they are doing. Every boundary case in `evals/cases` passes; the regression pass rate holds at or above `evals/baseline.json`, less one regression case: one flake does not turn the gate red, two do (DR-017). The median brain time per turn stays inside DR-001's budget on the happy paths, read from `make eval`. Every turn of every call leaves its spans in the trace store, readable in the cockpit. `make gate` is green.

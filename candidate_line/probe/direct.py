@@ -89,6 +89,7 @@ async def run_direct(url: str, case: Case, settings: Settings, voice: str) -> Pr
             PollySpeaker(settings.aws_region, voice_id=voice),
             [t.user for t in case.turns if t.user is not None],
             stream_sid=f"probe-{case.id}",
+            auth_token=settings.twilio_auth_token,
         )
         transcript = await session.run(incoming())
         log.info("events %s", counts)

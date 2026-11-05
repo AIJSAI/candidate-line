@@ -17,7 +17,7 @@ from candidate_line.traces.store import TraceStore
 
 SID = "MZ123"
 # The media tests count the sentences Gus says, so they greet in one sentence of their own; the persona's greeting
-# (candidate_line.persona.GREETING) is two, and its words are not what these tests are about.
+# (candidate_line.persona.GREETING) is three, and its words are not what these tests are about.
 GREETING = "ACME candidate line, this is Gus."
 
 
@@ -188,7 +188,12 @@ def test_the_media_websocket_runs_a_session_end_to_end() -> None:
         greeting="Hi.",
     )
     client = TestClient(
-        create_app(Settings.from_env({"BRAIN_PROVIDER": "echo", "TRACE_STORE_PATH": ":memory:"}), deps)
+        create_app(
+            Settings.from_env(
+                {"BRAIN_PROVIDER": "echo", "TRACE_STORE_PATH": ":memory:", "ALLOW_UNSIGNED_WEBHOOKS": "1"}
+            ),
+            deps,
+        )
     )
     with client.websocket_connect("/media") as ws:
         ws.send_json({"event": "connected", "protocol": "Call", "version": "1.0.0"})
@@ -814,3 +819,209 @@ def test_a_superseded_turn_undoes_its_tools_newest_first_and_a_kept_turn_does_no
     # The dropped turn's spans stay, so a span says it was never heard and its effects were taken back.
     [dropped] = [span for span in store.spans("CA1") if (span.kind, span.name) == ("hook", "superseded")]
     assert dropped.meta == {"undone": 3} and "not spoken" in (dropped.text or "")
+
+
+def test_the_length_line_names_five_minutes_only_when_the_cap_is_five_minutes() -> None:
+    from candidate_line.persona import LENGTH_LINE, length_line
+
+    assert LENGTH_LINE == "We're at the five-minute mark, so I'll let you go. Call back any time. Goodbye."
+    assert length_line(300) == LENGTH_LINE
+    assert length_line(120) == "We're at the time limit, so I'll let you go. Call back any time. Goodbye."
+    assert length_line(0.3) == length_line(120)
+
+
+def test_the_call_length_cap_comes_from_settings_and_refuses_nonsense() -> None:
+    assert Settings.from_env({}).max_call_seconds == 300
+    assert Settings.from_env({"MAX_CALL_SECONDS": ""}).max_call_seconds == 300
+    assert Settings.from_env({"MAX_CALL_SECONDS": "120"}).max_call_seconds == 120
+    for bad in ("0", "-5", "five", "2.5"):
+        with pytest.raises(ValueError, match="MAX_CALL_SECONDS"):
+            Settings.from_env({"MAX_CALL_SECONDS": bad})
+
+
+def test_the_phone_hands_the_call_length_cap_to_each_session(monkeypatch) -> None:
+    from candidate_line.telephony import app as app_module
+
+    seen: list[float] = []
+
+    class Recorder:
+        def __init__(self, *args, max_call_seconds: float, **kwargs) -> None:
+            seen.append(max_call_seconds)
+
+        async def run(self, incoming) -> None:
+            return None
+
+    monkeypatch.setattr(app_module, "MediaSession", Recorder)
+    deps = Deps(transcriber=lambda: None, speaker=lambda: None, brain=EchoBrain, hooks=NoHooks)
+    settings = Settings.from_env(
+        {"MAX_CALL_SECONDS": "90", "TRACE_STORE_PATH": ":memory:", "ALLOW_UNSIGNED_WEBHOOKS": "1"}
+    )
+    with TestClient(create_app(settings, deps)).websocket_connect("/media") as ws:
+        ws.send_json({"event": "start", "streamSid": SID, "start": {"callSid": "CA5"}})
+    assert seen == [90]
+
+
+TIME_LIMIT_SAID = ["We're at the time limit, so I'll let you go.", "Call back any time.", "Goodbye."]
+
+
+def capped_session(
+    transcriber: ScriptedTranscriber,
+    speaker: FakeSpeaker,
+    brain,
+    sent: list[dict],
+    store: TraceStore,
+    greeting: str | None = GREETING,
+) -> MediaSession:
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    return MediaSession(
+        send,
+        transcriber,
+        speaker,
+        brain,
+        NoHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=greeting,
+        grace_ms=(50, 60),
+        store=store,
+        silence_after_s=30.0,  # no holding line inside these tests
+        max_call_seconds=0.3,
+    )
+
+
+async def marks_then_frames(session: MediaSession, sent: list[dict], counted: dict[str, int]):
+    """Hands back every mark once the hang-up is asked for, then sends frames as the stream would. The session
+    must stop reading them once the closing line has played."""
+    await settle(lambda: session._hang_up.is_set())
+    for m in [m for m in sent if m["event"] == "mark"]:
+        yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+    for _ in range(50):
+        yield frame()
+        counted["n"] += 1
+        await asyncio.sleep(0.01)
+
+
+def length_cap_spans(store: TraceStore) -> list:
+    return [s for s in store.spans("CA1") if (s.kind, s.name) == ("hook", "length-cap")]
+
+
+def test_the_length_cap_waits_for_a_turn_in_progress_and_follows_its_reply() -> None:
+    transcriber, speaker, brain = ScriptedTranscriber(), FakeSpeaker(), GatedEcho()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+    counted = {"n": 0}
+    session = capped_session(transcriber, speaker, brain, sent, store)
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Book me Thursday.", is_partial=False)
+        await settle(lambda: session._thinking)
+        # The cap passes while the reply is being made; nothing may be said over it.
+        await settle(lambda: time.monotonic() - session.ctx.started_at > 0.45)
+        assert speaker.said == [GREETING] and not length_cap_spans(store)
+        brain.gate.set()
+        async for message in marks_then_frames(session, sent, counted):
+            yield message
+
+    asyncio.run(session.run(script()))
+    assert speaker.said == [GREETING, "Book me Thursday.", *TIME_LIMIT_SAID]
+    assert "clear" not in [m["event"] for m in sent] and counted["n"] < 50
+    [span] = length_cap_spans(store)
+    assert span.seconds is not None and span.seconds >= 0.3 and span.meta == {"max_call_seconds": 0.3}
+    assert not [s for s in store.spans("CA1") if s.kind == "kill"]  # the line is open; only this call ended
+
+
+def test_the_silence_watcher_ends_a_quiet_call_at_the_cap_once_gus_has_finished() -> None:
+    gate = threading.Event()
+    calls = {"n": 0}
+
+    def delay() -> None:
+        calls["n"] += 1
+        if calls["n"] == 2:  # the greeting's second sentence is still being made when the cap passes
+            gate.wait(0.5)
+
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker(delay=delay)
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+    counted = {"n": 0}
+    session = capped_session(
+        transcriber, speaker, EchoBrain(), sent, store, greeting="First sentence. Second sentence."
+    )
+
+    async def script():
+        await settle(lambda: sum(m["event"] == "mark" for m in sent) == 2, seconds=3.0)
+        assert speaker.said == ["First sentence.", "Second sentence."]  # the greeting was never cut
+        assert not length_cap_spans(store)  # Twilio is still playing it
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        async for message in marks_then_frames(session, sent, counted):
+            yield message
+
+    asyncio.run(session.run(script()))
+    assert speaker.said == ["First sentence.", "Second sentence.", *TIME_LIMIT_SAID]
+    assert "clear" not in [m["event"] for m in sent] and counted["n"] < 50
+    assert len(length_cap_spans(store)) == 1 and session.turns == 0
+
+
+def test_the_length_cap_never_cuts_in_while_the_caller_is_mid_sentence() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+    counted = {"n": 0}
+    session = capped_session(transcriber, speaker, EchoBrain(), sent, store)
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        # Partials with no final yet, on past the cap and over two of the watcher's ticks.
+        while time.monotonic() - session.ctx.started_at < 0.8:
+            transcriber.hear("I wanted to ask", is_partial=True)
+            await asyncio.sleep(0.08)
+        assert speaker.said == [GREETING]
+        transcriber.hear("I wanted to ask about Thursday.", is_partial=False)
+        async for message in marks_then_frames(session, sent, counted):
+            yield message
+
+    asyncio.run(session.run(script()))
+    assert speaker.said == [GREETING, "I wanted to ask about Thursday.", *TIME_LIMIT_SAID]
+    assert len(length_cap_spans(store)) == 1 and session.barge_ins == 0
+
+
+def test_a_caller_who_talks_over_the_reply_at_the_cap_still_hears_the_goodbye_whole() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+    counted = {"n": 0}
+    session = capped_session(transcriber, speaker, EchoBrain(), sent, store)
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        await settle(lambda: time.monotonic() - session.ctx.started_at > 0.35)
+        transcriber.hear("Which day is open?", is_partial=False)
+        await settle(lambda: session._hang_up.is_set())
+        transcriber.hear("Wait, one more", is_partial=True)
+        transcriber.hear("Wait, one more thing.", is_partial=False)
+        await asyncio.sleep(0.3)  # past the grace: the words must not become a turn
+        # Twilio is still playing: the frames are read and the call goes on until the marks come back.
+        for _ in range(5):
+            yield frame()
+            counted["n"] += 1
+            await asyncio.sleep(0.01)
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        for _ in range(50):
+            yield frame()
+            counted["n"] += 1
+            await asyncio.sleep(0.01)
+
+    asyncio.run(session.run(script()))
+    assert "clear" not in [m["event"] for m in sent] and session.barge_ins == 0
+    assert speaker.said[-3:] == TIME_LIMIT_SAID
+    assert session.turns == 1 and 5 <= counted["n"] < 50
+    assert len(length_cap_spans(store)) == 1

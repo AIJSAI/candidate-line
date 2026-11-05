@@ -2,9 +2,10 @@
 
 Why a queue and a thread: the turn loop calls `submit` and returns in microseconds; the worker records the
 escalation in the trace store, posts it, and records the outcome. Why the reply comes back through the cockpit:
-a Slack incoming webhook is one-way, and the loop closes when a person logs what they did against the call
-(DR-012's reply box), which is the same place the recruiter reads the trace. The rule for which tier posts is
-written live with the tiers; this module only knows how to post.
+an SNS email and a Slack incoming webhook are both one-way, and the loop closes when a person logs what they did
+against the call (DR-012's reply box), which is the same place the recruiter reads the trace. Why SNS in the
+deployment: the coordinator reads email already, and the container's own role can publish with no secret to store
+(DR-021). The rule for which tier posts is written live with the tiers; this module only knows how to post.
 """
 
 from __future__ import annotations
@@ -18,11 +19,13 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from candidate_line.traces import TraceStore
 
 log = logging.getLogger("candidate_line.escalation")
+
+SNS_SUBJECT = "Candidate Line hand-off"
 
 TEMPLATE = (
     "Candidate Line: {tier} on call {call_id}\n"
@@ -90,6 +93,41 @@ class SlackWebhookPoster:
                 raise RuntimeError(f"webhook answered {response.status}")
 
 
+class SnsPoster:
+    """One SNS Publish per hand-off to a topic whose subscribers are the coordinator's email addresses.
+
+    The container's task role holds sns:Publish on this one topic and nothing else, so no key or webhook is
+    stored for it, and the role cannot send to anyone the topic does not already list. The client is built for
+    the topic's own region, read from its ARN, since a publish to another region's endpoint is refused. The ARN
+    holds the account id, so it is never logged, and a failed publish is reported by its error code alone.
+    """
+
+    channel = "sns"
+
+    def __init__(self, topic_arn: str | None, client: Any | None = None) -> None:
+        if not topic_arn:
+            raise ValueError("SNS_TOPIC_ARN is not set")
+        parts = topic_arn.split(":")
+        if len(parts) != 6 or parts[0] != "arn" or parts[2] != "sns" or not parts[3] or not parts[5]:
+            raise ValueError("SNS_TOPIC_ARN is not an SNS topic ARN")
+        self._topic_arn = topic_arn
+        if client is None:
+            import boto3  # here, so text mode and the evals, which never publish, do not pay for the import
+
+            client = boto3.client("sns", region_name=parts[3])
+        self._client = client
+
+    def post(self, text: str) -> None:
+        try:
+            self._client.publish(TopicArn=self._topic_arn, Subject=SNS_SUBJECT, Message=text)
+        except Exception as error:  # noqa: BLE001  (raised again below, as a code with no account id in it)
+            # botocore's message names the role and the topic, both with the account id, and the queue writes
+            # what it is given into the trace store; the code alone says what went wrong.
+            response = getattr(error, "response", None) or {}
+            code = response.get("Error", {}).get("Code") or type(error).__name__
+            raise RuntimeError(f"SNS publish failed: {code}") from None
+
+
 class LogPoster:
     """No channel: the message is kept in memory and shown. Text mode, the eval runner and the tests use it."""
 
@@ -153,12 +191,18 @@ class EscalationQueue:
         self._thread.join(timeout)
 
 
-def default_poster(webhook_url: str | None) -> Poster:
-    """Slack when the webhook is set, the log poster otherwise; the same interface either way."""
+def default_poster(webhook_url: str | None, sns_topic_arn: str | None = None) -> Poster:
+    """SNS when the topic is set, Slack when the webhook is, the log poster otherwise; the same interface either
+    way. Both set means SNS, the deployment's channel, so a Slack webhook left in the environment never splits
+    the hand-offs over two places."""
+    if sns_topic_arn:
+        return SnsPoster(sns_topic_arn)
     return SlackWebhookPoster(webhook_url) if webhook_url else LogPoster()
 
 
-def default_queue(store: TraceStore, webhook_url: str | None) -> EscalationQueue:
+def default_queue(
+    store: TraceStore, webhook_url: str | None, sns_topic_arn: str | None = None
+) -> EscalationQueue:
     """What the phone and text mode run: one queue per process over the room's store. The eval runner passes no
-    webhook, so an eval never posts to a real channel (card 06 submits through `ctx.escalations`)."""
-    return EscalationQueue(store, default_poster(webhook_url))
+    channel, so an eval never posts to a real one (card 06 submits through `ctx.escalations`)."""
+    return EscalationQueue(store, default_poster(webhook_url, sns_topic_arn))

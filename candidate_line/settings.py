@@ -23,6 +23,11 @@ DEFAULT_COCKPIT_BASE_URL = "http://127.0.0.1:8001"
 # ignored var/; STATE_PATH names another file, and ":memory:" keeps them for one call only (the tests, the evals and
 # the walks, so the live ledger stays clean).
 DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent / "var" / "state.json"
+# The caps a public number needs before it is on any page (DR-021). Five minutes is two more than the three spec
+# section 8 gives a good call, so a candidate who books never meets it. Thirty calls a day is far above the real
+# callers of a week and bounds what a dialler left running can spend.
+DEFAULT_MAX_CALL_SECONDS = 300
+DEFAULT_MAX_CALLS_PER_DAY = 30
 
 
 @dataclass(frozen=True)
@@ -42,7 +47,10 @@ class Settings:
     eval_trace_store_path: str | None
     state_path: str | None  # None means in memory
     slack_webhook_url: str | None
+    sns_topic_arn: str | None
     cockpit_base_url: str
+    max_call_seconds: int
+    max_calls_per_day: int
     # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above.
     twilio_account_sid: str | None
     twilio_line_number: str | None
@@ -89,10 +97,17 @@ class Settings:
             trace_store_path=e.get("TRACE_STORE_PATH") or None,
             eval_trace_store_path=e.get("EVAL_TRACE_STORE_PATH") or None,
             state_path=_state_path(e.get("STATE_PATH")),
-            # The escalation channel (DR-013): Slack when set, the log poster otherwise. A secret, from the keychain.
+            # The escalation channel (DR-013): SNS when its topic is set, Slack when its webhook is, the log poster
+            # otherwise (escalation.default_poster). The webhook is a secret, from the keychain. The topic ARN is
+            # no secret but holds the account id, so it too comes from the environment and is never written down.
             slack_webhook_url=e.get("SLACK_WEBHOOK_URL") or None,
+            sns_topic_arn=e.get("SNS_TOPIC_ARN") or None,
             # Where a hand-off's trace link points (escalation.trace_link). An empty value reads as unset.
             cockpit_base_url=e.get("COCKPIT_BASE_URL") or DEFAULT_COCKPIT_BASE_URL,
+            # A cap that reads as zero or as nonsense would switch the control off without a word, so it stops
+            # the process at start instead.
+            max_call_seconds=_positive_int(e, "MAX_CALL_SECONDS", DEFAULT_MAX_CALL_SECONDS),
+            max_calls_per_day=_positive_int(e, "MAX_CALLS_PER_DAY", DEFAULT_MAX_CALLS_PER_DAY),
         )
 
     def system_prompt(self) -> str:
@@ -103,6 +118,20 @@ class Settings:
         if self.system_prompt_file:
             return Path(self.system_prompt_file).read_text(encoding="utf-8").strip()
         return SYSTEM_PROMPT
+
+
+def _positive_int(e: Mapping[str, str], name: str, default: int) -> int:
+    """A whole number of at least one; an empty value reads as unset, like every other setting here."""
+    raw = e.get(name) or ""
+    if not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a whole number, not {raw!r}") from None
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1, not {value}")
+    return value
 
 
 def _state_path(raw: str | None) -> str | None:

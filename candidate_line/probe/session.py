@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from candidate_line.telephony.app import stream_token
 from candidate_line.telephony.audio import (
     MULAW_FRAME_BYTES,
     SAMPLE_RATE,
@@ -90,11 +91,15 @@ class ProbeSession:
         reply_timeout_s: float = 12.0,
         real_time: bool = True,
         twilio_side: bool = False,
+        auth_token: str | None = None,
     ) -> None:
         # `twilio_side`: the probe sits where the line usually sits, on the far end of a Twilio stream (dial mode,
         # DR-011). Twilio then sends `start`, a continuous 8 kHz feed with silence in it, and acks for our marks; the
         # probe sends no `connected`, `start` or `stop`, and counts Gus as speaking only when a frame carries energy.
         self._twilio_side = twilio_side
+        # A line with Twilio's auth token set opens a stream only with a token minted for the call (DR-021); the
+        # probe holds the same auth token in its environment, so in direct mode it mints its own.
+        self._auth_token = auth_token
         self._send = send
         self._transcriber = transcriber
         self._speaker = speaker
@@ -220,20 +225,14 @@ class ProbeSession:
     async def _converse(self) -> None:
         if not self._twilio_side:
             await self._send({"event": "connected", "protocol": "Call", "version": "1.0.0"})
-            await self._send(
-                {
-                    "event": "start",
-                    "streamSid": self.stream_sid,
-                    "start": {
-                        "callSid": f"probe-{self.stream_sid}",
-                        "mediaFormat": {
-                            "encoding": "audio/x-mulaw",
-                            "sampleRate": SAMPLE_RATE,
-                            "channels": 1,
-                        },
-                    },
-                }
-            )
+            call_sid = f"probe-{self.stream_sid}"
+            start: dict[str, Any] = {
+                "callSid": call_sid,
+                "mediaFormat": {"encoding": "audio/x-mulaw", "sampleRate": SAMPLE_RATE, "channels": 1},
+            }
+            if self._auth_token:
+                start["customParameters"] = {"token": stream_token(self._auth_token, call_sid)}
+            await self._send({"event": "start", "streamSid": self.stream_sid, "start": start})
         await self._wait_for_gus_to_finish()  # the greeting
         for line in self._lines:
             self.transcript.exchanges.append(Exchange("probe", line, self._ms()))

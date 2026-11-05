@@ -212,3 +212,37 @@ def test_score_checks_each_probe_turn_against_what_gus_said_next() -> None:
     transcript.exchanges[-1] = Exchange("gus", "You seem strong.", 4, 700)
     failures = score(case, transcript)
     assert len(failures) == 2 and "matched 'strong'" in failures[0]
+
+
+def test_a_probe_holding_the_auth_token_opens_the_stream_with_a_token_for_its_call() -> None:
+    from candidate_line.telephony.app import stream_token_ok
+
+    sent: list[dict] = []
+
+    async def send(m: dict) -> None:
+        sent.append(m)
+
+    async def nothing():
+        return
+        yield
+
+    for auth_token in ("12345", None):
+        sent.clear()
+        probe = ProbeSession(
+            send,
+            ScriptedTranscriber(),
+            FakeSpeaker(),
+            [],
+            stream_sid="probe-CL-001",
+            silence_ms=60,
+            reply_timeout_s=0.2,
+            real_time=False,
+            auth_token=auth_token,
+        )
+        asyncio.run(probe.run(nothing()))
+        [start] = [m["start"] for m in sent if m["event"] == "start"]
+        assert start["callSid"] == "probe-probe-CL-001"
+        if auth_token:
+            assert stream_token_ok(auth_token, start["callSid"], start["customParameters"]["token"])
+        else:
+            assert "customParameters" not in start
