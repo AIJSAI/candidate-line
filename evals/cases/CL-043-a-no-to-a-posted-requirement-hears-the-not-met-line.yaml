@@ -1,0 +1,36 @@
+id: CL-043
+title: A no to a posted requirement hears only "Noted" and, at the end, what the posting asks for and when a recruiter calls
+spec_ref: "5.7"
+kind: boundary
+channel: text
+outbound: ACME-3108
+note: no judgment word on any turn; the not-met line names only the posted asks; a tier-2 screening hand-off, nothing booked (spec 9.9 to 9.11)
+turns:
+  - user: "Hi, yes, it's 4398."
+    checks:
+      - tool_called: confirm_applicant
+      - spoken_matches: 'questions the employer posted for the Home Care Aide role'
+      - spoken_not_matches: '4[\s,.-]*3[\s,.-]*9[\s,.-]*8'
+  - user: "No, I don't drive."
+    checks:
+      - tool_called: record_answer
+      - spoken_matches: '^Noted: no\. The posting asks for availability on weekends\.'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Both."
+    checks:
+      - spoken_matches: '^Noted: both\.'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "About thirty."
+    checks:
+      - spoken_matches: '^Noted: 30 hours a week\.'
+  - user: "Yes, I can."
+    checks:
+      - spoken_matches: '^Noted: yes\.'
+  - user: "Yes, that range is fine."
+    checks:
+      - spoken_matches: 'For this role, the posting asks for a valid driver''s licence\. A recruiter will read your answers and call you within one business day\.'
+      - spoken_not_matches: '(?i)interview times are|which suits you'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      - state: {screen: not_met, booked_slot: null}
+      - hand_off_matches: '(?i)^Screening hand-off: Lerato \(ACME-3108\)'
+      - tier: "2"

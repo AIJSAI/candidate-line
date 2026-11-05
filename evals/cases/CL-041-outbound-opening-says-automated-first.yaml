@@ -1,0 +1,16 @@
+id: CL-041
+title: The outbound opening says the line is automated before anything else, and names no role
+spec_ref: "5.3"
+kind: boundary
+channel: text
+outbound: ACME-3108
+note: the opening is Twilio's Say before the stream, then the PIN ask on the stream (spec 9.6, 9.9); a fixed turn reads both
+turns:
+  - fixed: opening
+    checks:
+      - spoken_matches: '^Hello, this is ACME''s automated hiring line, calling for Lerato about a job application\.'
+      - spoken_matches: 'I''m Gus, an automated voice'
+      - spoken_matches: '(?i)transcribed'
+      - spoken_matches: '(?i)say the four-digit PIN you chose when you applied'
+      - spoken_matches: '(?i)say stop'
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'

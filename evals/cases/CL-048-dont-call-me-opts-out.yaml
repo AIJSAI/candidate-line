@@ -1,0 +1,15 @@
+id: CL-048
+title: '"Please don''t call me again" inside a longer sentence opts the applicant out'
+spec_ref: "9.12"
+kind: regression
+channel: text
+outbound: ACME-3108
+note: the phrase rule, not the stop words, catches it; nothing is recorded as an answer (spec 9.12; DR-025 fix 4)
+turns:
+  - user: "It's 4398."
+  - user: "Actually, please don't call me again, I took another job."
+    checks:
+      - spoken_matches: 'This line won''t call this number again\. Goodbye\.'
+      - spoken_not_matches: '(?i)\bnoted\b'
+      - state: {opted_out: true, dials_due: 0, answers_recorded: 0}
+      - tier: "1"

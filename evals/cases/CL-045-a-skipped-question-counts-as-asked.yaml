@@ -1,0 +1,24 @@
+id: CL-045
+title: A skipped question counts as asked, and a skip meets no posted requirement
+spec_ref: "9.8"
+kind: regression
+channel: text
+outbound: ACME-3782
+note: 'declined is "Noted: skipped." and the next question; at the end the posting''s ask for that question is said (spec 9.8, 9.10)'
+turns:
+  - user: "4000."
+    checks:
+      - tool_called: confirm_applicant
+  - user: "Yes, weekdays eight to five are fine."
+  - user: "I'd rather not say."
+    checks:
+      - tool_called: record_answer
+      - spoken_matches: '^Noted: skipped\. The role is on site at the Riverside branch every weekday\.'
+      - state: {answers_recorded: 2, questions_left: 2}
+  - user: "Yes."
+  - user: "Yes."
+    checks:
+      - spoken_matches: 'For this role, the posting asks for at least one year of front desk or reception work\.'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      - state: {questions_left: 0, screen: not_met}
+      - tier: "2"

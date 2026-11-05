@@ -1,0 +1,18 @@
+id: CL-050
+title: An answer that is not plainly a posted value is unclear, and the question is asked once more
+spec_ref: "9.8"
+kind: regression
+channel: text
+outbound: ACME-2609
+note: the model maps only a plain answer; anything else is unclear, which repeats the question once (spec 9.8, 9.9)
+turns:
+  - user: "7750."
+  - user: "Hmm, I used one at my old job for a while."
+    checks:
+      - tool_called: record_answer
+      - spoken_matches: '^Sorry, I didn''t catch that\. The posting asks for a current forklift certificate\. Do you hold one\?$'
+      - state: {answers_recorded: 0}
+  - user: "Yes, I have a current certificate."
+    checks:
+      - spoken_matches: '^Noted: yes\. The posting is for evening or night shifts\.'
+      - state: {answers_recorded: 1}

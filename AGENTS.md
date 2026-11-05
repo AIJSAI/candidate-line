@@ -9,7 +9,7 @@ These rules bind every coding tool and every agent working in this repository, t
 1. **The learning rule comes first.** Every pre-built component gets a decision record, `docs/decisions/DR-NNN-<slug>.md`, from the template in DR-000: what it is, the alternative rejected, why, what would change the decision, and the one-line "say it like this". Every build block ends with James's teach-back: he explains the component in his own words; you grade each point right, partly or wrong against the code with file and line references, write the "say it like this" line into the record, and log every miss as a card in `docs/learn/cards.yaml` for the next day's grill. Before each command or diff, say what it does and why, and wait for approval. In Wednesday's live session, records are written as decisions land, and teach-backs wait until afterward. (KICKOFF.md, section 2; the format is in `docs/learn/README.md`.)
 2. **Spec first.** No code for a work item until `spec.md` holds the line it serves. A change arrives as a spec line, then an eval case, then code, in that order.
 3. **One work item and its files only.** Each card in `prompts/` names its work item, its files and its acceptance criteria. Touch nothing else; if the work needs another file, stop and ask.
-4. **Never edit `evals/` or the baseline.** The eval cases and the committed baseline change only inside the work item that names them as its files, which is `prompts/02` and no other, with James approving the diff. Never change a case, a threshold or the baseline to make a run pass.
+4. **Never edit `evals/` or the baseline.** The eval cases and the committed baseline change only inside the work items that name them as their files, which are `prompts/02` and, for the outbound cases from CL-041 and the baseline rewritten after them, the eval step of `prompts/08`, and no other, with James approving the diff. Never change a case, a threshold or the baseline to make a run pass.
 5. **The spec's Never list binds every tool.** It holds for the coding tool, the fallback, every agent and every script, not only for the line at runtime.
 6. **Cite or refuse.** Every answer the line gives from the knowledge pack cites a retrieved section id, or the line refuses. No answer comes from the model's own memory.
 7. **Secrets from the environment or 1Password.** Never in a file, a commit, a log, a trace, a prompt or a message. On this Mac the machine copy lives in the login keychain: `make secret NAME=<VAR>` stores the clipboard and clears it, and `scripts/env.sh` exports it for a shell (`. scripts/env.sh`). No account id, phone number, start URL or credential is written into this repository.
@@ -22,7 +22,7 @@ These rules bind every coding tool and every agent working in this repository, t
 
 ## The work items
 
-Seven prompt cards in `prompts/`, one work item each, in order. Each card holds the text to paste, the shape of the output, the acceptance criteria, the decisions left open for James, the files it may touch, and the teach-back. The function's specifics live only in `spec.md`, so a new function changes the spec and not the cards.
+Eight prompt cards in `prompts/`, one work item each, in order. Each card holds the text to paste, the shape of the output, the acceptance criteria, the decisions left open for James, the files it may touch, and the teach-back. The function's specifics live only in `spec.md`, so a new function changes the spec and not the cards.
 
 | Card | Work item | Record |
 | - | - | - |
@@ -33,6 +33,7 @@ Seven prompt cards in `prompts/`, one work item each, in order. Each card holds 
 | `prompts/05-guard-and-red-proof.md` | `before_speak`, red first, then green | DR-020 |
 | `prompts/06-tiers-and-observer.md` | the tier rule, the hand-off, the override, the kill switch | DR-021 |
 | `prompts/07-scorecard.md` | `make scorecard` | DR-022 |
+| `prompts/08-outbound-screening.md` | the outbound screening call: the signed intake, the dialler, the posted questions with the gate in code, and the hand-off to a recruiter | DR-025 |
 
 The switch rule (KICKOFF.md, section 6): three minutes with no diff, or one work item failing twice, and the same card goes to the other tool, said aloud.
 

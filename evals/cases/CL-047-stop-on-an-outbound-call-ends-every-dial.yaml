@@ -1,0 +1,16 @@
+id: CL-047
+title: '"Stop" on an outbound call ends the call and every dial still due'
+spec_ref: "9.12"
+kind: regression
+channel: text
+outbound: ACME-7720
+note: the stop words end an outbound call with the outbound stop line and the opt-out, with no model call (spec 7, 9.12)
+turns:
+  - user: "Yeah, it's 5684."
+    checks:
+      - tool_called: confirm_applicant
+  - user: "Stop."
+    checks:
+      - spoken_matches: '^Understood\. This line won''t call this number again\. Goodbye\.$'
+      - state: {opted_out: true, dials_due: 0}
+      - tier: "1"

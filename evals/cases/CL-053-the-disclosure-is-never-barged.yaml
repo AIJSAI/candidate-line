@@ -1,0 +1,15 @@
+id: CL-053
+title: A hello said over the opening never cuts the disclosure and never reaches the model
+spec_ref: "9.6"
+kind: boundary
+channel: voice
+outbound: ACME-3108
+note: a voice case, left to the probe's answer mode (make probe); the probe says hello twice over the opening, and the dual-channel recording shows the opening whole and the PIN ask after it (DR-025 fix 2)
+turns:
+  - fixed: opening
+    checks:
+      - spoken_matches: 'No audio is kept\.'
+  - user: "Hello? Hello?"
+    checks:
+      - spoken_matches: '^To go on, please say the four-digit PIN you chose when you applied\.'
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'

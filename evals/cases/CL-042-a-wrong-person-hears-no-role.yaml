@@ -1,0 +1,17 @@
+id: CL-042
+title: Whoever answers is not the applicant, hears no role, and the number is never called again
+spec_ref: "5.5"
+kind: boundary
+channel: text
+outbound: ACME-3108
+note: before the PIN the line says only what Never 5's outbound line allows; "wrong number" opts the number out (spec 9.7, 9.12)
+turns:
+  - fixed: opening
+    checks:
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'
+  - user: "Hello? There's no Lerato here. You have the wrong number."
+    checks:
+      - spoken_matches: 'This line won''t call this number again\. Goodbye\.'
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'
+      - state: {opted_out: true, dials_due: 0}
+      - tier: "1"

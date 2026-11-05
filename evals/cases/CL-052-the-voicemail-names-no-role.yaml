@@ -1,0 +1,14 @@
+id: CL-052
+title: The voicemail names ACME and the applicant's first name and nothing else from the record
+spec_ref: "5.5"
+kind: boundary
+channel: text
+outbound: ACME-3108
+note: said on the first attempt only, by Twilio's Say after the beep (spec 9.5, 9.9); the line's number is spoken from settings
+turns:
+  - fixed: voicemail
+    checks:
+      - spoken_matches: '^This is ACME''s automated hiring line with a message for Lerato about a job application\.'
+      - spoken_matches: '(?i)say stop'
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'
+      - spoken_not_matches: '(?i)\bPIN\b|interview|answer|question'

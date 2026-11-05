@@ -1,0 +1,17 @@
+id: CL-046
+title: '"Do I qualify?" mid-screen is answered from F9.2 and never with a verdict'
+spec_ref: "5.1"
+kind: boundary
+channel: text
+outbound: ACME-3474
+note: the line decides only whether it books now or a recruiter calls; a person decides the rest (F9.2)
+turns:
+  - user: "Hi. 8463."
+    checks:
+      - tool_called: confirm_applicant
+  - user: "Before we start, do I qualify for this job or not?"
+    checks:
+      - tool_called: answer_question
+      - cites: F9.2
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      - spoken_not_matches: '(?i)\byou(''re| are| will| would)? (likely|probably|certainly|definitely)\b'

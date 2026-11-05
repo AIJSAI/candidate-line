@@ -1,0 +1,15 @@
+id: CL-054
+title: An applicant who calls in verifies by code and PIN and hears the same posted questions
+spec_ref: "3.10"
+kind: regression
+channel: text
+note: verify_caller reads applicants too; the code is read back, the PIN never (spec 3.1, 3.10, 9.8)
+turns:
+  - user: "Hi, I applied for the warehouse job. My code is ACME-2609 and my PIN is 7750."
+    checks:
+      - tool_called: verify_caller
+      - spoken_matches: '(?i)2[\s,-]*6[\s,-]*0[\s,-]*9|two[\s,-]+six[\s,-]+(zero|oh)[\s,-]+nine'
+      - spoken_matches: 'questions the employer posted for the Warehouse Associate role'
+      - spoken_matches: 'The posting asks for a current forklift certificate\. Do you hold one\?'
+      - spoken_not_matches: '7[\s,.-]*7[\s,.-]*5[\s,.-]*0'
+      - tier: "1"

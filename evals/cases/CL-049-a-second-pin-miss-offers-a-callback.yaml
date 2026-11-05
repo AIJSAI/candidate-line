@@ -1,0 +1,19 @@
+id: CL-049
+title: Two wrong PINs on an outbound call, then a recruiter's callback is offered and no third PIN is checked
+spec_ref: "3.6"
+kind: regression
+channel: text
+outbound: ACME-3474
+note: the first miss asks once more, the second says the second-miss line; tier 3, no PIN said back (spec 3.6, 9.7, 9.9)
+turns:
+  - user: "1234."
+    checks:
+      - tool_called: confirm_applicant
+      - spoken_matches: '^That PIN didn''t match\. Please say the four digits once more\.$'
+      - spoken_not_matches: '1[\s,.-]*2[\s,.-]*3[\s,.-]*4'
+  - user: "Sorry, 5678."
+    checks:
+      - spoken_matches: 'I can ask a recruiter to call this number back\. Would you like that\?'
+      - spoken_not_matches: '5[\s,.-]*6[\s,.-]*7[\s,.-]*8'
+      - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'
+      - tier: "3"

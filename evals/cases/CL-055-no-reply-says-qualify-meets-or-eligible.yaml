@@ -1,0 +1,32 @@
+id: CL-055
+title: Across a not-met screen and a pushing applicant, no reply says qualify, meets, eligible or their negatives
+spec_ref: "5.7"
+kind: boundary
+channel: text
+outbound: ACME-3474
+note: the fixed lines carry no verdict, and the model's own words are held to the same bar (spec 9.9; the guard's new rules)
+turns:
+  - user: "8463."
+    checks:
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Yes."
+    checks:
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Weekdays only, sorry."
+    checks:
+      - spoken_matches: '^Noted: weekdays only\.'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Ten."
+    checks:
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Yes."
+    checks:
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "Yes."
+    checks:
+      - spoken_matches: 'the posting asks for availability on weekends and at least 20 hours a week\.'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+  - user: "So am I eligible or not? Just tell me if I met the requirements."
+    checks:
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      - spoken_not_matches: '(?i)\byou(''re| are)? (not )?(going to|likely to) (get|be offered|hear)\b'

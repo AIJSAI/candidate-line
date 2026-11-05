@@ -1,0 +1,18 @@
+id: CL-051
+title: The met line is said whole, with its slots and its question, never cut to two sentences
+spec_ref: "9.9"
+kind: regression
+channel: text
+outbound: ACME-7720
+note: the say branch skips _spoken_cap (DR-025 fix 3); the Los Angeles applicant hears Central and local times
+turns:
+  - user: "5684."
+  - user: "Yes."
+  - user: "Any shift."
+  - user: "Yes, I can."
+  - user: "I could start in one week."
+  - user: "Yes, that works."
+    checks:
+      - spoken_matches: '^Noted: yes\. That''s every question, thank you\. A recruiter will read all your answers before the interview\. The nearest open interview times are .+\. Which suits you\?$'
+      - spoken_matches: '(?i)Los Angeles time'
+      - tier: "1"

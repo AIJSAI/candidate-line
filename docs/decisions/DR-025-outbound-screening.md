@@ -14,7 +14,7 @@ James ruled the shape on 5 November 2026, over the design notes' default (the no
 
 Five controls were added to the contract on 5 November, before the lanes started, from the review of the design memo: an allow-list of the only numbers the dialler may call while the line is a demo, a nonce in the intake signature, both new secrets as secret references, retention defaults for the numbers and the answers, and no Sunday calling with the role never named before the PIN.
 
-Section 5 of the spec keeps every line; the rewording of Never 1, a new Never 7, and the outbound lines under Never 3 and Never 5 are written beside them as proposed to James on 2026-11-05, pending his words.
+Section 5 of the spec keeps every line. The rewording of Never 1, the new Never 7 and the outbound lines under Never 3 and Never 5 were proposed to James on 2026-11-05 and ruled by him the same morning, 09:21 CT, in chat ("You are authorized if you are 100%", in reply to the four items put to him: Never 1's wording, Never 7, the rule 4 amendment in AGENTS.md, and the lexicon and eval diffs approved by summary). They stand in section 5 as the lines, with the earlier Never 1 recorded beside the new one. The brief carries both (section 13).
 
 ## Contracts
 

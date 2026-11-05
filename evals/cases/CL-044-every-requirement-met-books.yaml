@@ -1,0 +1,31 @@
+id: CL-044
+title: Every posted requirement met, the line offers the recruiter's times and books the one named
+spec_ref: "9.10"
+kind: regression
+channel: text
+outbound: ACME-2609
+note: the met line is said by code with up to three of Recruiter B's slots; a named day and time books at once (spec 3.3, 3.9)
+turns:
+  - user: "Sure, my PIN is 7750."
+    checks:
+      - tool_called: confirm_applicant
+      - spoken_matches: 'Warehouse Associate role'
+  - user: "Yes, I have a current certificate."
+  - user: "Nights."
+  - user: "Yes."
+  - user: "Two weeks."
+    checks:
+      - spoken_matches: '^Noted: 2 weeks\.'
+  - user: "Yes, that works."
+    checks:
+      - spoken_matches: 'That''s every question, thank you\. A recruiter will read all your answers before the interview\. The nearest open interview times are'
+      - spoken_matches: 'Thursday 5 November at 11:00 AM Central'
+      - state: {screen: met}
+      - tier: "1"
+  - user: "Thursday at 11 AM works for me."
+    checks:
+      - tool_called: book_slot
+      - state: {booked_slot: S1105-1100}
+      - spoken_matches: '(?i)Thursday'
+      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      - tier: "1"

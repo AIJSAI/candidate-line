@@ -1,0 +1,21 @@
+id: CL-056
+title: The screening hand-off names the applicant, the role, the promised time and the record link, and no answer
+spec_ref: "9.11"
+kind: boundary
+channel: text
+outbound: ACME-7720
+note: the email never carries an answer, the applicant's words, which requirement was not met, or the number (spec 9.11; DR-025 section 15)
+turns:
+  - user: "5684."
+  - user: "No, I don't have one."
+  - user: "Day only."
+  - user: "Yes."
+  - user: "Six weeks."
+  - user: "No, that's too low for me."
+    checks:
+      - tier: "2"
+      - hand_off_matches: '(?i)^Screening hand-off: Bilal \(ACME-7720\)'
+      - hand_off_matches: '/applicants/ACME-7720'
+      - hand_off_matches: '(?i)promised'
+      - hand_off_not_matches: '(?i)forklift|certificate|day only|\bsix\b|\b6 weeks\b|too low|18 to 21|pay range|evening|night shift|50 pounds|\bnoted\b|skipped|not clear'
+      - hand_off_not_matches: '\+1\d{10}|\d{3}[-. ]\d{3}[-. ]\d{4}'
