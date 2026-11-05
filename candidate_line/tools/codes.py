@@ -116,9 +116,29 @@ def _code(match: re.Match[str]) -> str:
     return f"{lead}{code_label(_joined(match.group('digits')))}"
 
 
+# A bare run of four digits beside a PIN is the code even with no cue word: on the operator's first call to the
+# container (2026-11-04, 20:14 CT) the transcriber wrote "it's 323-3 and the PIN is 9683", the hyphen kept the
+# model from reading a code, and the caller paid a turn to say it again. A time ("9:30") has a colon, which the
+# gap never spans, and a year beside a PIN is not a thing a caller says.
+_BARE_CODE = re.compile(
+    rf"(?<![0-9A-Za-z-])(?P<digits>{_DIGIT_TOKEN}(?:{_GAP}{_DIGIT_TOKEN}){{3}})(?![0-9])", re.IGNORECASE
+)
+
+
+def _bare_code_beside_pin(text: str) -> str:
+    if "PIN " not in text or "ACME-" in text:
+        return text
+    pin_at = text.index("PIN ")
+    for match in _BARE_CODE.finditer(text):
+        if match.start() < pin_at and len(_joined(match.group("digits"))) == 4:
+            return text[: match.start()] + code_label(_joined(match.group("digits"))) + text[match.end() :]
+    return text
+
+
 def normalise_transcript(text: str) -> str:
     """The caller's words with each code written "ACME-dddd" and each PIN "PIN dddd". The PIN keeps its digits as
     heard, a dropped leading zero included, since pin_digits puts the zero back when the tool reads it."""
     text = _THOUSANDS.sub(r"\1\2", text)
     text = _PIN.sub(lambda m: f"PIN {_joined(m.group('digits'))}", text)
-    return _CODE.sub(_code, text)
+    text = _CODE.sub(_code, text)
+    return _bare_code_beside_pin(text)
