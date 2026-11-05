@@ -241,3 +241,46 @@ def test_the_sns_topic_comes_from_settings() -> None:
     assert Settings.from_env({}).sns_topic_arn is None
     assert Settings.from_env({"SNS_TOPIC_ARN": ""}).sns_topic_arn is None
     assert Settings.from_env({"SNS_TOPIC_ARN": TOPIC}).sns_topic_arn == TOPIC
+
+
+def test_the_queue_sends_the_email_form_to_a_poster_that_has_one() -> None:
+    from candidate_line.escalation import SnsPoster, format_email, format_subject
+
+    client = FakeSns()
+    store = TraceStore(":memory:")
+    e = Escalation(
+        call_id="CA1",
+        tier="2",
+        reason="callback request from ACME-3233 (Hannah Haddad): relocation; best time tomorrow afternoon",
+        suggested_action="call the candidate back",
+        trace_url="http://127.0.0.1:8001/calls/CA1",
+        caller="***-***-0657",
+        raised_at="2026-11-04 20:15",
+    )
+    queue = EscalationQueue(store, SnsPoster(TOPIC, client=client))
+    queue.submit(e)
+    queue.drain()
+    [published] = client.published
+    assert published["Subject"] == "Candidate Line: callback request from ACME-3233 (Hannah Haddad)"
+    assert published["Message"] == format_email(e)
+    body = published["Message"]
+    assert "relocation; best time tomorrow afternoon" in body
+    assert "***-***-0657" in body and "call the candidate back" in body and "2026-11-04 20:15 Central" in body
+    assert "9683" not in body
+    assert format_subject(e) == published["Subject"]
+
+
+def test_the_subject_is_one_short_ascii_line() -> None:
+    from candidate_line.escalation import SNS_SUBJECT_MAX, format_subject
+
+    long = Escalation(
+        "CA2", "2", "move request from ACME-6792 (Priya Marchetti)" + ": " + "x" * 300, "a", "u"
+    )
+    assert format_subject(long) == "Candidate Line: move request from ACME-6792 (Priya Marchetti)"
+    odd = Escalation("CA3", "3", "guard\u00a0hit\nagain" + ": " + "y" * 300, "a", "u")
+    subject = format_subject(odd)
+    assert (
+        "\n" not in subject and len(subject) <= SNS_SUBJECT_MAX and all(32 <= ord(c) < 127 for c in subject)
+    )
+    bare = Escalation("CA4", "3", "", "a", "u")
+    assert format_subject(bare) == "Candidate Line: tier 3 hand-off"

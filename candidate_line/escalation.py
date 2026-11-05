@@ -18,14 +18,17 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from candidate_line.traces import TraceStore
 
 log = logging.getLogger("candidate_line.escalation")
 
 SNS_SUBJECT = "Candidate Line hand-off"
+SNS_SUBJECT_MAX = 100  # SNS refuses a longer subject, and it must be one line of printable ASCII
 
 TEMPLATE = (
     "Candidate Line: {tier} on call {call_id}\n"
@@ -47,6 +50,41 @@ class Escalation:
     # The masked number from the store's call row (TraceStore.call), so the recruiter knows who to ring back
     # without opening the trace; "-" in text mode, where there is no number. Never a raw number (AGENTS.md rule 7).
     caller: str = "-"
+    # When the hand-off was raised, in Central time, for the email: the operator reads it hours later.
+    raised_at: str = field(default_factory=lambda: central_now())
+
+
+def central_now() -> str:
+    return datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M")
+
+
+def format_subject(e: Escalation) -> str:
+    """One line a coordinator can act on from the inbox list: the kind of hand-off and who it is from ("callback
+    request from ACME-3233 (Hannah Haddad)"), never the detail after it, which may hold free text. Cut to SNS's
+    limit on one line of printable ASCII."""
+    head = e.reason.split(":", 1)[0].strip() or f"tier {e.tier} hand-off"
+    subject = f"Candidate Line: {head}"
+    subject = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in subject)
+    return subject[:SNS_SUBJECT_MAX]
+
+
+def format_email(e: Escalation) -> str:
+    """The email body: what the caller asked, who they are (masked), what to do next, and where the call's
+    record is. The Slack and log template stays as it was; this one reads as a note, because the first hand-off
+    email of 2026-11-04 arrived as the template's bare lines and the operator called it messy."""
+    what = e.reason
+    return (
+        "A caller on the ACME candidate line needs a person.\n"
+        "\n"
+        f"What:   {what}\n"
+        f"Caller: {e.caller} (the number the call came from, masked)\n"
+        f"Next:   {e.suggested_action}\n"
+        f"When:   {e.raised_at} Central\n"
+        f"Call:   {e.call_id}\n"
+        "\n"
+        "The call's steps are on the cockpit's page for this call, which the operator reaches through the private "
+        "port-forward; log what you did there, and that closes the loop."
+    )
 
 
 def format_message(e: Escalation) -> str:
@@ -117,9 +155,16 @@ class SnsPoster:
             client = boto3.client("sns", region_name=parts[3])
         self._client = client
 
+    def post_escalation(self, e: Escalation) -> None:
+        """The email form: a subject that says what happened and a body that reads as a note (format_email)."""
+        self._publish(format_subject(e), format_email(e))
+
     def post(self, text: str) -> None:
+        self._publish(SNS_SUBJECT, text)
+
+    def _publish(self, subject: str, text: str) -> None:
         try:
-            self._client.publish(TopicArn=self._topic_arn, Subject=SNS_SUBJECT, Message=text)
+            self._client.publish(TopicArn=self._topic_arn, Subject=subject, Message=text)
         except Exception as error:  # noqa: BLE001  (raised again below, as a code with no account id in it)
             # botocore's message names the role and the topic, both with the account id, and the queue writes
             # what it is given into the trace store; the code alone says what went wrong.
@@ -171,7 +216,11 @@ class EscalationQueue:
                 e.call_id, e.tier, e.reason, e.suggested_action, self._poster.channel
             )
             try:
-                self._poster.post(format_message(e))
+                post_escalation = getattr(self._poster, "post_escalation", None)
+                if post_escalation is not None:
+                    post_escalation(e)  # the email form, where the poster has one
+                else:
+                    self._poster.post(format_message(e))
                 self._store.mark_posted(escalation_id)
             except Exception as error:  # noqa: BLE001  (any failure is recorded against the call, never raised into a turn)
                 self._store.mark_posted(escalation_id, error=f"{type(error).__name__}: {error}")
