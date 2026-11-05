@@ -19,6 +19,10 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING")
 # `make cockpit` serves on loopback at this address (Makefile), so a hand-off's trace link works on this Mac with
 # nothing set; COCKPIT_BASE_URL names another address when the recruiter reads the cockpit elsewhere.
 DEFAULT_COCKPIT_BASE_URL = "http://127.0.0.1:8001"
+# The tools' ledger keeps the line's bookings, move requests and callbacks here, beside the trace store under the
+# ignored var/; STATE_PATH names another file, and ":memory:" keeps them for one call only (the tests, the evals and
+# the walks, so the live ledger stays clean).
+DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent / "var" / "state.json"
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,7 @@ class Settings:
     log_level: str
     trace_store_path: str | None
     eval_trace_store_path: str | None
+    state_path: str | None  # None means in memory
     slack_webhook_url: str | None
     cockpit_base_url: str
     # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above.
@@ -83,6 +88,7 @@ class Settings:
             # store module's default beside var/traces.sqlite; TRACE_STORE_PATH is the name the store already used.
             trace_store_path=e.get("TRACE_STORE_PATH") or None,
             eval_trace_store_path=e.get("EVAL_TRACE_STORE_PATH") or None,
+            state_path=_state_path(e.get("STATE_PATH")),
             # The escalation channel (DR-013): Slack when set, the log poster otherwise. A secret, from the keychain.
             slack_webhook_url=e.get("SLACK_WEBHOOK_URL") or None,
             # Where a hand-off's trace link points (escalation.trace_link). An empty value reads as unset.
@@ -97,3 +103,10 @@ class Settings:
         if self.system_prompt_file:
             return Path(self.system_prompt_file).read_text(encoding="utf-8").strip()
         return SYSTEM_PROMPT
+
+
+def _state_path(raw: str | None) -> str | None:
+    """An empty value reads as unset, like every other path here."""
+    if raw == ":memory:":
+        return None
+    return raw or str(DEFAULT_STATE_PATH)
