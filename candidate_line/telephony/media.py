@@ -3,14 +3,16 @@
 Why one class with injected ears, mouth and brain: the whole loop is tested with fakes and no network, and the
 same loop runs the real pair under `make dev`. Why barge-in is a `clear`: Twilio buffers what we send and plays
 it; emptying that buffer is the only way to stop Gus mid-sentence (the WebSocket messages page, DR-005). What
-counts as barge-in today: a partial transcript with words while Gus is speaking. Tracing spans are not written
-here yet; they are added live, before the first tool (PREBUILT.md).
+counts as barge-in: a partial transcript with words other than fillers while Gus is speaking. On a call this file
+writes the heard and spoken spans (card 03), because only the voice path knows the transcriber's confidence and
+lag and the synthesis time.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -18,6 +20,7 @@ from typing import Any
 from candidate_line.brain import Brain
 from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import Hooks
+from candidate_line.persona import RECOVERY_LINE
 from candidate_line.telephony.audio import (
     decode_twilio_payload,
     encode_twilio_payload,
@@ -25,14 +28,15 @@ from candidate_line.telephony.audio import (
     mulaw_to_pcm16,
     split_sentences,
 )
-from candidate_line.telephony.speech import Speaker, Transcriber
+from candidate_line.telephony.speech import Heard, Speaker, Transcriber
+from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, run_silence, run_turn
 
 log = logging.getLogger("candidate_line.media")
 
-# Said when a turn raises and the caller is still on the line; the exception is logged, the call goes on.
-RECOVERY_LINE = "Sorry, I lost that. Could you say it again?"
+# RECOVERY_LINE (persona.py) is said when a turn raises and the caller is still on the line; the exception is
+# logged, the call goes on.
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 OUT_CHUNK_BYTES = 4000  # half a second of mu-law per WebSocket message
 
@@ -52,6 +56,37 @@ GRACE_BACKSTOP_MS = 2000  # a partial that never becomes a final still releases 
 # it before the dry run of card 06 found the hole. It fires again after another such stretch.
 SILENCE_AFTER_S = 6.0
 _HANDOVER_MARKS = ("?", "!")
+
+# Sounds a caller makes while thinking. On a real call on 2026-11-04 the caller's "Um," cut Gus off mid-sentence and
+# then became a turn of its own that Gus answered. So a transcript made only of these is not speech: it never barges
+# in, never supersedes a turn, never holds the turn open and never becomes one. "Mm-hmm" and "uh-huh" are not here
+# because callers say them for yes.
+FILLERS = frozenset({"um", "uh", "hmm", "mm", "mhm", "er", "erm", "ah", "huh"})
+# "Uh huh" and "mm hmm" written as two words are still a caller's yes, and "huh?" asks Gus to say it again, so
+# none of them is dropped even though each word alone is a filler.
+_NOT_FILLER = re.compile(r"(?i)^\W*(?:uh\W*huh|mm\W*hmm|huh\W*\?)\W*$")
+
+# A PIN reaches the transcript with or without the word PIN before it, and a transcript cannot tell a code from a
+# PIN, so a span's text masks every run of three or more digits, written or spoken (spec section 5, Never 4; card
+# 03, open decision 3). The code is still in the verify tool's span, where the store masks only the PIN. A time
+# such as 9:30 and a date such as 5 November keep their digits, so a booking turn stays readable.
+_DIGIT_WORD = r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
+_DIGIT_RUN = re.compile(r"\d(?:[ ,.\-]{0,2}\d){2,}")
+_DIGIT_WORD_RUN = re.compile(rf"\b{_DIGIT_WORD}(?:[ ,.\-]{{1,2}}{_DIGIT_WORD}){{2,}}\b", re.IGNORECASE)
+
+
+def is_filler(text: str) -> bool:
+    """True when every word, without its punctuation and case, is a filler, or there is no word at all."""
+    if _NOT_FILLER.match(text):
+        return False
+    words = ("".join(ch for ch in token if ch.isalnum()).casefold() for token in text.split())
+    return all(word in FILLERS for word in words if word)
+
+
+def mask_spoken_digits(text: str) -> str:
+    """The text with each digit of a run of three or more, written or spoken, replaced by an asterisk."""
+    text = _DIGIT_RUN.sub(lambda m: re.sub(r"\d", "*", m.group()), text)
+    return _DIGIT_WORD_RUN.sub(lambda m: re.sub(_DIGIT_WORD, "*", m.group(), flags=re.IGNORECASE), text)
 
 
 async def _settle(task: asyncio.Future, timeout: float, what: str) -> None:
@@ -84,6 +119,7 @@ class MediaSession:
         store: TraceStore | None = None,
         escalations: EscalationQueue | None = None,
         silence_after_s: float = SILENCE_AFTER_S,
+        ledger: Ledger | None = None,
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -93,7 +129,12 @@ class MediaSession:
         self._greeting = greeting
         self.stream_sid = stream_sid
         self.ctx = TurnContext(
-            call_id=call_id, channel="voice", system=system, store=store, escalations=escalations
+            call_id=call_id,
+            channel="voice",
+            system=system,
+            store=store,
+            escalations=escalations,
+            ledger=ledger,
         )
         self._silence_after = silence_after_s
         self._last_activity = time.monotonic()  # the caller's last words or the end of Gus's last line
@@ -188,7 +229,9 @@ class MediaSession:
             async for heard in self._transcriber.events():
                 if heard.is_partial:
                     log.debug("partial %s %r", self.ctx.call_id, heard.text[-60:])
-                    if heard.text.strip():
+                    # A filler leaves the silence clock alone too: line noise transcribed as "Uh." must not hold
+                    # a dead call open past the hold limit.
+                    if not is_filler(heard.text):
                         self._last_activity = time.monotonic()
                         if self.speaking:
                             await self.barge_in()
@@ -196,6 +239,11 @@ class MediaSession:
                             self._superseded = True
                         # The caller went on talking: the pending finals wait for the next final, with a backstop.
                         self._arm_grace(None)
+                    continue
+                filler = is_filler(heard.text)
+                self._trace_final(heard, filler)
+                if filler:
+                    log.info("filler dropped %s %r", self.ctx.call_id, heard.text)
                     continue
                 log.info("final %s %r", self.ctx.call_id, heard.text)
                 self._last_activity = time.monotonic()
@@ -209,6 +257,47 @@ class MediaSession:
         except Exception:
             log.exception("listening failed for %s", self.ctx.call_id)
             raise
+
+    def _trace(self, kind: str, name: str, **fields: Any) -> None:
+        """Writes one span when the call has a store. A failed write is logged and the call goes on, because a
+        trace is never worth a dropped turn or a silent caller."""
+        if self.ctx.store is None:
+            return
+        try:
+            self.ctx.store.span(self.ctx.call_id, kind, name, **fields)
+        except Exception:
+            log.exception("%s span failed for %s", kind, self.ctx.call_id)
+
+    def _trace_final(self, heard: Heard, filler: bool) -> None:
+        # Every final is traced, a dropped filler included, so the cockpit shows what the caller said that Gus let go.
+        meta: dict[str, Any] = {}
+        if heard.confidence is not None:
+            meta["confidence"] = heard.confidence
+        if filler:
+            meta["dropped"] = "filler"
+        self._trace(
+            "transcribe", "final", text=mask_spoken_digits(heard.text), ms=heard.final_lag_ms, meta=meta
+        )
+
+    def _run_undo(self) -> None:
+        """Takes back what a superseded turn's tools did, newest first, so a slot booked on half a question is
+        free again before the whole question is answered. One reversal failing never stops the rest or the call."""
+        undo = self.ctx.data.pop("undo", None) or []
+        for reverse in reversed(undo):
+            try:
+                reverse()
+            except Exception:
+                log.exception("undo failed for %s", self.ctx.call_id)
+        if undo:
+            log.info("undid %d tool effects of the superseded turn %s", len(undo), self.ctx.call_id)
+        # The dropped turn's tool and tier spans stay in the trace, so this one says they were never heard and
+        # what they did was taken back; the cockpit and card 07's booking count read it.
+        self._trace(
+            "hook",
+            "superseded",
+            text="the caller kept talking, so this turn was not spoken and its tool effects were taken back",
+            meta={"undone": len(undo)},
+        )
 
     def _arm_grace(self, last_final: str | None) -> None:
         self._cancel_grace()
@@ -266,6 +355,7 @@ class MediaSession:
                 # two messages come off the history, and its words lead the next turn, so one whole question is
                 # answered once. The turn's clock keeps running from the first final.
                 del self.ctx.history[history_before:]
+                self._run_undo()
                 self._carry = text
                 self.superseded += 1
                 log.info("turn superseded %s heard=%r (the caller kept talking)", self.ctx.call_id, text)
@@ -289,10 +379,14 @@ class MediaSession:
         async with self._speak_lock:
             self._interrupted.clear()
             self.speaking = True
+            synth_ms = 0.0
+            gap_ms: int | None = None
             for sentence in split_sentences(text):
                 if self._interrupted.is_set():
                     break
+                synth_started = time.perf_counter()
                 mulaw = await asyncio.to_thread(self._speaker.say, sentence)
+                synth_ms += (time.perf_counter() - synth_started) * 1000
                 if self._interrupted.is_set():
                     break
                 for chunk in frames(mulaw, OUT_CHUNK_BYTES):
@@ -314,6 +408,15 @@ class MediaSession:
             # Twilio is still playing what we sent; `speaking` clears when the last mark comes back.
             if not self._pending_marks:
                 self.speaking = False
+            # Written after the audio is out, so a slow store write never delays the caller's first byte.
+            self._trace(
+                "speech",
+                "polly",
+                text=mask_spoken_digits(text),
+                chars=len(text),
+                ms=round(synth_ms),
+                meta={} if gap_ms is None else {"first_audio_gap_ms": gap_ms},
+            )
 
     def _on_mark(self, name: str) -> None:
         self._pending_marks.discard(name)

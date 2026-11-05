@@ -3,19 +3,22 @@ import base64
 import threading
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from candidate_line.brain import EchoBrain
 from candidate_line.hooks import NoHooks
-from candidate_line.persona import GREETING
 from candidate_line.settings import Settings
 from candidate_line.telephony.app import Deps, create_app, twiml_stream
 from candidate_line.telephony.audio import MULAW_FRAME_BYTES, mulaw_to_pcm16, pcm16_to_mulaw, split_sentences
-from candidate_line.telephony.media import RECOVERY_LINE, MediaSession
-from candidate_line.telephony.speech import FakeSpeaker, ScriptedTranscriber
+from candidate_line.telephony.media import RECOVERY_LINE, MediaSession, is_filler, mask_spoken_digits
+from candidate_line.telephony.speech import FakeSpeaker, Heard, ScriptedTranscriber
 from candidate_line.traces.store import TraceStore
 
 SID = "MZ123"
+# The media tests count the sentences Gus says, so they greet in one sentence of their own; the persona's greeting
+# (candidate_line.persona.GREETING) is two, and its words are not what these tests are about.
+GREETING = "ACME candidate line, this is Gus."
 
 
 def frame() -> dict:
@@ -547,3 +550,267 @@ def test_a_failed_turn_speaks_the_recovery_line_instead_of_silence(caplog) -> No
     asyncio.run(session.run(incoming()))
     assert speaker.said[0] == GREETING and " ".join(speaker.said[1:]) == RECOVERY_LINE
     assert "turn failed for CA1" in caplog.text and "the model is down" in caplog.text
+
+
+@pytest.mark.parametrize("text", ["Uh huh.", "Mm hmm.", "Huh?", "uh, huh", "MM HMM"])
+def test_a_yes_in_two_filler_words_and_a_huh_asking_again_are_speech(text: str) -> None:
+    assert not is_filler(text)
+
+
+def test_a_transcript_made_only_of_fillers_is_a_filler() -> None:
+    for text in ("Um,", "um", "Uh... hmm.", "MHM.", "Er, erm, ah?", "huh", "", "   ", "..."):
+        assert is_filler(text), text
+    for text in ("Um, I have a question.", "3233", "Mm-hmm.", "Uh-huh.", "ah, okay", "PIN"):
+        assert not is_filler(text), text
+
+
+def test_a_span_masks_every_run_of_three_or_more_digits_but_keeps_times_and_dates() -> None:
+    assert mask_spoken_digits("My code is ACME-3233, PIN 4417.") == "My code is ACME-****, PIN ****."
+    assert mask_spoken_digits("It's 32 33 and 0, 417") == "It's ** ** and *, ***"
+    assert mask_spoken_digits("four four one seven") == "* * * *"
+    assert (
+        mask_spoken_digits("Thursday 5 November at 9:30 AM Central")
+        == "Thursday 5 November at 9:30 AM Central"
+    )
+    assert mask_spoken_digits("one or two questions") == "one or two questions"
+
+
+def test_a_filler_partial_while_speaking_neither_clears_nor_arms_the_grace() -> None:
+    gate = threading.Event()
+    calls = {"n": 0}
+
+    def delay() -> None:
+        calls["n"] += 1
+        if calls["n"] == 2:  # hold the second sentence while the caller says "Um,"
+            gate.wait(2)
+
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker(delay=delay)
+    grace_seen: list[object] = []
+
+    async def script(session, sent):
+        await settle(lambda: sum(m["event"] == "mark" for m in sent) == 1)
+        transcriber.hear("Um,", is_partial=True)
+        await asyncio.sleep(0.05)
+        grace_seen.append(session._grace)
+        gate.set()
+        await settle(lambda: sum(m["event"] == "mark" for m in sent) == 2)
+        yield {"event": "stop", "streamSid": SID}
+
+    sent, session = run_session(transcriber, speaker, script, greeting="First sentence. Second sentence.")
+    assert session.barge_ins == 0 and "clear" not in [m["event"] for m in sent]
+    assert speaker.said == ["First sentence.", "Second sentence."]
+    assert grace_seen == [None]
+
+
+def test_a_filler_partial_while_the_reply_is_being_made_does_not_supersede_it() -> None:
+    transcriber, speaker, brain = ScriptedTranscriber(), FakeSpeaker(), GatedEcho()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, brain, NoHooks(), "sys", "CA1", SID, greeting=GREETING, grace_ms=(50, 60)
+    )
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hi, I got an invite.", is_partial=False)
+        await settle(lambda: session._thinking)
+        transcriber.hear("Uh", is_partial=True)
+        await asyncio.sleep(0.02)
+        brain.gate.set()
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 2)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert session.superseded == 0 and session.turns == 1
+    assert speaker.said == [GREETING, "Hi, I got an invite."]
+
+
+def test_a_filler_final_makes_no_turn_and_is_traced_as_dropped(caplog) -> None:
+    caplog.set_level("INFO", logger="candidate_line.media")
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, EchoBrain(), NoHooks(), "sys", "CA1", SID, grace_ms=(50, 60), store=store
+    )
+
+    async def script():
+        transcriber.hear("Um,", is_partial=False)
+        await asyncio.sleep(0.2)  # well past the grace: a turn would have fired by now
+        assert session._pending == [] and session._grace is None
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert session.turns == 0 and speaker.said == []
+    assert "filler dropped CA1 'Um,'" in caplog.text
+    [span] = store.spans("CA1")
+    assert (span.kind, span.name, span.text, span.meta) == (
+        "transcribe",
+        "final",
+        "Um,",
+        {"dropped": "filler"},
+    )
+
+
+def test_a_final_with_words_after_a_filler_still_makes_a_turn() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Um, can I book Thursday?", is_partial=False)
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 2)
+        yield {"event": "stop", "streamSid": SID}
+
+    _sent, session = run_session(transcriber, speaker, script)
+    assert session.turns == 1 and speaker.said[1:] == ["Um, can I book Thursday?"]
+
+
+def test_a_call_writes_a_transcribe_span_per_final_and_a_speech_span_per_line() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    sent: list[dict] = []
+    heard = "My code is ACME-3233. PIN 4417."
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, EchoBrain(), NoHooks(), "sys", "CA1", SID, greeting="Hi.", store=store
+    )
+
+    async def script():
+        await quiet(session, sent, transcriber)
+        transcriber._put(Heard(heard, is_partial=False, confidence=0.91, final_lag_ms=420))
+        await settle(lambda: session.turns == 1 and len(speaker.said) == 3)
+        await settle(lambda: len(media_spans(store)) == 3)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    # The turn loop writes its own spans (model, guard, tier) between these; this file owns these two kinds.
+    greeting, final, reply = media_spans(store)
+    assert [(s.kind, s.name) for s in (greeting, final, reply)] == [
+        ("speech", "polly"),
+        ("transcribe", "final"),
+        ("speech", "polly"),
+    ]
+    assert final.text == "My code is ACME-****. PIN ****." and "4417" not in (reply.text or "")
+    assert (final.ms, final.seconds, final.meta) == (420, None, {"confidence": 0.91})
+    assert greeting.chars == len("Hi.") and greeting.meta == {}  # no turn clock runs for the greeting
+    assert reply.chars == len(heard) and isinstance(reply.ms, int) and reply.ms >= 0
+    assert reply.meta["first_audio_gap_ms"] >= 0
+
+
+def media_spans(store: TraceStore) -> list:
+    return [s for s in store.spans("CA1") if s.kind in ("transcribe", "speech")]
+
+
+def test_a_span_write_that_fails_never_breaks_the_call(caplog) -> None:
+    class BrokenStore(TraceStore):
+        def span(self, *args, **kwargs):
+            raise RuntimeError("disk full")
+
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    store = BrokenStore(":memory:")
+    store.start_call("CA1", "voice")
+    session = stopped_session_on(transcriber, speaker, store)
+    assert session.turns == 1 and speaker.said == ["hello there"]
+    assert "transcribe span failed for CA1" in caplog.text and "speech span failed for CA1" in caplog.text
+
+
+def stopped_session_on(
+    transcriber: ScriptedTranscriber, speaker: FakeSpeaker, store: TraceStore
+) -> MediaSession:
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    session = MediaSession(
+        send, transcriber, speaker, EchoBrain(), NoHooks(), "sys", "CA1", SID, greeting=None, store=store
+    )
+
+    async def script():
+        transcriber.hear("hello there", is_partial=False)
+        # The speech span is written in the same step as the line's mark, so the mark means the write was tried.
+        await settle(lambda: any(m["event"] == "mark" for m in sent))
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    return session
+
+
+def test_a_superseded_turn_undoes_its_tools_newest_first_and_a_kept_turn_does_not(
+    monkeypatch, caplog
+) -> None:
+    from candidate_line.brain import Reply
+    from candidate_line.telephony import media as media_module
+    from candidate_line.turn import TurnResult
+
+    gate = threading.Event()
+    undone: list[str] = []
+    calls = {"n": 0}
+
+    def broken() -> None:
+        raise RuntimeError("ledger busy")
+
+    def turn(brain, hooks, ctx, text, max_tokens=None):
+        calls["n"] += 1
+        if calls["n"] == 1:  # the half question books a slot, then the caller goes on
+            ctx.data.setdefault("undo", []).extend(
+                [lambda: undone.append("first"), broken, lambda: undone.append("second")]
+            )
+            gate.wait(2)
+        else:
+            ctx.data["undo"] = [lambda: undone.append("kept")]
+        return TurnResult(text, text, Reply("", 0, 0, 0, "echo", "none"))
+
+    monkeypatch.setattr(media_module, "run_turn", turn)
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "voice")
+    session = MediaSession(
+        send,
+        transcriber,
+        speaker,
+        EchoBrain(),
+        NoHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=None,
+        grace_ms=(50, 60),
+        store=store,
+    )
+
+    async def script():
+        transcriber.hear("Book Thursday.", is_partial=False)
+        await settle(lambda: session._thinking)
+        transcriber.hear("at nine", is_partial=True)
+        await asyncio.sleep(0.02)
+        transcriber.hear("at nine thirty.", is_partial=False)
+        gate.set()
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert session.superseded == 1 and calls["n"] == 2
+    assert undone == ["second", "first"]  # the broken reversal in between was logged and passed over
+    assert "undo failed for CA1" in caplog.text and "ledger busy" in caplog.text
+    assert len(session.ctx.data["undo"]) == 1  # the spoken turn's reversal waits for the loop to clear it
+    # The dropped turn's spans stay, so a span says it was never heard and its effects were taken back.
+    [dropped] = [span for span in store.spans("CA1") if (span.kind, span.name) == ("hook", "superseded")]
+    assert dropped.meta == {"undone": 3} and "not spoken" in (dropped.text or "")
