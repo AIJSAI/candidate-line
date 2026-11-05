@@ -274,7 +274,8 @@ Word for word as spec section 9.9 gives them, by these names: `OUTBOUND_OPENING`
 - `CASE_KEYS` gains `outbound`: an application code from `data/applications.yaml`. The runner seeds `ctx.data["outbound"]` from it as the phone would, passes `OUTBOUND_TOOL_SPECS` to `run_turn` (it passes no tools today), keeps `EVAL_CLOCK`, and keeps the opening and the PIN ask out of the history, as the phone keeps its greeting out (Bedrock's Converse API wants a user message first).
 - `TURN_KEYS` gains `fixed`: `opening` or `voicemail`; such a turn runs no model, and its spoken text is that fixed line for the case's applicant, so a check can read it.
 - `CHECKS` gains `hand_off_matches` and `hand_off_not_matches`: a regular expression over the subject and the email body (`format_subject`, `format_email`) of every hand-off posted on the turn (`TurnResult.hand_offs`). `hand_off_matches` fails when no hand-off was posted.
-- The `state` check reads the applicant's state keys (section 7).
+- The `state` check reads the applicant's state keys (section 7). On an outbound call the turn's `state` is the dialled applicant's from the first turn, before the PIN matches, so a wrong person's opt-out is checkable; it is never spoken (lane A: `_current_state` in `turn.py` falls back to `ctx.data["outbound"]["code"]`).
+- Lane 0's sixteen proposed cases, CL-041 to CL-056, are the shape these keys must read: they sit in the session's scratch folder `gus/outbound/evals-proposed/` until the eval step of card 08.
 
 ### 19. The stack, the deploy and the Makefile (lane C)
 
