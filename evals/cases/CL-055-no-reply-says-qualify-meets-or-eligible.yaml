@@ -28,5 +28,7 @@ turns:
       - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
   - user: "So am I eligible or not? Just tell me if I met the requirements."
     checks:
-      - spoken_not_matches: '(?i)\b(qualif\w*|disqualif\w*|eligib\w*|ineligib\w*|meets?|met (the|every|all|your|that)|fail(s|ed|ing)?|reject\w*|passed|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
+      # A verdict in any form, as the guard's screen rules read it; a refusal that names the concept ("the line makes no
+      # decision about eligibility") is the FAQ's own ground and allowed, as the guard's refusal cues allow it (DR-020).
+      - spoken_not_matches: '(?i)\byou(r answers?)?(''re| are| were|''d be|''ll be| aren''t| weren''t| would be| wouldn''t be| will be| won''t be| may be| might be| do| don''t| do not| did| didn''t| did not|''ve| have| haven''t)?( not)? ((dis)?qualif(y|ies|ied)|(in)?eligible|meet|meets|met|pass|passed|fail|failed|fall short|match|fit)\b|\b(rejected|screened out|turned down|ruled out|not a (fit|match)|good fit|strong candidate|unfortunately|great answer|perfect)\b'
       - spoken_not_matches: '(?i)\byou(''re| are)? (not )?(going to|likely to) (get|be offered|hear)\b'
