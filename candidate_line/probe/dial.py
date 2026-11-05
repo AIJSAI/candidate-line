@@ -273,8 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.csv is not None:
         n = append_rows(args.csv, args.arm, f"{case.id}:{call_sid[-6:]}", transcript, recorded, note)
         print(f"{n} rows appended to {args.csv}")
-        if recording_sid is not None and recorded:
-            twilio.delete_recording(recording_sid)  # the CSV holds the turns; Twilio keeps nothing
+    if recording_sid is not None and recorded:
+        twilio.delete_recording(recording_sid)  # the transcript holds the turns; Twilio keeps nothing
     return 1 if failures else 0
 
 
