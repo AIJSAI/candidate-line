@@ -1,0 +1,74 @@
+# Prompt card 08: the outbound screening call
+
+Work item: the line calls an applicant back within minutes of a signed application with consent, asks the role's posted questions, and either books an interview (every posted requirement met) or hands the application to a recruiter with a promised call (one not met), with the gate in code and a person making every hiring decision.
+Record: `docs/decisions/DR-025-outbound-screening.md` (DRAFT). Its Contracts section is what every lane builds to; spec section 9 holds the lines each piece serves (AGENTS.md rule 2). Lane 0 wrote the spec lines, the record, this card, the refs in `docs/refs/` and the data in `data/`; the proposed eval cases wait outside `evals/` (below).
+
+## Paste this
+
+> Read `AGENTS.md`, `spec.md` (sections 3, 4, 5, 7, 8 and 9), `docs/decisions/DR-025-outbound-screening.md` (all of it: the Contracts, Spend and Security sections and the numbered code fixes), `data/roles.yaml`, `data/applications.yaml`, `data/faq.md` (F9) and your lane's files below. Build your lane to DR-025's contracts: the names, signatures, record shapes and fixed lines exactly as written there. If your lane needs a contract changed, stop and say which one and why; the record changes first, then the code. Write the tests with your code, close the numbered code fixes DR-025 assigns to your lane, run `uv run pytest -q`, `uv run ruff check .` and `uv run ruff format --check .`, commit WIP locally every 20 minutes or so with a conventional message, and stop. Touch only your lane's files. Never edit `evals/` or the baseline (AGENTS.md rule 4).
+
+## The lanes
+
+Three builders start from lane 0's commit. Lane C lands the ledger first, as its own commit, because lanes A and B call it; until it lands, A and B code against DR-025 section 7's signatures and test with an in-memory `Ledger` once it is there, or a small fake in their own test files before. The merge order is lane C's ledger, lane A, lane B, then lane C's rest, with the whole suite green after each.
+
+### Lane A: the tools and the loop
+
+Files: `candidate_line/tools/roles.py` (new), `candidate_line/tools/rules.py` (new), `candidate_line/tools/screening.py` (new), `candidate_line/tools/actions.py`, `candidate_line/tools/__init__.py` (to export `OUTBOUND_TOOL_SPECS`), `candidate_line/turn.py`, `candidate_line/persona.py`, `candidate_line/hooks.py`, `candidate_line/guard/lexicon.txt`, `candidate_line/tiers.py`, `candidate_line/escalation.py`, and their tests: `tests/test_roles.py`, `tests/test_rules.py`, `tests/test_screening.py` (new), `tests/test_tools.py`, `tests/test_turn.py`, `tests/test_hooks.py`, `tests/test_guard_red_proof.py`, `tests/test_tiers.py`, `tests/test_escalation.py`.
+
+Acceptance criteria:
+- `rules.check` is pure and tested on every rule form, both sides of every bound, `declined` and `unclear`, and every role in `data/roles.yaml` with an all-met set and each question unmet alone.
+- The roles loader refuses an unknown key (score, weight, rank, knockout, required among them), a rule form that does not fit its kind, and a question on any topic DR-025 section 4 lists, each in its own test; `data/roles.yaml` loads clean.
+- With a scripted brain: the PIN confirms and the intro and first question are said by code; each answer is followed by "Noted: {value}." and the next question with one model call for the turn; the first `unclear` repeats the question; a skip counts as asked; the met line is said whole, slots and question included (fix 3); the not-met line names only the posted `asks` and posts one tier-2 screening hand-off; `book_slot` and `list_open_slots` refuse an applicant with a question unasked and with a requirement unmet, even when the model calls them directly; the second PIN miss says the second-miss line and is tier 3.
+- "Don't call me", "stop calling", "take me off", "wrong number" and "not me" stop the calls with no model call and cancel the dials; "don't stop" and "stop the booking" do not (fix 4).
+- The guard's new rules, red first in `tests/test_guard_red_proof.py`, catch "you qualify", "you don't qualify", "you're (not) eligible for the role", "(you|your answer) (meets|doesn't meet|didn't meet|fails|falls short of) the requirement" and "you don't have what the posting asks for"; every fixed line of spec 9.9, every question in `data/roles.yaml` and every F9 line pass clean. The lexicon diff is James's to approve (DR-020).
+- `format_email` and `format_subject` for a screening hand-off carry the record link and the promised time and none of the fixtures' answers or heard words, tested with every one of them (fix 9). `assign` gives tier 2 for any turn that posted a hand-off (fix 10).
+- `uv run pytest -q` green; ruff clean.
+
+### Lane B: intake and the dialler
+
+Files: `candidate_line/outbound/__init__.py`, `candidate_line/outbound/intake.py`, `candidate_line/outbound/contacts.py`, `candidate_line/outbound/window.py`, `candidate_line/outbound/dialler.py` (all new), `candidate_line/telephony/twilio_rest.py` (new: the probe's standard-library client moved here and extended), `candidate_line/telephony/app.py`, `candidate_line/telephony/media.py`, `candidate_line/settings.py`, `candidate_line/probe/dial.py` (its answer mode and the shared client), and their tests: `tests/test_intake.py`, `tests/test_contacts.py`, `tests/test_window.py`, `tests/test_dialler.py`, `tests/test_twilio_rest.py` (new), `tests/test_webhook.py`, `tests/test_media.py`, `tests/test_settings.py`, `tests/test_probe_dial.py`.
+
+Acceptance criteria:
+- Intake refuses, each in its own test: no key (503), a bad signature, a stale timestamp, a replayed signature, an extra key, a bad number, zone, PIN or role, an unknown consent version, a body over 4 KB. A good one answers 202 with the code and never the number or the PIN; no consent or an opted-out number is stored and never dialled.
+- The window and the attempts, on a pinned clock: inside and outside the window in four US zones, Sunday, the window's edges, attempt 2 at plus two hours moved into the window, attempt 3 the next calling day at the window's middle, none past MAX_DIAL_ATTEMPTS.
+- The dialler, with a fake Twilio and a pinned clock, places nothing while OUTBOUND_ENABLED is off, `var/kill` or `var/no-dial` exists, the task is under 120 s old, the day's cap is reached, a call is in flight, the applicant has no consent or opted out, or the Polly preflight answers AccessDenied (which also sets `var/no-dial`); and otherwise places one call with exactly the parameters of DR-025 section 12 (fix 8).
+- `/voice` on an outbound call: no dial record answers `<Hangup/>`; a record found by CallSid or by the signed dial id skips the inbound count, starts the call with channel `outbound` and the masked `To` (fix 7), and answers `<Say>` with the opening before `<Connect><Stream>` with the token. `/voice/status` and `/voice/amd` refuse a bad signature, schedule the next attempt on no answer, busy or failed, and leave the voicemail on the first attempt's machine only.
+- The media session on an outbound call: the PIN ask at stream start, hello words never barge in or reach the model before the PIN matches (fix 2), the 480 s cap (fix 1), `on_call_end` and the dial's outcome off the event loop (fix 5).
+- The contacts store: mode 600, the number readable only through `Contacts.number`, `purge` after CONTACTS_RETENTION_DAYS, `delete` on an opt-out; a test greps every span, log line, post and cockpit page of a full scripted outbound call for the raw test number and finds none.
+- Each new setting refused at start when zero or nonsense, `MAX_CONCURRENT_OUTBOUND` other than 1 refused, outbound on with a missing key, account id or line number refused.
+- The probe's answer mode: it posts a signed synthetic application for its own number, answers the line's call with one short hello, plays a met case and a not-met case, records dual-channel and deletes the recording; run live only with James watching.
+- `uv run pytest -q` green; ruff clean.
+
+### Lane C: the data, the ledger, the cockpit, the scorecard and the stack
+
+Files: `candidate_line/tools/ledger.py`, `candidate_line/traces/cockpit.py`, `candidate_line/scorecard.py`, `candidate_line/evals/schema.py`, `candidate_line/evals/checks.py`, `candidate_line/evals/runner.py` (the outbound case key, the `fixed` turn and the hand-off checks), `infra/aws/candidate-line-stack.yaml`, `scripts/deploy.sh`, `Makefile`, and their tests: `tests/test_ledger.py` (new), `tests/test_traces.py`, `tests/test_scorecard.py`, `tests/test_evals.py`.
+
+Acceptance criteria:
+- The ledger part lands first, as its own commit: the four new overlay keys and the shapes of DR-025 section 7, every method there with its test, the claim placing one dial once across two ledgers on one file, `_read_overlay` keeping unknown keys and `_write` writing them back (fix 6), `book()` and `state()` reading applicants and `book()` refusing a screen not met (fix 11), no raw number or PIN digit in the file after a full scripted screen.
+- `/applicants` lists in arrival order with no sort, filter, colour or count by answer; `/applicants/{code}` shows each posted question, what it asks for and its reason beside the answer and the masked words; the read form writes its span; both read the state file without `Ledger` (fix 12).
+- The four scorecard rows of DR-025 section 17, each with its method and n, tested on synthetic dials, answers and hand-offs; `calls_by_channel` and `hand_offs` count outbound apart (fix 10).
+- The eval schema takes `outbound`, `fixed` and the two hand-off checks and still refuses an unknown key; the runner passes the outbound tools and seeds the call (fix 12). No file under `evals/` changes.
+- The stack: the two secret references, the four parameters, DesiredCount 1 and MaximumPercent 100 kept, no new resource; `make dial-off`, `make dial-on`, `make apply` and `make forget CODE=`; `aws cloudformation validate-template` passes; no account id or number in any file.
+- `uv run pytest -q` green; ruff clean.
+
+## The eval step, after the lanes merge
+
+`evals/` and `evals/baseline.json` change only in this step, with James approving the diff (AGENTS.md rule 4). Lane 0 wrote sixteen proposed cases, CL-041 to CL-056, outside the repository, in the session's scratch folder `gus/outbound/evals-proposed/`. Rule 4 today names `prompts/02` alone, so the step starts with James's word on the amendment below; then the cases are copied into `evals/cases/` as he approves them, `make eval` runs three times with the cases' failures read and never bent, and `make baseline` writes the baseline from the first green run.
+
+Proposed to James, a one-sentence amendment to AGENTS.md rule 4, in place of its second sentence: "The eval cases and the committed baseline change only inside the work items that name them as their files, which are `prompts/02` and, for the outbound cases from CL-041 and the baseline rewritten after them, the eval step of `prompts/08`, and no other, with James approving the diff." With it, the work-items table in AGENTS.md gains card 08's row and DR-025.
+
+## Decisions left open, asked of James before the lanes merge
+
+1. The wording of Never 1 and Never 7, and the outbound lines under Never 3 and Never 5 (spec section 5, proposed 2026-11-05). Section 1 ("never evaluates anyone"), F8.1 ("it does not evaluate candidates") and F1.1 still read as written; whether they change with Never 1 is his call.
+2. Counsel's read before any real applicant's number is dialled: the consent text in `data/applications.yaml`, whether a recruiting call counts as a solicitation under the federal and state hour rules, whether 47 CFR 64.1200(b)(2) is met by saying the line's own number, the Illinois notice, whether the gate's yes or no is simplified output under New York City's rules (then a bias audit, or the no-gate fallback), and California's automated-decision regulations. Until then OUTBOUND_ENABLED stays off except for the probe's own number.
+3. Money: the 45 USD budget stop, which 10 screens a day reach on about day 25 of a month (DR-025, Spend); MAX_OUTBOUND_PER_DAY (20 proposed); the Twilio balance's own top-up limit, the one stop on Twilio's side.
+4. Retention: how long answers, applications and consent records are kept (contacts 30 days proposed), and who handles a deletion request.
+5. The calling window (09:00 to 20:00, Monday to Saturday, the applicant's zone) and whether Sundays are right to skip and federal holidays need skipping too; three attempts with one voicemail on the first; the applicant's first name in a voicemail a household member may hear.
+6. Who gives the applicant their PIN and code (the careers form's thank-you page and email, proposed), and what a rotation of INTAKE_SIGNING_KEY does to stored PIN hashes (re-key, or ask the applicant to call in).
+7. The recruiter's access: the cockpit is the operator's alone through the SSM port-forward, so a recruiter needs a login (a stack change) or the hand-off email's link reaches only the operator.
+8. Accommodation and language: whether the opening offers a person in place of the questions (one line, to `request_callback`), and whether a Spanish line is wanted.
+9. Whether Gus reads the answers back for correction before the outcome line, and whether "within one business day" is the promised time.
+
+## Teach-back, after
+
+James explains: how an application becomes a call (the signed intake, the contacts store, the claim, the dial id in the signed Url, the opening in `<Say>`, the stream); what the gate decides and what it can never decide, and where the code enforces it; what the recruiter reads and what the email never carries; what bounds the bill with nobody calling and what the budget stop does not stop; and the two stops. Grade against `tools/rules.py`, `tools/screening.py`, `outbound/dialler.py`, `outbound/intake.py`, `telephony/app.py` and `escalation.py` by line.
