@@ -1,6 +1,6 @@
 # PREBUILT
 
-Everything committed before the tag `prebuilt-2026-11-03` is listed here with its commit date. No hidden finished branch exists. Nothing on this list decides anything about a caller: the spec, the eval cases, the guard, the tiers, the persona and the tools are built live.
+Everything committed before the tag `prebuilt-2026-11-03` is listed here with its commit date. No hidden finished branch exists. Nothing on this list decides anything about a caller: the spec, the eval cases, the guard, the tiers, the persona and the tools were built on the evening of 4 November 2026, after the session, and are listed at the end of this file with their records.
 
 Each row carries the commit date and short sha, its decision record, and the date of the teach-back (KICKOFF.md, Rule 1).
 
@@ -59,16 +59,18 @@ The tag marks what the dry run of 2026-11-02 left; Tuesday changed the shape of 
 
 On the evening of 2026-11-02 all seven cards were run one at a time, in order, by a coding agent in a detached scratch worktree, against a clock, with the session's draft answers standing in for James's (cards 02 and 04 twice, after the fixes their first pass forced). The worktree was discarded and pruned; nothing it built exists in this repository or on any branch. What entered the repository is its defect list, as pre-built plumbing fixed before the tag and named commit by commit in DR-015's table: the eval schema's keys and the runner's pending verdicts; one persona and one hooks object for every path; a trace store per path and the span kinds; the brain's native tool channel with the prompt cache mark; the escalation queue on the turn context, the phone's silence hook and hang-up; the rate table's speech rows; and the cards' own wording wherever it said something the code could not do. The decisions the cards leave open are still open: no spec, case, tool, persona, guard, tier or scorecard from the dry run exists here. The per-card times are in DR-015: about 68 minutes of tool time end to end.
 
-## Planned for the live session, not built (see the README)
+## Built the evening of 4 November 2026, after the session (see the README)
 
-- `spec.md`, from a five-line problem card and the room's answers, with the Never list confirmed by the room
-- The eval cases: the first set from the spec, then one more for the counter-case, then another for the change the room asks for
-- Tracing, before the first tool
-- DR-001's decision text, after the counter-case
-- The tools and the persona
-- The guard, its red-proof, the tiers and the observer
-- The escalation rule, with the tiers
-- The kill switch and the override log
-- The probe caller's cases
-- The scorecard
-- The change the room asks for
+The hour went to another topic and built nothing. A test call at 16:26 CT with a valid code found the placeholder prompt refusing it, and the cards' work was done that evening in their order, outside the session, by the author's build helper with the open decisions taken as defaults (`spec.md`). Each item below names its record.
+
+- `spec.md`, from the five-line problem card, with the open decisions answered as defaults (DR-016)
+- The eval cases, 36 of them, and the first baseline from the first green run (DR-017)
+- Tracing: the spans from the turn loop and the media session into the store (DR-018)
+- DR-001's decision text stands as written on 2026-11-02; the counter-case did not run
+- The tools over `data/` and the persona (DR-019)
+- The guard with its red-proof (DR-020); the tiers, the hand-offs and the kill switch (DR-021)
+- The escalation rule, with the tiers (DR-021)
+- The kill switch (DR-021); the override spoken on the next turn is not built and DR-021 says what it would touch
+- The probe caller's cases: run from scratch files on 4 November, not committed under `evals/cases` (a `channel: voice` case there waits for the runner to pass them to the probe)
+- The scorecard: not built
+- The change the room asks for: none was asked

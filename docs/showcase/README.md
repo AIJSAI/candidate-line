@@ -6,7 +6,7 @@ Four pages drawn from this repository's code and records on 2026-11-03, for the 
 
 ![How a call to Gus works: the phone path, the brain, the records and the cockpit](architecture.png)
 
-The phone path, the brain, the records and the cockpit. Grey boxes were built before the session; orange boxes are what the session's cards build. Page: [architecture.html](architecture.html). Notes: [architecture-notes.md](architecture-notes.md).
+The phone path, the brain, the records and the cockpit. Grey boxes were built before the session; orange boxes were built on the evening of 4 November, after it. Page: [architecture.html](architecture.html). Notes: [architecture-notes.md](architecture-notes.md).
 
 ## How I Build: One Change, From Plan to Main
 
@@ -18,7 +18,7 @@ The system every build of mine runs under, numbered one to eleven, with what pro
 
 ![The one-page, non-technical version of the line](customer.png)
 
-The one-page, non-technical version: what it does, what it never does, what the client gets, what it costs, how it rolls out. It describes the line as designed: the tools, the guard, the tiers and the off switch were to be built in the session and are not in this tree. Page: [customer.html](customer.html). Notes: [customer-notes.md](customer-notes.md).
+The one-page, non-technical version: what it does, what it never does, what the client gets, what it costs, how it rolls out. It describes the line as built: the tools, the guard, the tiers and the off switch landed on the evening of 4 November (records DR-019 to DR-021). Page: [customer.html](customer.html). Notes: [customer-notes.md](customer-notes.md).
 
 ## The Cockpit, Redesigned for the Recruiting Lead
 
