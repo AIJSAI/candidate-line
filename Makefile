@@ -28,7 +28,7 @@ help:
 	@echo "make deploy STEP=ecr|push|secrets|stack|url|status|probe-url   one step of scripts/deploy.sh against the AWS stack (DR-023)"
 	@echo "make line-off / line-on    the kill switch on the task: every call hears the closing line, and the dialler stops"
 	@echo "make dial-off / dial-on    the dialler's own stop on the task (var/no-dial); calls in go on (DR-025)"
-	@echo "make apply PIN=dddd [URL=http://127.0.0.1:8000] [PHONE=probe] [ROLE=care-aide] [FIRST=Ama] [ZONE=America/Chicago]   a signed synthetic application for a walk"
+	@echo "make apply PIN=dddd [URL=http://127.0.0.1:8000] [PHONE=probe|operator] [ROLE=care-aide] [FIRST=Ama] [ZONE=America/Chicago]   a signed synthetic application for a walk"
 	@echo "make forget CODE=ACME-dddd [WHERE=local]   a deletion request: the application, its answers, its dials and its number"
 
 up:

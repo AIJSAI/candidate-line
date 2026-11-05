@@ -110,7 +110,7 @@ case "${1:?step}" in
   apply)
     # A signed synthetic application for a walk (DR-025 section 10), posted to URL (the line on this Mac by
     # default). PHONE is a fictional 555-01xx number by default, which is on no allow-list, so the line stores the
-    # application as not dialled; PHONE=probe uses the probe's number from the keychain. The key and the number go
+    # application as not dialled; PHONE=probe uses the probe's number from the keychain, PHONE=operator the allow-list's second entry. The key and the number go
     # to the signer on stdin, never on a command line, and the reply carries the code and the status only.
     url="${URL:-http://127.0.0.1:8000}"
     pin="${PIN:-}"
@@ -118,6 +118,9 @@ case "${1:?step}" in
     key="$(keychain INTAKE_SIGNING_KEY)" || { echo "INTAKE_SIGNING_KEY is not in the login keychain (make secret NAME=INTAKE_SIGNING_KEY)"; exit 2; }
     phone="${PHONE:-+15555550100}"
     if [ "$phone" = "probe" ]; then phone="$(keychain TWILIO_PROBE_NUMBER)" || { echo "TWILIO_PROBE_NUMBER is not in the login keychain"; exit 2; }; fi
+    # PHONE=operator is the second entry of the allow-list in the keychain, the operator's own phone, so that number
+    # is never typed on a command line, in a log or in a chat (AGENTS.md rule 7).
+    if [ "$phone" = "operator" ]; then phone="$(keychain OUTBOUND_ALLOWED_NUMBERS | cut -d, -f2)"; [ -n "$phone" ] || { echo "OUTBOUND_ALLOWED_NUMBERS holds no second entry"; exit 2; }; fi
     printf '%s' "$phone" | grep -Eq "$E164" || { echo "PHONE must be an E.164 US number or probe"; exit 2; }
     printf '%s\n%s\n' "$key" "$phone" | python3 -c '
 import hashlib, hmac, json, secrets, sys, time, urllib.error, urllib.request

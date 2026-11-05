@@ -818,6 +818,13 @@ def _direct_probe(voice: str) -> Probe:
     return run
 
 
+def voice_cases(cases: list[Any]) -> tuple[list[Any], list[str]]:
+    """The cases the direct probe can run, and the ids it cannot: an outbound case is the line's call to an
+    applicant, seeded from a dial record, which only the dialled probe's answer mode exercises (DR-025 section 18)."""
+    runnable = [case for case in cases if getattr(case, "outbound", None) is None]
+    return runnable, [case.id for case in cases if getattr(case, "outbound", None) is not None]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="every eval case through the deployed line's audio path, one at a time, scored from its store"
@@ -841,7 +848,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     paths = args.cases or sorted(CASES.glob("*.yaml"))
-    cases = [load_case(path) for path in paths]
+    cases, dialled = voice_cases([load_case(path) for path in paths])
+    if dialled:
+        print(
+            f"{len(dialled)} outbound case(s) left to the dialled probe (make probe-answer, DR-025): {', '.join(dialled)}"
+        )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     # The probe's own log (its event counts, a stream the line closed) goes beside the report, not over the table.
     logging.basicConfig(

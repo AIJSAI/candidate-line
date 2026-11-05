@@ -423,3 +423,14 @@ def _raw(case: Case) -> dict[str, Any]:
             else {"silence_seconds": t.silence_seconds, "checks": checks}
         )
     return {"id": case.id, "title": case.title, "kind": case.kind, "turns": turns}
+
+
+def test_outbound_cases_are_left_to_the_dialled_probe() -> None:
+    from types import SimpleNamespace
+
+    from candidate_line.probe.regression import voice_cases
+
+    inbound = SimpleNamespace(id="CL-001", outbound=None)
+    outbound = SimpleNamespace(id="CL-043", outbound="ACME-3108")
+    runnable, dialled = voice_cases([inbound, outbound])
+    assert [c.id for c in runnable] == ["CL-001"] and dialled == ["CL-043"]
