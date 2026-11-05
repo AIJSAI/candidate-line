@@ -72,5 +72,6 @@ The hour went to another topic and built nothing. A test call at 16:26 CT with a
 - The escalation rule, with the tiers (DR-021)
 - The kill switch (DR-021); the override spoken on the next turn is not built and DR-021 says what it would touch
 - The probe caller's cases: run from scratch files on 4 November, not committed under `evals/cases` (a `channel: voice` case there waits for the runner to pass them to the probe)
-- The scorecard: not built
+- The scorecard, with CI for the linters and the tests (DR-022)
+- Not in any card: the line in a container on AWS, the operator's controls and the hand-off note by email (DR-023)
 - The change the room asks for: none was asked
