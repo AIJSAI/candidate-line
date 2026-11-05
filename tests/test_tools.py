@@ -382,13 +382,14 @@ def test_section_ids_sent_as_json_text_still_find_their_sections(sent: str) -> N
 
 
 def test_a_question_the_faq_does_not_cover_returns_no_section() -> None:
-    outcome, body = _run(_ctx(), "answer_question", section_ids=["F9.1", "salary"])
+    # F10.1 since F9 landed (card 08): an id no FAQ section has.
+    outcome, body = _run(_ctx(), "answer_question", section_ids=["F10.1", "salary"])
     assert not outcome.is_error and body == {"sections": []} and outcome.cited == ()
 
 
 def test_the_index_names_every_section_under_its_heading() -> None:
     lines = faq_index().splitlines()
-    assert len(lines) == 8 and lines[0].startswith("F1 The process: F1.1 What are the stages?")
+    assert len(lines) == 9 and lines[0].startswith("F1 The process: F1.1 What are the stages?")
     assert "F3.2 Can I move my slot?" in lines[2] and "Once, through the coordinator" not in faq_index()
 
 

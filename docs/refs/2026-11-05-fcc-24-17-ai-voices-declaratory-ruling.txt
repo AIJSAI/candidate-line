@@ -1,0 +1,128 @@
+Source: https://docs.fcc.gov/public/attachments/FCC-24-17A1.pdf
+Read (UTC): 2026-11-05T15:42:48Z
+HTTP: 200
+
+Reduced: a public document of the Federal Communications Commission, converted from the PDF with pdftotext -layout. Kept: the caption, paragraphs 1 to 9 of the Declaratory Ruling and the ordering clause, with footnotes 3, 4, 6, 13 and 23; the other footnotes, the page headers and numbers, and the Commissioners' separate statements are left out.
+
+                                                 Before the
+                                      Federal Communications Commission
+                                            Washington, D.C. 20554
+
+ In the Matter of                                            )
+                                                             )
+ Implications of Artificial Intelligence Technologies        )       CG Docket No. 23-362
+ on Protecting Consumers from Unwanted                       )
+ Robocalls and Robotexts                                     )
+
+                                            DECLARATORY RULING
+
+Adopted: February 2, 2024                                                             Released: February 8, 2024
+
+By the Commission: Chairwoman Rosenworcel and Commissioners Starks and Gomez issuing separate
+statements.
+
+I.       INTRODUCTION
+        1.       As artificial intelligence (AI) technologies emerge that affect the existing regulatory
+landscape that protects consumers from unwanted and illegal robocalls, we take action today to ensure
+that consumers continue to receive the protections afforded under the Telephone Consumer Protection
+Act (TCPA).1 AI technologies that can generate content such as artificial voice communications can be
+beneficial, but also pose new challenges to consumers.2 We take this opportunity to clarify the
+application of the TCPA to these technologies.
+         2.        In this Declaratory Ruling, we confirm that the TCPA’s restrictions on the use of
+“artificial or prerecorded voice” encompass current AI technologies that generate human voices.3 As a
+result, calls that use such technologies fall under the TCPA and the Commission’s implementing rules,
+and therefore require the prior express consent of the called party to initiate such calls absent an
+emergency purpose or exemption.4
+II.      BACKGROUND
+        3.       The TCPA protects consumers from unwanted calls made using an artificial or
+prerecorded voice.5 In relevant part, the TCPA prohibits initiating “any telephone call to any residential
+telephone line using an artificial or prerecorded voice to deliver a message without the prior express
+consent of the called party” unless a statutory exception applies or the call is “exempted by rule or order
+by the Commission under [section 227(b)(2)(B)].”6 The TCPA also prohibits, without the prior express
+consent of the called party, any non-emergency call made using an automatic telephone dialing system or
+
+3 See 47 U.S.C. § 227(b); 47 CFR § 64.1200(a)(1), (3).
+
+4 The Commission has exercised its statutory authority to adopt certain exemptions from this prohibition.   See 47
+CFR § 64.1200(a)(3), (9).
+6 47 U.S.C. § 227(b)(1)(B).    The TCPA does not define the terms “artificial” or “prerecorded voice.”
+
+an artificial or prerecorded voice to certain specified categories of telephone numbers including
+emergency lines and wireless numbers.7
+         4.      On November 16, 2023, the Commission released a Notice of Inquiry seeking to better
+understand the implications of emerging AI technologies as part of our ongoing efforts to protect
+consumers from unwanted and illegal telephone calls and text messages under the TCPA.8 As part of that
+inquiry, the Commission indicated that “the Commission’s authority under the TCPA encompasses
+current uses of AI in robocalling and robotexting as we understand them, e.g., emulating human speech
+and interacting with consumers as though they were live human callers when generating voice and text
+messages.”9 In addition, the Commission stated “that certain AI technologies such as ‘voice cloning’
+appear to fall within the TCPA’s existing prohibition on artificial or prerecorded voice messages because
+this technology artificially simulates a human voice” and sought comment on these issues.10 In response,
+several commenters ask the Commission to confirm that AI technologies that simulate a human voice
+and/or generate call content using a prerecorded voice should be considered an “artificial or prerecorded
+voice” for purposes of the TCPA.11
+III.      DISCUSSION
+          5.      Consistent with our statements in the AI NOI, we confirm that the TCPA’s restrictions on
+the use of “artificial or prerecorded voice” encompass current AI technologies that resemble human
+voices and/or generate call content using a prerecorded voice.12 Therefore, callers must obtain prior
+express consent from the called party before making a call that utilizes artificial or prerecorded voice
+simulated or generated through AI technology.13 AI technologies such as “voice cloning” fall within the
+TCPA’s existing prohibition on artificial or prerecorded voice messages because this technology
+artificially simulates a human voice.14 Voice cloning and other similar technologies emulate real or
+artificially created human voices for telephone calls to consumers.15 They are “artificial” voice messages
+because a person is not speaking them,16 and, as a result, when used they represent the types of calls the
+TCPA seeks to protect consumers from.17 The Commission also recognized in the AI NOI the potential
+
+13 If these robocalls introduce an advertisement or contain telemarketing, the Commission’s rules require that the
+
+caller obtain the prior express written consent of the called party. See 47 CFR § 64.1200(a)(2), (3).
+
+for AI technologies to communicate with consumers using prerecorded voice messages.18 Where this
+occurs, we conclude that the call is “using” a “prerecorded voice” within the meaning of the TCPA.19 In
+reaching these conclusions, we agree with several commenters that the existing consumer protections
+under the TCPA apply to these calls.20 No commenter opposes these conclusions.
+        6.       Our finding will deter negative uses of AI and ensure that consumers are fully protected
+by the TCPA when they receive such calls. And it also makes clear that the TCPA does not allow for any
+carve out of technologies that purport to provide the equivalent of a live agent, thus preventing
+unscrupulous businesses from attempting to exploit any perceived ambiguity in our TCPA rules.21
+Although voice cloning and other uses of AI on calls are still evolving, we have already seen their use in
+ways that can uniquely harm consumers and those whose voice is cloned.22 Voice cloning can convince a
+called party that a trusted person, or someone they care about such as a family member, wants or needs
+them to take some action that they would not otherwise take. Requiring consent for such calls arms
+consumers with the right not to receive such calls or, if they do, the knowledge that they should be
+cautious about them.23
+         7.       To be clear, we understand that not all AI-generated calls may be deceptive or annoy all
+consumers. But the TCPA’s demands fully apply to those calls and, thus, consumers can themselves
+choose whether to receive them. Indeed, as Congress observed in adopting the TCPA, “residential
+telephone subscribers consider automated or prerecorded telephone calls, regardless of the content or the
+initiator of the message, to be a nuisance and an invasion of privacy.”24 Our ruling today thus comports
+with both the statutory text and the legislative intent of the TCPA and protects consumers from unwanted
+and illegal prerecorded or artificial voice calls.
+       8.       Our conclusion is also consistent with the Commission’s Soundboard Ruling, which
+confirmed that the TCPA applies to any telephone call that is initiated using an artificial or prerecorded
+voice message.25 There the Commission confirmed that the presence of a live agent on a call selecting the
+
+23 As discussed below, section 64.1200(b)(1) of the Commission’s rules provides: “All artificial or prerecorded
+
+voice telephone messages shall: (1) At the beginning of the message, state clearly the identity of the business,
+individual, or other entity that is responsible for initiating the call. . . .”
+
+prerecorded messages to be played “does not negate the clear statutory prohibition against initiating a call
+using a prerecorded or artificial voice.”26 We find that this rationale applies to AI technologies, including
+those that either wholly simulate an artificial voice or resemble the voice of a real person taken from an
+audio clip to make it appear as though that person is speaking on the call to interact with consumers. In
+both cases, the call is initiated using an artificial or prerecorded voice under the TCPA.
+         9.       As a result, callers that use such technologies must obtain the prior express consent of the
+called party to initiate such calls absent an emergency purpose or exemption.27 In addition, our rules
+require that all artificial or prerecorded voice messages must provide certain identification and disclosure
+information for the entity responsible for initiating the call.28 In every case where the artificial or
+prerecorded voice message includes or introduces an advertisement or constitutes telemarketing, it must
+also offer specified opt-out methods for the called party to make a request to stop calling that telephone
+number.29 These requirements are applicable to any AI technology that initiates any outbound telephone
+call using an artificial or prerecorded voice to consumers.
+IV.        ORDERING CLAUSE
+      10.     Accordingly, IT IS ORDERED, pursuant to Sections 1-4, and 227 of the
+Communications Act of 1934, as amended, 47 U.S.C. §§ 151-154, 227, sections 1.2 and 64.1200 of the
+Commission’s rules, 47 CFR §§ 1.2 and 64.1200, that this Declaratory Ruling IS ADOPTED.
+           11.   IT IS FURTHER ORDERED that this Declaratory Ruling shall be effective upon
+release.

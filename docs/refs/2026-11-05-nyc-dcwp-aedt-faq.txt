@@ -1,0 +1,99 @@
+Source: https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page and https://www.nyc.gov/assets/dca/downloads/pdf/about/DCWP-AEDT-FAQ.pdf (the FAQ the page links, dated 06/29/2023)
+Read (UTC): 2026-11-05T15:42:48Z
+HTTP: 200
+
+Reduced: public pages of the New York City Department of Consumer and Worker Protection; the FAQ converted from the PDF with pdftotext -layout. Kept: the page's summary of Local Law 144 and its notice-timing note; the FAQ's section I (what an AEDT is, when the law applies, screening as an employment decision) and section VI (notice). The bias-audit detail (sections II to V) and the complaint lines are left out; the rules themselves are at the link the FAQ gives.
+
+## The DCWP page (excerpt)
+
+Local Law 144 of 2021 regarding automated employment decision tools (“AEDT”) prohibits employers and employment agencies from using an automated employment decision tool unless the tool has been subject to a bias audit within one year of the use of the tool, information about the bias audit is publicly available, and certain notices have been provided to employees or job candidates.
+Note: DCWP will begin enforcement of this law and rule on July 5, 2023.
+DCWP held educational roundtables in May 2023 about Local Law 144 of 2021. Watch recap below. Note: DCWP revised the presentation slides in June 2023 to clarify that the Notice must be provided 10 business days prior to use of an AEDT.
+
+## The FAQ, section I (excerpt)
+
+I.          Overview of the Law
+1. What is Local Law 144 of 2021?
+The Law prohibits employers and employment agencies from using an automated employment decision
+tool (AEDT) in New York City unless they ensure a bias audit was done and provide required notices.
+
+The Law was enacted in 2021. It took effect on January 1, 2023. Enforcement begins on July 5, 2023.
+
+2. What is an AEDT?
+An AEDT is a computer-based tool that:
+
+       •    Uses machine learning, statistical modeling, data analytics, or artificial intelligence. AND
+       •    Helps employers and employment agencies make employment decisions. AND
+       •    Substantially assists or replaces discretionary decision-making.
+
+3. How can you tell if a tool uses machine learning, statistical modeling, data analytics, or
+   artificial intelligence?
+Machine learning, statistical modeling, data analytics, or artificial intelligence are mathematical,
+computer-based techniques used to:
+
+       •    Generate a prediction or a classification. AND
+       •    Identify the inputs, the relative importance of the identified inputs, and any other parameters to
+            improve the accuracy of the generated prediction or classification.
+
+A prediction includes but is not limited to an assessment of a candidate’s fit for the job or likelihood of
+success.
+
+A classification is an assignment of an observation to a group, such as categorizations based on skill
+sets or aptitude.
+
+See The Rules of the City of New York1 for additional guidance.
+
+4. What are the Law’s requirements and how do they apply to an AEDT used “in the city”?
+
+The Law applies only to employers and employment agencies that use an AEDT “in the city.” This
+means:
+
+        •    The job location is an office in NYC, at least part time. OR
+        •    The job is fully remote but the location associated with it is an office in NYC. OR
+        •    The location of the employment agency using the AEDT is NYC or, if the location of the
+             employment agency is outside NYC, one of the bullets above is true.
+
+If the Law applies:
+
+       •    A bias audit of the AEDT must be completed before its use. AND
+       •    Job candidates who are New York City residents must receive notice that the employer or
+            employment agency uses an AEDT.
+
+5. Is an “employment decision” just the final hiring or promotion decision?
+No. The Law defines employment decision more broadly to include screening.
+
+If employers or employment agencies use an AEDT to substantially help them assess or screen
+candidates at any point in the hiring or promotion process, they must comply with the Law’s requirements
+before using an AEDT.
+
+6. Do the Law’s requirements apply if an employer or employment agency uses an AEDT to scan
+    a resume bank, conduct outreach to potential candidates, or invite applications?
+No. The requirements apply to AEDT use to assess candidates for hiring or promotion only. A candidate
+for employment is a person who has applied for a specific position by submitting the necessary
+information or items in the format required by the employer or employment agency.
+
+If AEDT use is to assess someone who is not an employee being considered for promotion and who has
+not applied for a specific position for employment, the bias audit and notice requirements do not apply.
+
+## The FAQ, section VI
+
+VI.       Notice Requirements
+1. How must employers and employment agencies provide notice of AEDT use?
+Employers and employment agencies must notify employees and job candidates who are residents of
+New York City that they are using an AEDT and the job qualifications or characteristics the AEDT will
+assess. Employers and employment agencies must:
+
+      •   Include in the notice instructions to request a reasonable accommodation under other laws. AND
+      •   Provide the notice 10 business days before using an AEDT. AND
+      •   Provide the notice in a job posting or by mail or email. Note:
+          o For job applicants: As an alternative, employers and employment agencies can provide notice
+              on the employment section of their website. Notice on a website does not have to be position-
+              specific.
+          o For candidates for promotion: As an alternative, employers and employment agencies can
+              include notice in a written policy or procedure. Notice provided in this way does not have to be
+              position-specific.
+
+2. If employers and employment agencies provide notice on their website, when can they start
+    using an AEDT to assess applicants for a position?
+Employers and employment agencies can begin using an AEDT 10 business days after posting notice on
+their website regardless of when a specific job posted.

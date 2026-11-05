@@ -65,7 +65,7 @@ roles:
   recruiter: Recruiter A        # a label; the interview slots below name it
   questions:                    # asked in this order, word for word
   - id: q1                      # unique within the role
-    say: The posting asks for a valid driver's licence, because aides drive between clients' homes. Do you hold one?
+    say: The posting asks for a valid driver's licence, because aides drive between clients' homes. Do you hold a valid driver's licence?
     kind: yes_no                # yes_no | choice | range
     asks: a valid driver's licence   # the posted requirement in words, for the not-met line and the cockpit
     rule: {equals: 'yes'}       # the posted requirement in a closed form
@@ -105,13 +105,14 @@ interview_slots:                # the recruiters' slots, beside data/slots.yaml'
 ```python
 @dataclass(frozen=True)
 class GateResult:
-    complete: bool               # every posted question has a recorded answer
-    met: bool                    # complete, and every recorded value meets its question's rule
-    unasked: tuple[str, ...]     # question ids with no recorded answer, in posted order
-    unmet: tuple[str, ...]       # question ids whose answer meets no rule (declined and unclear included)
+    complete: bool  # every posted question has a recorded answer
+    met: bool  # complete, and every recorded value meets its question's rule
+    unasked: tuple[str, ...]  # question ids with no recorded answer, in posted order
+    unmet: tuple[str, ...]  # question ids whose answer meets no rule (declined and unclear included)
+
 
 def meets(question: Question, value: str) -> bool: ...
-def check(role: Role, answers: Mapping[str, str]) -> GateResult: ...   # answers: question id to value
+def check(role: Role, answers: Mapping[str, str]) -> GateResult: ...  # answers: question id to value
 ```
 
 Pure: no file, clock, network, model or randomness; the same inputs always give the same result. `declined` and `unclear` meet no rule. Nothing in it weighs, sums or compares answers across questions or across applicants. Tested on every rule form, both sides of each bound, and every role in `data/roles.yaml` with an all-met and an each-one-unmet answer set.
@@ -125,13 +126,13 @@ firm: ACME
 consent_texts:                  # each version the careers form has shown, word for word
   consent-2026-11-05: By ticking this box, I agree that ACME's automated hiring line may call ...
 applications:
-- code: ACME-4417               # ACME- and four digits, never a code in data/candidates.yaml
-  first_name: Ana
+- code: ACME-3108               # ACME- and four digits, never a code in data/candidates.yaml
+  first_name: Lerato
   role: care-aide               # a role id in data/roles.yaml
   zone: America/Chicago         # an IANA zone in the US
-  pin: '2580'                   # the fixture's PIN as a string; an intake application keeps only its HMAC
-  applied_at: '2026-11-04T16:20:00-06:00'
-  consent: {version: consent-2026-11-05, accepted: true, at: '2026-11-04T16:19:40-06:00', source: careers-form}
+  pin: '4398'                   # the fixture's PIN as a string; an intake application keeps only its HMAC
+  applied_at: '2026-11-04T09:35:00-06:00'
+  consent: {version: consent-2026-11-05, accepted: true, at: '2026-11-04T09:33:36-06:00', source: careers-form}
 ```
 
 No phone number and no email address: the fixtures hold none, and a test that needs a number injects a fictional 555-01xx one at run time.
@@ -189,7 +190,7 @@ class Ledger:
 ### 8. The dial record
 
 ```json
-{"dial_id": "D-3f9a1c2b7e4d", "code": "ACME-4417", "attempt": 1,
+{"dial_id": "D-3f9a1c2b7e4d", "code": "ACME-3108", "attempt": 1,
  "due_at": "2026-11-05T16:02:00+00:00", "status": "due",
  "claimed_at": null, "placed_at": null, "call_sid": null,
  "twilio_status": null, "answered_at": null, "answered_by": null,
@@ -248,7 +249,7 @@ Word for word as spec section 9.9 gives them, by these names: `OUTBOUND_OPENING`
 
 - `assign(tools_called, guard_hits=(), refused=False, verify_failures=0, spoken="", hand_offs=())`: tier 2 when the turn posted any hand-off (`hand_offs`, the `HandOff`s the turn's outcomes carried), whatever the tool; the existing tool-name rule stays for callers that pass none. `_DONE_ALONE` gains `confirm_applicant` ("confirmed the applicant by PIN"), `record_answer` ("recorded an answer") and `stop_calls` ("stopped every further call"). Tier 3 for a second PIN miss (the shared `verify_failures`) and for a call the length cap ended with questions left.
 - The screening hand-off: `HandOff(reason=f"screening hand-off from {code} ({first_name}): {role title}; recruiter call promised by {when}", suggested_action="read the answers on the applicant's record and call them by the promised time; a person decides the application")`. `{when}` is the promised time in Central ("4:05 PM Central on Friday 6 November 2026"), one business day after the screen.
-- `Escalation` gains `record_url: str | None = None` = `{COCKPIT_BASE_URL}/applicants/{code}`. `format_subject` gives "Screening hand-off: Ana (ACME-4417)". `format_email` for this kind: "{first name} ({code}) answered the screening questions for the {role} role on the ACME line, and the line promised that a recruiter will call by {when}.", a blank line, "Read the answers on the applicant's record: {record_url}", "What to do: read the answers on the record and call the applicant by the promised time; a person decides every application.", and the call record line. It never carries an answer, the applicant's words, which requirement was not met, or the number, and a test holds it to that with every answer of the fixtures.
+- `Escalation` gains `record_url: str | None = None` = `{COCKPIT_BASE_URL}/applicants/{code}`. `format_subject` gives "Screening hand-off: Lerato (ACME-3108)". `format_email` for this kind: "{first name} ({code}) answered the screening questions for the {role} role on the ACME line, and the line promised that a recruiter will call by {when}.", a blank line, "Read the answers on the applicant's record: {record_url}", "What to do: read the answers on the record and call the applicant by the promised time; a person decides every application.", and the call record line. It never carries an answer, the applicant's words, which requirement was not met, or the number, and a test holds it to that with every answer of the fixtures.
 
 ### 16. The cockpit's `/applicants` (lane C, `traces/cockpit.py`)
 
@@ -340,7 +341,10 @@ Counsel's read of the consent text, the hour rules, the Illinois notice and whet
 - Twilio's answering machine detection page, read 2026-11-05 (`docs/refs/2026-11-05-twilio-answering-machine-detection.txt`): with `DetectMessageEnd` a person is reported at once and a machine only at the end of its greeting; the `AnsweredBy` values; asynchronous detection lets the call go on and takes one of four forked audio streams while it listens.
 - Twilio's US voice pricing page, read 2026-11-05 (`docs/refs/2026-11-05-twilio-voice-pricing-us.txt`): the rates in Spend, "current as of August 2026".
 - 47 CFR 64.1200, read 2026-11-05 from the eCFR (`docs/refs/2026-11-05-ecfr-47-cfr-64-1200.txt`): (a)(1) prior express consent for an artificial-voice call to a mobile number; (a)(10) revocation by any reasonable means, honoured within ten business days; (b)(1) the business's identity at the beginning of the message and (b)(2) a telephone number during or after it; (c)(1) the 08:00 to 21:00 limit for a telephone solicitation.
-- The FCC's declaratory ruling of February 2024 (FCC 24-17), New York City's AEDT rules, Illinois Public Act 103-0804 and the California Civil Rights Council's automated-decision regulations: saved in `docs/refs/` by the second commit of lane 0, with the facts this record relies on added here then.
+- The FCC's Declaratory Ruling of 8 February 2024, FCC 24-17, read 2026-11-05 (`docs/refs/2026-11-05-fcc-24-17-ai-voices-declaratory-ruling.txt`): the TCPA's "artificial or prerecorded voice" covers AI technologies that generate human voices, so a call that uses one needs the called party's prior express consent (paragraphs 2, 5 and 9), there is no carve-out for a technology that stands in for a live agent (paragraph 6), and 64.1200(b)'s identification and disclosure rules apply (paragraph 9). This is why consent is taken at intake and versioned, and why the opening names ACME first.
+- New York City's DCWP page and its AEDT FAQ of 2023-06-29, read 2026-11-05 (`docs/refs/2026-11-05-nyc-dcwp-aedt-faq.txt`): an AEDT uses machine learning, statistical modeling, data analytics or AI, helps make employment decisions, and substantially assists or replaces discretionary decision-making; screening counts as an employment decision; the law needs a bias audit within a year before use and a notice to New York City candidates 10 business days before use, with the job qualifications the tool assesses and how to ask for an accommodation. Whether a fixed comparison of an applicant's own answer with a posted requirement is such a tool is counsel's question (card 08, open decision 2) [inference: the gate uses no model and no statistics, but a model maps the words to the value it compares].
+- Illinois Public Act 103-0804, re-read 2026-11-05 (`docs/refs/2026-11-05-illinois-public-act-103-0804.txt`), in effect since 1 January 2026: an employer may not use AI with the effect of discrimination on a protected class, or zip codes as a proxy for one, in recruitment and hiring, and must give notice that it uses AI; the Department's rules set the notice. The roles loader refuses a zip-code question for this reason.
+- The California Civil Rights Council's automated-decision system regulations, summary page of 30 June 2025, read 2026-11-05 (`docs/refs/2026-11-05-california-crc-ads-regulations.txt`), in effect since 1 October 2025: an automated-decision system may violate California law if it harms applicants on a protected characteristic; employment records, including automated-decision data, are kept at least four years; and an assessment's questions that elicit information about a disability may be an unlawful medical inquiry. So the retention decision (card 08, open decision 4) reads four years for any applicant in California, and the lifting questions carry the accommodation clause and go to counsel with the rest.
 - The cost figures in Spend are arithmetic on those rates, labelled [inference] or [hypothesis]; nothing is measured yet. The dialled probes (met and not met) and James's own call measure the screen's minutes, its characters and the first contact time.
 
 ## Say it like this

@@ -1,0 +1,137 @@
+Source: https://www.twilio.com/docs/voice/api/call-resource
+Read (UTC): 2026-11-05T15:41:40Z
+HTTP: 200
+
+Reduced: the full page is not redistributed (copyright Twilio Inc.). Quoted below, word for word from the page as fetched, are only the passages DR-025 cites: the Direction and AnsweredBy properties, the create parameters the dialler sends, the StatusCallbackEvent values, the Direction values in a request, and Update a Call. Lines that only said "Optional" or "Not PII" are dropped.
+
+## Call properties (excerpt)
+
+directionstring
+A string describing the direction of the call. Can be: inbound for inbound calls, outbound-api for calls initiated via the REST API or outbound-dial for calls initiated by a <Dial> verb. Using Elastic SIP Trunking, the values can be trunking-terminating for outgoing calls from your communications infrastructure to the PSTN or trunking-originating for incoming calls to your communications infrastructure from the PSTN.
+answeredBystring
+Either human or machine if this call was initiated with answering machine detection. Empty otherwise.
+
+## Create a Call: request body parameters (excerpt)
+
+tostring<endpoint>
+required
+PII MTL: 120 days
+The phone number, SIP address, or client identifier to call.
+fromstring<endpoint>
+required
+PII MTL: 120 days
+The phone number or client identifier to use as the caller id. If using a phone number, it must be a Twilio number or a Verified outgoing caller id for your account. If the to parameter is a phone number, From must also be a phone number.
+
+statusCallbackstring<uri>
+The URL we should call using the status_callback_method to send status information to your application. If no status_callback_event is specified, we will send the completed status. If an application_sid parameter is present, this parameter is ignored. URLs must contain a valid hostname (underscores are not permitted).
+statusCallbackEventarray[string]
+The call progress events that we will send to the status_callback URL. Can be: initiated, ringing, answered, and completed. If no event is specified, we send the completed status. If you want to receive multiple events, specify each one in a separate status_callback_event parameter. See the code sample for monitoring call progress. If an application_sid is present, this parameter is ignored.
+statusCallbackMethodenum<http-method>
+The HTTP method we should use when calling the status_callback URL. Can be: GET or POST and the default is POST. If an application_sid parameter is present, this parameter is ignored.
+Possible values:
+GETPOST
+
+timeoutinteger
+The integer number of seconds that we should allow the phone to ring before assuming there is no answer. The default is 60 seconds and the maximum is 600 seconds. For some call flows, we will add a 5-second buffer to the timeout value you provide. For this reason, a timeout value of 10 seconds could result in an actual timeout closer to 15 seconds. You can set this to a short time, such as 15 seconds, to hang up before reaching an answering machine or voicemail.
+
+machineDetectionstring
+Whether to detect if a human, answering machine, or fax has picked up the call. Can be: Enable or DetectMessageEnd. Use Enable if you would like us to return AnsweredBy as soon as the called party is identified. Use DetectMessageEnd, if you would like to leave a message on an answering machine. If send_digits is provided, this parameter is ignored. For more information, see Answering Machine Detection.
+machineDetectionTimeoutinteger
+The number of seconds that we should attempt to detect an answering machine before timing out and sending a voice request with AnsweredBy of unknown. The default timeout is 30 seconds.
+
+asyncAmdstring
+Select whether to perform answering machine detection in the background. Default, blocks the execution of the call until Answering Machine Detection is completed. Can be: true or false.
+asyncAmdStatusCallbackstring<uri>
+The URL that we should call using the async_amd_status_callback_method to notify customer application whether the call was answered by human, machine or fax.
+asyncAmdStatusCallbackMethodenum<http-method>
+The HTTP method we should use when calling the async_amd_status_callback URL. Can be: GET or POST and the default is POST.
+Possible values:
+GETPOST
+
+timeLimitinteger
+The maximum duration of the call in seconds. Constraints depend on account and configuration.
+
+The absolute URL that returns the TwiML instructions for the call. We will call this URL using the method when the call connects. For more information, see the Url Parameter section in Making Calls.
+twimlstring<twiml>
+required if Url or ApplicationSid is not passed
+TwiML instructions for the call Twilio will use without fetching Twiml from url parameter. If both twiml and url are provided then twiml parameter will be ignored. Max 4000 characters.
+## The request Twilio sends to the Url: Direction (excerpt)
+
+A string describing the direction of the call:
+- inbound for inbound calls
+- outbound-api for calls initiated via the REST API
+- outbound-dial for calls initiated by a <Dial> verb.
+|
+
+## StatusCallbackEvent (excerpt)
+
+If you specify any call progress events in the StatusCallbackEvent parameter, Twilio will make an asynchronous request to the StatusCallback URL you provided in your POST request.
+The call progress events you can specify are:
+Event
+|
+Description
+|
+initiated
+|
+Twilio removes your call from the queue and starts dialing.
+|
+ringing
+|
+The call starts ringing.
+|
+answered
+|
+The call is answered. If this event is specified, Twilio will send an in-progress status.
+|
+completed
+|
+The call is completed, regardless of the termination status (which can be busy, canceled, completed, failed, or no-answer). If no StatusCallbackEvent is specified, completed is fired by default.
+|
+
+## Update a Call (excerpt)
+
+## Update a Call
+POST https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Calls/{Sid}.json
+Updating a Call allows you to modify an active call.
+Real-time call modification allows you to interrupt an in-progress call and terminate it or have it begin processing TwiML from either a new URL or from the TwiML provided with modification. Call modification is useful for any application where you want to change the behavior of a running call asynchronously, e.g., hold music, call queues, transferring calls, or forcing a hangup.
+By sending an HTTP POST request to a specific Call instance, you can redirect a call that is in progress or you can terminate a call.
+For step-by-step guidance on modifying in-progress calls, check out the tutorial Modify Calls in Progress in your web language of choice.
+### Path parameters
+Property nameTypeRequiredPIIDescription
+accountSidSID<AC>
+required
+The SID of the Account that created the Call resource(s) to update.
+Pattern: ^AC[0-9a-fA-F]{32}$Min length: 34Max length: 34
+sidSID<CA>
+required
+The Twilio-provided string that uniquely identifies the Call resource to update
+Pattern: ^CA[0-9a-fA-F]{32}$Min length: 34Max length: 34
+### Request body parameters
+Encoding type:application/x-www-form-urlencoded
+SchemaExample
+Property nameTypeRequiredPIIDescriptionChild properties
+urlstring<uri>
+The absolute URL that returns the TwiML instructions for the call. We will call this URL using the method when the call connects. For more information, see the Url Parameter section in Making Calls.
+methodenum<http-method>
+The HTTP method we should use when calling the url. Can be: GET or POST and the default is POST. If an application_sid parameter is present, this parameter is ignored.
+Possible values:
+GETPOST
+statusenum<string>
+Possible values:
+canceledcompleted
+fallbackUrlstring<uri>
+The URL that we call using the fallback_method if an error occurs when requesting or executing the TwiML at url. If an application_sid parameter is present, this parameter is ignored.
+fallbackMethodenum<http-method>
+The HTTP method that we should use to request the fallback_url. Can be: GET or POST and the default is POST. If an application_sid parameter is present, this parameter is ignored.
+Possible values:
+GETPOST
+statusCallbackstring<uri>
+The URL we should call using the status_callback_method to send status information to your application. If no status_callback_event is specified, we will send the completed status. If an application_sid parameter is present, this parameter is ignored. URLs must contain a valid hostname (underscores are not permitted).
+statusCallbackMethodenum<http-method>
+The HTTP method we should use when requesting the status_callback URL. Can be: GET or POST and the default is POST. If an application_sid parameter is present, this parameter is ignored.
+Possible values:
+GETPOST
+twimlstring<twiml>
+TwiML instructions for the call Twilio will use without fetching Twiml from url. Twiml and url parameters are mutually exclusive
+timeLimitinteger
+The maximum duration of the call in seconds. Constraints depend on account and configuration.

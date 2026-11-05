@@ -1,0 +1,20 @@
+Source: https://calcivilrights.ca.gov/2025/06/30/civil-rights-council-secures-approval-for-regulations-to-protect-against-employment-discrimination-related-to-artificial-intelligence/
+Read (UTC): 2026-11-05T15:42:48Z
+HTTP: 200
+
+Reduced: the California Civil Rights Department's press release of 30 June 2025, the summary page of the Civil Rights Council's automated-decision system regulations. Kept: the title, date, effective date and the sections on why the rules are needed and what they do. Left out: the quotations, the contact block (it holds telephone numbers, which this repository never carries) and the page's navigation. The regulation text itself is linked from the page and is not saved here.
+
+# Civil Rights Council Secures Approval for Regulations to Protect Against Employment Discrimination Related to Artificial Intelligence
+June 30, 2025
+New rules are set to go into effect on October 1, 2025
+SACRAMENTO – The California Civil Rights Council today announced securing final approval for regulations to protect against potential employment discrimination as a result of the use of artificial intelligence, algorithms, and other automated-decision systems. The newly approved regulations provide increased clarity on how existing antidiscrimination laws apply to the use of artificial intelligence in employment decisions.
+Why Are Regulations Needed Now?
+Automated-decision systems — which may rely on algorithms or artificial intelligence — are increasingly used in employment settings to facilitate a wide range of decisions related to job applicants or employees, including with respect to recruitment, hiring, and promotion. While these tools can bring myriad benefits, they can also exacerbate existing biases and contribute to discriminatory outcomes. Whether it is a hiring tool that rejects women applicants by mimicking the existing features of a company’s male-dominated workforce or a job advertisement delivery system that reinforces gender and racial stereotypes by directing cashier ads to women and taxi jobs to Black workers, there are numerous challenges that may arise with the use of artificial intelligence in the workplace.
+What’s the Process for Issuing Regulations?
+Under California law, the California Civil Rights Department (CRD) is charged with enforcing many of the state’s robust civil rights laws, including in the areas of employment, housing, businesses and public accommodations, and state-funded programs and activities. As part of those efforts, the Civil Rights Council — which is supported by CRD staff — develops and issues regulations to implement state civil rights laws, including when it comes to new and emerging technologies. With respect to automated-decision systems, the Civil Rights Council’s final regulations are the result of a series of public hearings and careful consideration of input from experts and the public, as well as federal reports and guidance. After review by the Office of Administrative Law, the regulations were approved on June 27, 2025 and are set to go into effect on October 1, 2025.
+What Do These Regulations Do?
+The regulations clarify the application of existing antidiscrimination laws in the workplace in the context of new and emerging technologies, like artificial intelligence. Among other changes, the Civil Rights Council’s regulations aim to:
+- Make it clear that the use of an automated-decision system may violate California law if it harms applicants or employees based on protected characteristics, such as gender, race, or disability.
+- Ensure employers and covered entities maintain employment records, including automated-decision data, for a minimum of four years.
+- Affirm that automated-decision system assessments, including tests, questions, or puzzle games that elicit information about a disability, may constitute an unlawful medical inquiry.
+- Add definitions for key terms used in the regulations, such as “automated-decision system,” “agent,” and “proxy.”

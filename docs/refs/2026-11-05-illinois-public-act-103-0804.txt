@@ -1,0 +1,26 @@
+Source: https://www.ilga.gov/legislation/publicacts/fulltext.asp?Name=103-0804
+Read (UTC): 2026-11-05T15:42:48Z
+HTTP: 200
+
+Reduced: Illinois public law, from the General Assembly's full-text page; the page's line-number table is joined into running text. Kept: the Act's title lines, the definitions of artificial intelligence and generative artificial intelligence in 775 ILCS 5/2-101 (M) and (N, first sentence), the opening of 5/2-102, subdivision (L), and the effective date. The rest of the Act is left out. The 2026-11-01 copy in this folder holds more of the same text.
+
+HB3773 Enrolled LRB103 27562 SPS 53938 b AN ACT concerning business.
+Be it enacted by the People of the State of Illinois, represented in the General Assembly:
+
+[...]
+
+(M) Artificial Intelligence. "Artificial intelligence" means a machine-based system that, for explicit or implicit objectives, infers, from the input it receives, how to generate outputs such as predictions, content, recommendations, or decisions that can influence physical or virtual environments. "Artificial intelligence" includes generative artificial intelligence.
+(N) Generative Artificial Intelligence. "Generative artificial intelligence" means an automated computing system that, when prompted with human prompts, descriptions, or queries, can produce outputs that simulate human-produced content, including, but not limited to, the following: [...]
+
+[...]
+
+(775 ILCS 5/2-102) (from Ch. 68, par. 2-102) Sec. 2-102. Civil rights violations - employment. It is a civil rights violation:
+
+[...]
+
+(L) Use of artificial intelligence. (1) With respect to recruitment, hiring, promotion, renewal of employment, selection for training or apprenticeship, discharge, discipline, tenure, or the terms, privileges, or conditions of employment, for an employer to use artificial intelligence that has the effect of subjecting employees to discrimination on the basis of protected classes under this Article or to use zip codes as a proxy for protected classes under this Article. (2) For an employer to fail to provide notice to an employee that the employer is using artificial intelligence for the purposes described in paragraph (1). The Department shall adopt any rules necessary for the implementation and enforcement of this subdivision, including, but not limited to, rules on the circumstances and conditions that require notice, the time period for providing notice, and the means for providing notice.
+
+[...]
+
+Section 99. Effective date. This Act takes effect January 1, 2026.
+Effective Date: 1/1/2026

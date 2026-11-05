@@ -1,0 +1,58 @@
+Source: https://www.twilio.com/en-us/voice/pricing/us
+Read (UTC): 2026-11-05T15:42:48Z
+HTTP: 200
+
+Reduced: the full page is not redistributed (copyright Twilio Inc.). Quoted below are only the rows DR-025's Spend part uses, with the table's cell separators kept as "|".
+
+Pricing current as of August 2026
+
+Under "Pay-as-you-go Voice pricing", United States:
+Number type
+|
+To make calls
+|
+To receive calls
+|
+Refer from Twilio
+|
+Local calls
+|
+$0.0140 / min
+|
+$0.0085 / min
+|
+|
+Toll-free calls
+|
+$0.0140 / min
+|
+$0.0220 / min
+|
+|
+
+Under the same section's features table:
+Answering machine detection
+|
+$0.0075 / call
+|
+|
+|
+
+Under "Intelligent service pricing":
+Text-to-Speech (TTS) - Free
+|
+Free
+|
+|
+|
+Text-to-Speech (TTS) - Premium
+|
+Standard
+$0.0008 / 100 chars
+|
+Neural
+$0.0032 / 100 chars
+|
+Generative
+$0.0130 / 100 chars
+|

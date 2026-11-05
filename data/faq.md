@@ -109,3 +109,17 @@ The call is transcribed to text so the coordinator can act on your request; audi
 
 ### F8.4 Who do I contact about this line?
 The coordinator, by the same callback route. Complaints about the line itself are read by a person.
+
+## F9. Screening questions and calls from this line
+
+### F9.1 Why did this line call me?
+You applied for an hourly role at ACME and agreed, on the application form, to an automated call about it. The line calls within a few minutes of the application, between 9 AM and 8 PM, Monday to Saturday, in your time zone. It says first that it is automated, and it asks for the four-digit PIN you chose when you applied before it says anything else about the application.
+
+### F9.2 What does the line decide?
+Only one thing: whether it offers you an interview time now or a recruiter calls you back. The line asks the questions the employer posted for the role, in the posted words, and writes down each answer as you give it. When every answer fits what the posting asks for, it offers the recruiter's open interview times. When one does not, it says what the posting asks for and that a recruiter will call you within one business day. A person reads your answers and makes every decision about your application; the line makes none.
+
+### F9.3 How do I stop the calls?
+Say "stop" or "don't call me" on any call from this line, and it will not call that number again. You can also call this line and say the same. Stopping the calls does not withdraw your application.
+
+### F9.4 What is kept, and for how long?
+Your answers are kept as text, in your own words and as the line noted them, with the time of each call and a record of the consent you gave; no audio is kept. Your phone number is kept apart from everything else, is used only to place these calls, and is deleted 30 days after you apply, or at once when you ask the line to stop calling. To have your answers deleted, ask for a callback (F8.2) and say so.
