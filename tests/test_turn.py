@@ -545,3 +545,141 @@ def test_a_five_call_cap_turn_takes_back_its_miss_with_the_rest_of_what_it_did()
     brain2 = ScriptedBrain(asks(("verify_caller", HANNAH)), said("Thanks, you're verified."))
     run_turn(brain2, NoHooks(), c, "ACME 3233 PIN 9683")
     assert c.data["candidate"] == "ACME-3233"
+
+
+# The say branch (DR-025 sections 2 and 3, fix 3): a tool's words said by code, with no further model call.
+
+LONG_FIXED = (
+    "That's every question, thank you. A recruiter will read all your answers before the interview. The nearest "
+    "open interview times are Thursday 5 November at 9:00 AM Central and Friday 6 November at 9:00 AM Central. "
+    "Which suits you?"
+)
+
+
+def _say_tool(words: str, **extra: object):
+    def tool(args, ctx):
+        return actions.ToolOutcome(content='{"recorded":true}', say=words, **extra)
+
+    return tool
+
+
+def test_a_tools_say_is_spoken_whole_with_no_further_model_call(monkeypatch) -> None:
+    monkeypatch.setitem(actions._TOOLS, "record_answer", _say_tool(f"Noted: yes. {LONG_FIXED}"))
+    brain = ScriptedBrain(asks(("record_answer", {"question_id": "q5", "value": "yes", "heard": "yes"})))
+    result = run_turn(brain, default_hooks(), c := tool_ctx(), "Yes, that range works.")
+    # Four sentences and no section named: the cap and the section naming would both have changed it.
+    assert result.spoken == f"Noted: yes. {LONG_FIXED}" and len(brain.calls) == 1
+    assert [m.role for m in c.history] == ["user", "assistant", "tool", "assistant"]
+    assert c.history[-1] == Message("assistant", result.spoken) and result.tier == "1"
+
+
+def test_a_say_in_the_models_own_refusal_words_is_still_said_as_given(monkeypatch) -> None:
+    words = (
+        "That PIN didn't match. I don't have that information on file. Please say the four digits once more."
+    )
+    monkeypatch.setitem(actions._TOOLS, "confirm_applicant", _say_tool(words))
+    brain = ScriptedBrain(asks(("confirm_applicant", {"pin": "1111"})))
+    result = run_turn(brain, NoHooks(), tool_ctx(), "1111")
+    assert result.spoken == words and result.cited == () and result.tier == "1"
+
+
+def test_the_guard_still_reads_a_tools_say(monkeypatch) -> None:
+    monkeypatch.setitem(
+        actions._TOOLS, "record_answer", _say_tool("Noted: yes. You qualify for an interview.")
+    )
+    brain = ScriptedBrain(asks(("record_answer", {"question_id": "q1", "value": "yes", "heard": "yes"})))
+    result = run_turn(brain, default_hooks(), tool_ctx(), "yes")
+    assert result.spoken == f"Noted: yes. {FALLBACK_LINE}" and result.tier == "3"
+
+
+def test_the_last_say_wins_and_a_refusal_beside_it_is_neither_said_nor_written_up(monkeypatch) -> None:
+    monkeypatch.setitem(actions._TOOLS, "record_answer", _say_tool("Noted: no. Next question?"))
+    brain = ScriptedBrain(
+        asks(
+            ("record_answer", {"question_id": "q1", "value": "no", "heard": "no"}),
+            ("answer_question", {"section_ids": []}),
+        )
+    )
+    result = run_turn(brain, NoHooks(), c := tool_ctx(), "No. And what's the pay?")
+    assert result.spoken == "Noted: no. Next question?" and len(brain.calls) == 1
+    assert result.tier == "1" and c.data.get("tier3", []) == []
+
+
+def test_a_hooks_say_without_a_hang_up_is_spoken_with_no_model_call() -> None:
+    class Asker(NoHooks):
+        def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
+            ctx.data["say"] = "To go on, please say the four-digit PIN you chose when you applied."
+            return None
+
+    c = tool_ctx()
+    result = run_turn(ScriptedBrain(), Asker(), c, "Hello?")
+    assert result.spoken.startswith("To go on") and result.hang_up is False and "say" not in c.data
+    assert c.history == [Message("user", "Hello?"), Message("assistant", result.spoken)]
+
+
+def test_the_hand_offs_a_turn_posted_are_on_its_result_and_make_it_tier_two(monkeypatch) -> None:
+    hand_off = actions.HandOff(
+        reason="screening hand-off from ACME-3108 (Lerato): Home Care Aide; recruiter call promised by x",
+        suggested_action="read the record",
+        record_code="ACME-3108",
+    )
+    monkeypatch.setitem(
+        actions._TOOLS, "record_answer", _say_tool("Noted: no. A recruiter will call.", escalate=hand_off)
+    )
+
+    class Queue:
+        def __init__(self) -> None:
+            self.items: list = []
+
+        def submit(self, e) -> bool:
+            self.items.append(e)
+            return True
+
+    c = tool_ctx()
+    c.escalations = Queue()  # type: ignore[assignment]
+    brain = ScriptedBrain(asks(("record_answer", {"question_id": "q5", "value": "no", "heard": "no"})))
+    result = run_turn(brain, NoHooks(), c, "No.")
+    assert result.tier == "2" and result.tools_called == ("record_answer",)
+    [posted] = result.hand_offs
+    assert (
+        c.escalations.items == [posted] and posted.record_url == "http://127.0.0.1:8001/applicants/ACME-3108"
+    )
+    # The same hand-off again on the call is not posted twice, and the turn has none on its result.
+    again = run_turn(
+        ScriptedBrain(asks(("record_answer", {"question_id": "q5", "value": "no", "heard": "no"}))),
+        NoHooks(),
+        c,
+        "No.",
+    )
+    assert again.hand_offs == () and len(c.escalations.items) == 1
+
+
+def test_an_answers_value_is_kept_in_the_span_and_anything_else_there_is_masked(monkeypatch) -> None:
+    monkeypatch.setitem(actions._TOOLS, "record_answer", _say_tool("Noted."))
+    store = TraceStore(":memory:")
+    store.start_call("CA-turn", "text")
+    for value in ("weekends", "25", "9683"):
+        brain = ScriptedBrain(
+            asks(("record_answer", {"question_id": "q2", "value": value, "heard": f"it is {value}"}))
+        )
+        run_turn(brain, NoHooks(), tool_ctx(store), value)
+    args = [s.meta["args"] for s in store.spans("CA-turn") if s.kind == "tool"]
+    assert [a["value"] for a in args] == ["weekends", "25", "****"]
+    assert [a["heard"] for a in args] == ["it is weekends", "it is 25", "it is ****"]
+    assert all(a["question_id"] == "q2" for a in args) and "9683" not in repr(store.spans("CA-turn"))
+
+
+def test_the_state_on_an_outbound_call_before_the_pin_is_the_dialled_applicants() -> None:
+    class Ledgerish:
+        def state(self, code: str) -> dict:
+            return {"code": code, "opted_out": False}
+
+    c = TurnContext(call_id="CA-out", channel="voice", system="", ledger=Ledgerish())  # type: ignore[arg-type]
+    c.data["outbound"] = {
+        "code": "ACME-3108",
+        "first_name": "Lerato",
+        "dial_id": "D-0123456789ab",
+        "attempt": 1,
+    }
+    result = run_turn(ScriptedBrain(said("Please say your PIN.")), NoHooks(), c, "Who is this?")
+    assert result.state == {"code": "ACME-3108", "opted_out": False}

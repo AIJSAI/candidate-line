@@ -3,7 +3,8 @@
 Why plain functions behind one dispatcher: the turn loop runs whatever the model asked for through run_tool, which
 never raises, so a bad argument or an unknown tool becomes one sentence the model recovers from instead of a dead
 turn on a live call. The tools that need a person (move_slot, request_callback) change nothing a person must
-decide and return the hand-off for the loop to post.
+decide and return the hand-off for the loop to post. The screening tools live in screening.py and are named here
+with the rest; an applicant reaches verify_caller, list_open_slots and book_slot too, behind the gate (DR-025).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from candidate_line import persona  # by module: persona imports the tools package, so its names are read late
 from candidate_line.brain import ToolSpec
 from candidate_line.tools.codes import code_digits, pin_digits, spoken_digits
 from candidate_line.tools.faq import lookup
@@ -49,6 +51,8 @@ class HandOff:
     reason: str
     suggested_action: str
     tier: str = "2"
+    # The application whose cockpit record the email links to (a screening hand-off, DR-025 section 15).
+    record_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,9 @@ class ToolOutcome:
     hang_up: bool = False
     escalate: HandOff | None = None
     undo: Callable[[], None] | None = field(default=None, repr=False, compare=False)
+    # Words the loop speaks by code in place of a further model call (DR-025 section 2): a fixed line of spec 9.9
+    # or a posted question, so no applicant hears a reaction worded by the model. Never a PIN.
+    say: str | None = None
 
 
 class BadArgument(ValueError):
@@ -92,8 +99,14 @@ def _verified(ctx: TurnContext, ledger: Ledger) -> Candidate | None:
 
 
 def _state(ctx: TurnContext, ledger: Ledger | None) -> dict[str, Any] | None:
-    cand = _verified(ctx, ledger) if ledger is not None else None
-    return ledger.state(cand.code) if ledger is not None and cand else None
+    """The state the eval checks read: the verified candidate's, or a proved applicant's (DR-025 section 7)."""
+    if ledger is None:
+        return None
+    cand = _verified(ctx, ledger)
+    if cand is not None:
+        return ledger.state(cand.code)
+    found = screening.applicant(ctx, ledger)
+    return ledger.state(found.code) if found is not None else None
 
 
 def _text(args: Mapping[str, Any], key: str, required: str | None = None) -> str | None:
@@ -144,6 +157,8 @@ def _scrub(text: str | None, ctx: TurnContext, ledger: Ledger) -> str | None:
 def _need_verified(ctx: TurnContext, ledger: Ledger) -> Candidate:
     cand = _verified(ctx, ledger)
     if cand is None:
+        if screening.dialled(ctx) is not None:
+            raise BadArgument(screening.NOT_CONFIRMED)
         raise BadArgument("The caller is not verified yet. Ask for the application code and PIN first.")
     return cand
 
@@ -176,6 +191,9 @@ def _hear_pin(ctx: TurnContext, pin: str) -> None:
 @_tool
 def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
+    if screening.dialled(ctx) is not None:
+        # An outbound call is bound to the application it was placed for; another code never switches it.
+        raise BadArgument("On this call the applicant confirms with their PIN alone. Call confirm_applicant.")
     failures = int(ctx.data.get("verify_failures", 0))
     raw_code, raw_pin = args.get("code"), args.get("pin")
     if failures >= MAX_VERIFY_ATTEMPTS:
@@ -222,6 +240,8 @@ def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
         if failures >= MAX_VERIFY_ATTEMPTS:
             miss["next"] = OFFER_CALLBACK
         return ToolOutcome(content=_json(miss), state=_state(ctx, ledger))
+    if not isinstance(cand, Candidate):
+        return _verified_applicant(ctx, ledger, cand, code)
     ctx.data["candidate"] = cand.code
     booked = ledger.booked_slot(cand.code)
     return ToolOutcome(
@@ -243,9 +263,32 @@ def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     )
 
 
+def _verified_applicant(
+    ctx: TurnContext, ledger: Ledger, found: screening.ApplicantRecord, digits: str
+) -> ToolOutcome:
+    """An applicant who calls in with their code and PIN goes on with the first question not yet recorded, so they
+    reach the same questions as the outbound call (spec 3.10, 9.8)."""
+    role = screening.role_of(found)
+    ctx.data["candidate"] = found.code
+    lead = persona.verified_applicant_line(spoken_digits(digits))
+    say, more = screening.resume(ctx, ledger, found, role, lead=lead)
+    body = {
+        "verified": True,
+        "code": found.code,
+        "code_digits": spoken_digits(digits),
+        "first_name": found.first_name,
+        "role": role.title,
+        "questions": len(role.questions),
+    } | more
+    return ToolOutcome(content=_json(body), state=ledger.state(found.code), say=say)
+
+
 @_tool
 def list_open_slots(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
+    found = screening.applicant(ctx, ledger)
+    if found is not None:
+        return _applicant_slots(args, ctx, ledger, found)
     cand = _need_verified(ctx, ledger)
     day = _text(args, "day")
     wanted = parse_day(day) if day else None
@@ -278,6 +321,30 @@ def list_open_slots(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     return ToolOutcome(content=_json(body), state=ledger.state(cand.code))
 
 
+def _applicant_slots(
+    args: Mapping[str, Any], ctx: TurnContext, ledger: Ledger, found: screening.ApplicantRecord
+) -> ToolOutcome:
+    """The role's recruiter's interview slots, only once every posted question is answered and every posted
+    requirement is met: the gate, in code, whatever the model asked for (spec 3.8)."""
+    refusal = screening.gate_refusal(screening.gate(ledger, found))
+    if refusal is not None:
+        return _error(refusal, ledger.state(found.code))
+    role = screening.role_of(found)
+    day = _text(args, "day")
+    wanted = parse_day(day) if day else None
+    zone_name = _text(args, "time_zone") or found.zone
+    body: dict[str, Any] = {"slots": screening.slot_rows(ledger, role, zone_name, wanted)}
+    if day and wanted is None:
+        body["note"] = "That day was not understood, so these are the nearest open slots."
+    elif wanted is not None and not body["slots"]:
+        body["note"] = "No open slots match that day."
+    booked = ledger.booked_slot(found.code)
+    if booked is not None:
+        body["booked_slot"] = booked.label
+        body["note_booked"] = "The applicant already holds an interview time; a change goes to the recruiter."
+    return ToolOutcome(content=_json(body), state=ledger.state(found.code))
+
+
 def _caller_zone(name: str | None) -> ZoneInfo | None:
     if not name:
         return None
@@ -295,6 +362,9 @@ def _zone_words(name: str) -> str:
 @_tool
 def book_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
+    found = screening.applicant(ctx, ledger)
+    if found is not None:
+        return _book_interview(args, ctx, ledger, found)
     cand = _need_verified(ctx, ledger)
     slot_id = _text(args, "slot_id", required="Name the slot by its id, from list_open_slots.")
     try:
@@ -342,9 +412,50 @@ def book_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     )
 
 
+def _book_interview(
+    args: Mapping[str, Any], ctx: TurnContext, ledger: Ledger, found: screening.ApplicantRecord
+) -> ToolOutcome:
+    """Books one of the role's recruiter's open interview slots, behind the gate; the ledger refuses a screen not
+    met as a second lock (DR-025 section 1). No confirmation email is promised: an applicant left no address."""
+    state = ledger.state(found.code)
+    refusal = screening.gate_refusal(screening.gate(ledger, found))
+    if refusal is not None:
+        return _error(refusal, state)
+    slot_id = _text(args, "slot_id", required="Name the slot by its id, from list_open_slots.")
+    role = screening.role_of(found)
+    slot = screening.recruiters_open_slot(ledger, role, slot_id)
+    if slot is None:
+        return _error("That is not one of the open interview times. List the open slots again.", state)
+    try:
+        ledger.book(found.code, slot.id, ctx.call_id)
+    except LedgerError as refusal_:
+        state = ledger.state(found.code)
+        if refusal_.kind == "already_booked":
+            return _error(
+                "The applicant already holds an interview time; a change goes to the recruiter.", state
+            )
+        if refusal_.kind == "screen_not_met":
+            return _error(screening.GATE_UNMET, state)
+        if refusal_.kind == "not_open":
+            return _error("That slot is not open any more. List the open slots again.", state)
+        return _error(str(refusal_), state)
+    code, booking = found.code, slot.id
+
+    def undo() -> None:
+        ledger.unbook(code, booking)
+
+    row: dict[str, Any] = {"booked": True, "slot_id": slot.id, "slot": slot.label}
+    local = screening.local_words(slot, found.zone)
+    if local:
+        row["local"] = local
+    return ToolOutcome(content=_json(row), state=ledger.state(found.code), undo=undo)
+
+
 @_tool
 def move_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
+    if screening.applicant(ctx, ledger) is not None:
+        raise BadArgument("An interview time moves only through the recruiter. Offer a callback.")
     cand = _need_verified(ctx, ledger)
     current = ledger.booked_slot(cand.code)
     if current is None:
@@ -396,28 +507,43 @@ def answer_question(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
 def request_callback(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
     cand = _verified(ctx, ledger)
+    found = screening.applicant(ctx, ledger) if cand is None else None
     best_time = _scrub(_text(args, "best_time"), ctx, ledger)
     reason = _scrub(_text(args, "reason"), ctx, ledger)
-    ledger.request_callback(cand.code if cand else None, best_time, reason, ctx.call_id)
-    who = f"{cand.code} ({cand.name})" if cand else "the caller"
+    code = cand.code if cand else found.code if found else None
+    ledger.request_callback(code, best_time, reason, ctx.call_id)
+    # An applicant is named by first name only, which is all the application holds.
+    who = (
+        f"{cand.code} ({cand.name})"
+        if cand
+        else f"{found.code} ({found.first_name})"
+        if found
+        else "the caller"
+    )
+    first = cand.first_name if cand else found.first_name if found else "the caller"
+    action = (
+        "call the candidate back"
+        if cand
+        else "call the applicant back"
+        if found
+        else "call the caller back on the masked number"
+    )
     return ToolOutcome(
         content=_json(
             {
                 "recorded": True,
-                "for": cand.first_name if cand else "the caller",
+                "for": first,
                 "best_time": best_time,
                 "coordinator_calls_back": COORDINATOR_CALLS_BACK,
             }
         ),
-        state=ledger.state(cand.code) if cand else None,
+        state=ledger.state(code) if code else None,
         escalate=HandOff(
             reason=(
                 f"callback request from {who}: {reason or 'no reason given'}; "
                 f"best time {best_time or 'not given'}"
             ),
-            suggested_action="call the candidate back"
-            if cand
-            else "call the caller back on the masked number",
+            suggested_action=action,
         ),
     )
 
@@ -516,6 +642,27 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ),
 )
 
+# The screening tools build on the helpers above (ToolOutcome, _tool, _scrub), so their module is read once those
+# exist; an import at the top would be a cycle. screening.py reads the persona by module for the same reason.
+from candidate_line.tools import screening
+
+_SPECS_BY_NAME = {spec.name: spec for spec in TOOL_SPECS}
+# An applicant who calls in answers the questions too (spec 3.10), and any applicant can stop the calls, so the
+# inbound line carries record_answer and stop_calls; confirm_applicant is for a call the line placed.
+TOOL_SPECS += (screening.RECORD_ANSWER_SPEC, screening.STOP_CALLS_SPEC)
+# The outbound call's tools (DR-025 section 1): no verify_caller and no move_slot, because the call is bound to the
+# application it was placed for and the PIN alone proves who answered.
+OUTBOUND_TOOL_SPECS: tuple[ToolSpec, ...] = (
+    screening.CONFIRM_APPLICANT_SPEC,
+    screening.RECORD_ANSWER_SPEC,
+    screening.STOP_CALLS_SPEC,
+    _SPECS_BY_NAME["list_open_slots"],
+    _SPECS_BY_NAME["book_slot"],
+    _SPECS_BY_NAME["answer_question"],
+    _SPECS_BY_NAME["request_callback"],
+    _SPECS_BY_NAME["end_call"],
+)
+
 _TOOLS: dict[str, ToolFn] = {
     "verify_caller": verify_caller,
     "list_open_slots": list_open_slots,
@@ -524,8 +671,12 @@ _TOOLS: dict[str, ToolFn] = {
     "answer_question": answer_question,
     "request_callback": request_callback,
     "end_call": end_call,
+    "confirm_applicant": screening.confirm_applicant,
+    "record_answer": screening.record_answer,
+    "stop_calls": screening.stop_calls,
 }
 TOOL_NAMES: tuple[str, ...] = tuple(spec.name for spec in TOOL_SPECS)
+OUTBOUND_TOOL_NAMES: tuple[str, ...] = tuple(spec.name for spec in OUTBOUND_TOOL_SPECS)
 
 
 def run_tool(name: str, args: Mapping[str, Any] | None, ctx: TurnContext) -> ToolOutcome:

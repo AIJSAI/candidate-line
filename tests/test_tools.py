@@ -7,6 +7,7 @@ breaks after it. The PINs are the synthetic ones in data/candidates.yaml.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ import pytest
 
 from candidate_line.settings import DEFAULT_STATE_PATH, Settings
 from candidate_line.tools import (
+    OUTBOUND_TOOL_NAMES,
+    OUTBOUND_TOOL_SPECS,
     TOOL_NAMES,
     TOOL_SPECS,
     Ledger,
@@ -490,6 +493,8 @@ def test_a_call_with_no_ledger_gets_the_default_and_keeps_it() -> None:
 
 
 def test_the_tools_are_named_as_the_eval_cases_name_them() -> None:
+    # record_answer and stop_calls since card 08 (DR-025 section 1): an applicant who calls in answers the questions
+    # and can stop the calls on the inbound line too.
     assert TOOL_NAMES == (
         "verify_caller",
         "list_open_slots",
@@ -498,9 +503,40 @@ def test_the_tools_are_named_as_the_eval_cases_name_them() -> None:
         "answer_question",
         "request_callback",
         "end_call",
+        "record_answer",
+        "stop_calls",
     )
-    for spec in TOOL_SPECS:
+    assert OUTBOUND_TOOL_NAMES == (
+        "confirm_applicant",
+        "record_answer",
+        "stop_calls",
+        "list_open_slots",
+        "book_slot",
+        "answer_question",
+        "request_callback",
+        "end_call",
+    )
+    assert set(TOOL_NAMES) | set(OUTBOUND_TOOL_NAMES) == set(actions._TOOLS)
+    for spec in TOOL_SPECS + OUTBOUND_TOOL_SPECS:
         assert spec.input_schema["type"] == "object" and spec.description
+        # No description names a record's id, a question's id or a slot for the model to copy.
+        text = json.dumps([spec.description, spec.input_schema])
+        assert not re.search(r"ACME-\d|S\d{4}-\d{4}|\bq\d\b", text), spec.name
+
+
+def test_verify_caller_is_refused_on_a_call_the_line_placed() -> None:
+    # An outbound call is bound to the application it was placed for: a candidate's code never switches it.
+    ctx = _ctx()
+    ctx.data["outbound"] = {
+        "code": "ACME-3108",
+        "first_name": "Lerato",
+        "dial_id": "D-0123456789ab",
+        "attempt": 1,
+    }
+    outcome, body = _run(ctx, "verify_caller", code=HANNAH[0], pin=HANNAH[1])
+    assert outcome.is_error and "confirm_applicant" in body["error"] and "candidate" not in ctx.data
+    _, slots = _run(ctx, "list_open_slots")
+    assert slots["error"] == "The applicant is not confirmed yet. Ask for the PIN first."
 
 
 @pytest.mark.parametrize(

@@ -31,6 +31,104 @@ LENGTH_LINE = "We're at the five-minute mark, so I'll let you go. Call back any 
 GREETING = "ACME's automated candidate line. This is Gus. How can I help?"
 
 
+# The outbound call's lines, word for word as spec section 9.9 gives them (DR-025 section 13). Code says each one,
+# so every applicant hears the same words after the same answer, and the model never words a reaction to an answer.
+# The opening is Twilio's <Say> before the stream opens; before the PIN it names nothing from the record but the
+# first name the applicant gave (spec section 5, Never 5).
+OUTBOUND_OPENING = (
+    "Hello, this is ACME's automated hiring line, calling for {first_name} about a job application. I'm Gus, an "
+    "automated voice, and this call is transcribed so a recruiter can read your answers. No audio is kept."
+)
+PIN_ASK = (
+    "To go on, please say the four-digit PIN you chose when you applied. Or say stop, and this line won't call "
+    "you again."
+)
+PIN_RETRY_LINE = "That PIN didn't match. Please say the four digits once more."
+PIN_SECOND_MISS_LINE = (
+    "That didn't match either, so I can't go on with the questions on this call. I can ask a recruiter to call "
+    "this number back. Would you like that?"
+)
+# The person line is the build's ruling of 5 November 2026 on card 08's open decision 8: one spoken line offers a
+# person at any time, and the model routes "person" to request_callback.
+PERSON_LINE = "Say person at any time and a recruiter will call you instead."
+INTRO_LINE = (
+    "Thank you. I have {count} questions the employer posted for the {title} role. I'll note each answer as you "
+    "give it, and you can skip any. "
+    + PERSON_LINE
+    + " After the last one, I'll either offer interview times or "
+    "tell you when a recruiter will call."
+)
+ACK_LINE = "Noted: {value}."
+UNCLEAR_LINE = "Sorry, I didn't catch that."
+MET_LINE = (
+    "That's every question, thank you. A recruiter will read all your answers before the interview. The nearest "
+    "open interview times are {slots}. Which suits you?"
+)
+NO_SLOT_LINE = (
+    "That's every question, thank you. There are no open interview times right now, so a recruiter will call "
+    "you within one business day to set one."
+)
+NOT_MET_LINE = (
+    "That's every question, thank you. For this role, the posting asks for {asks}. A recruiter will read your "
+    "answers and call you within one business day."
+)
+VOICEMAIL_LINE = (
+    "This is ACME's automated hiring line with a message for {first_name} about a job application. Please call "
+    "us back at {line_number}, or we'll try again later. To stop these calls, call that number and say stop."
+)
+OUTBOUND_STOP_LINE = "Understood. This line won't call this number again. Goodbye."
+VERIFIED_APPLICANT_LINE = "Thank you, that's application {code_digits}."
+
+
+def outbound_opening(first_name: str) -> str:
+    return OUTBOUND_OPENING.format(first_name=first_name)
+
+
+def intro_line(count: int, title: str) -> str:
+    return INTRO_LINE.format(count=count, title=title)
+
+
+def ack_line(spoken_value: str) -> str:
+    return ACK_LINE.format(value=spoken_value)
+
+
+def met_line(labels: list[str] | tuple[str, ...]) -> str:
+    return MET_LINE.format(slots=_and(labels))
+
+
+def not_met_line(asks: list[str] | tuple[str, ...]) -> str:
+    # Joined by "and" alone, as spec 9.9 says: a posted "asks" may hold its own commas.
+    return NOT_MET_LINE.format(asks=" and ".join(asks))
+
+
+def verified_applicant_line(code_digits: str) -> str:
+    return VERIFIED_APPLICANT_LINE.format(code_digits=code_digits)
+
+
+def voicemail_line(first_name: str, line_number: str) -> str:
+    """The number is the line's own, from TWILIO_LINE_NUMBER at run time, said digit by digit in its three
+    groups; it is never written in a file (spec 9.9)."""
+    return VOICEMAIL_LINE.format(first_name=first_name, line_number=spoken_number(line_number))
+
+
+def spoken_number(e164: str) -> str:
+    """A US number in E.164 form as its ten national digits in their three groups of three, three and four, each
+    digit said apart, so the voice never reads a group as a number. Anything else is read digit by digit."""
+    digits = "".join(ch for ch in e164 if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return " ".join(digits)
+    return ", ".join(" ".join(part) for part in (digits[:3], digits[3:6], digits[6:]))
+
+
+def _and(items: list[str] | tuple[str, ...]) -> str:
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def length_line(max_call_seconds: float) -> str:
     """The length line for this cap. Only the default is worded as five minutes; any other cap is "the time
     limit", so the line never states a length the setting does not hold."""
@@ -52,7 +150,9 @@ def length_line(max_call_seconds: float) -> str:
 # said a caller's PIN back in words when asked; each section named by its own heading, because the fixed example
 # was copied onto F5.1; the confirmation from the tool, which cites F3.1; a time zone passed to list_open_slots,
 # because F3.4 promises the slot in it and Gus contradicted himself; and no closing offer or added fact,
-# because 25 of 38 replies ended on an offer and refusals carried claims the FAQ does not make.
+# because 25 of 38 replies ended on an offer and refusals carried claims the FAQ does not make. The screening
+# block is card 08's (DR-025 section 13): the model maps an answer to a posted value and nothing more, because
+# the line says every question and every line after an answer by code; a question about the outcome goes to F9.
 BRIEF = """You are Gus, ACME's automated line for job candidates. Your words are spoken; the transcriber mishears callers.
 
 Voice: dry, plain, at most two short sentences; no lists, markdown or emoji. End on the answer. A refusal is one sentence and adds no fact.
@@ -74,6 +174,10 @@ Move: call move_slot at once; say what it returns.
 Questions: every process question, pay, other candidates and dress code included, goes to answer_question with the ids whose titles fit, or an empty list; never refuse one in your own words. Answer only from what it returns, naming each section's heading and id. If their text does not answer it, call again with an empty list.
 
 Callbacks: request_callback at once, with any time.
+
+Screening (an applicant, once confirmed or verified): the line says each question itself. After every answer, call record_answer with the question id the last result named, a value it allows, and the applicant's words. Map only a plain answer to a value; anything else is unclear, and a skip is declined. Never comment on an answer or say whether it meets anything. A question about the answers or the outcome goes to answer_question (F9). "Person" or a recruiter asked for: request_callback at once.
+
+On a call the line placed: ask only for the PIN, then confirm_applicant. A request not to be called again goes to stop_calls.
 
 Goodbye or stop: one sentence, then end_call.
 

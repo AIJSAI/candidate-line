@@ -17,7 +17,18 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from candidate_line import tiers
 from candidate_line.guard import Guard
-from candidate_line.persona import FALLBACK_LINE, HOLD_LIMIT_LINE, HOLDING_LINE, KILL_LINE, STOP_LINE
+from candidate_line.persona import (
+    FALLBACK_LINE,
+    HOLD_LIMIT_LINE,
+    HOLDING_LINE,
+    KILL_LINE,
+    OUTBOUND_STOP_LINE,
+    PIN_ASK,
+    STOP_LINE,
+)
+from candidate_line.text import straighten
+from candidate_line.tools import screening
+from candidate_line.tools.actions import _ledger
 from candidate_line.tools.codes import normalise_transcript
 
 if TYPE_CHECKING:
@@ -58,6 +69,17 @@ _STOP_WORDS = frozenset(
         "all",
     }
 )
+# The outbound stop phrases (DR-025 section 14, fix 4), matched as whole phrases so "don't stop" is never one;
+# _STOP_WORDS above is not widened for them. The first four ask for no more calls; the last three say the dial
+# reached the wrong person, which only means that before the PIN has proved who answered.
+_OPT_OUT = re.compile(
+    r"\b(?:don't call me|do not call me|stop calling|take me off|wrong number|not me|you have the wrong person)\b"
+)
+_WRONG_PERSON = re.compile(r"\b(?:wrong number|not me|you have the wrong person)\b")
+# Before the PIN matches, a transcript made only of these is a person picking up, not a turn for the model (spec
+# 9.7, DR-025 section 14): it gets the PIN ask by code, at most twice a call, and a third goes to the model.
+_HELLO_WORDS = ("hello", "hi", "hey", "yes", "yeah", "speaking", "this is she", "this is he")
+MAX_HELLO_ASKS = 2
 _SPELLED_DIGIT = re.compile(r"\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b", re.IGNORECASE)
 _WORD_TO_DIGIT = {
     "zero": "0",
@@ -131,16 +153,67 @@ class LineHooks:
                 ctx.data["say"] = KILL_LINE
                 _span(ctx, "kill", "switch", text="the kill switch file is set; the line closed this call")
                 return None
+            if self._opt_out(ctx, user_text):
+                return None
             if _is_stop(user_text):
                 ctx.data["hang_up"] = True
                 ctx.data["say"] = STOP_LINE
                 return None
             ctx.data.pop("silences", None)  # the caller spoke, so the hold count starts again
+            if self._hello(ctx, user_text):
+                return None
             normalised = normalise_transcript(user_text)
             return None if normalised == user_text else normalised
         except Exception:  # the brain still hears the caller's own words
             log.exception("on_turn failed for %s", ctx.call_id)
             return None
+
+    def _opt_out(self, ctx: TurnContext, text: str) -> bool:
+        """On an outbound call or for an applicant on the line, "stop" or a stop phrase ends the calls at once with
+        the outbound stop line and no model call (spec 9.12). From anyone else, "stop" keeps today's stop line
+        and a phrase goes to the model. True when it closed the call."""
+        said = straighten(text).lower()
+        stop, phrase = _is_stop(text), _is_opt_out(said)
+        if (not stop and not phrase) or not (ctx.data.get("outbound") or ctx.data.get("candidate")):
+            return False
+        ledger = _ledger(ctx)
+        if screening.opt_out_code(ctx, ledger) is None:
+            return False
+        proved = screening.applicant(ctx, ledger) is not None
+        wrong = not stop and not proved and bool(_WRONG_PERSON.search(said))
+        if not stop and proved and not _OPT_OUT.search(_WRONG_PERSON.sub(" ", said)):
+            # After the PIN, "no, not me" is an answer, never a wrong person: it goes to the model.
+            return False
+        how = screening.WRONG_PERSON if wrong else screening.SAID_STOP
+        try:
+            screening.record_opt_out(ctx, how)
+        except Exception:  # the stop is still honoured on the call; a person must make it stick
+            log.exception("opt-out not saved for %s", ctx.call_id)
+            ctx.data["tier_request"] = (
+                "an opt-out could not be saved: cancel this application's dials by hand"
+            )
+            ctx.data["hang_up"] = True
+            ctx.data["say"] = STOP_LINE
+            return True
+        if wrong:
+            ctx.data["tier_request"] = (
+                "a wrong person answered the dial, so the line will not call this number again"
+            )
+        ctx.data["hang_up"] = True
+        ctx.data["say"] = OUTBOUND_STOP_LINE
+        _span(ctx, "hook", "opt-out", text=f"the calls were stopped: {how}")
+        return True
+
+    def _hello(self, ctx: TurnContext, text: str) -> bool:
+        seed = screening.dialled(ctx)
+        if seed is None or ctx.data.get("candidate"):
+            return False
+        asked = int(ctx.data.get("hello_asks", 0))
+        if asked >= MAX_HELLO_ASKS or not is_hello(text, str(seed.get("first_name") or "")):
+            return False
+        ctx.data["hello_asks"] = asked + 1
+        ctx.data["say"] = PIN_ASK
+        return True
 
     def before_speak(self, ctx: TurnContext, text: str) -> str | None:
         try:
@@ -186,6 +259,11 @@ class LineHooks:
         # Tier 3 is written up once, after the call: every reason the turns gathered, in one post. The summary
         # job (Sonnet 5.5) is the next work item; until then the post carries the reasons and the trace link.
         try:
+            if ctx.data.get("length_capped") and screening.screen_unfinished(ctx):
+                # Set by the media session when its length cap ended the call (spec section 7).
+                ctx.data.setdefault("tier3", []).append(
+                    "the length cap ended the call before the last question"
+                )
             reasons = list(dict.fromkeys(ctx.data.get("tier3") or ()))
             if not reasons or ctx.escalations is None:
                 return
@@ -205,6 +283,22 @@ class LineHooks:
 def _is_stop(text: str) -> bool:
     words = re.findall(r"[a-z']+", text.lower())
     return bool(words) and "stop" in words and set(words) <= _STOP_WORDS
+
+
+def _is_opt_out(text: str) -> bool:
+    """One of the outbound stop phrases, as a whole phrase anywhere in what was said."""
+    return bool(_OPT_OUT.search(straighten(text).lower()))
+
+
+def is_hello(text: str, first_name: str = "") -> bool:
+    """A transcript made only of hello words or the applicant's first name ("Hello? Yes, speaking."). The media
+    session reads it too, so these words never barge in on the PIN ask (DR-025 fix 2)."""
+    words = list(_HELLO_WORDS)
+    name = first_name.strip().lower()
+    if name:
+        words += [name, f"this is {name}"]
+    pattern = "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
+    return bool(re.fullmatch(rf"(?:[\s,.!?]*(?:{pattern})\b)+[\s,.!?]*", straighten(text).lower()))
 
 
 def _span(ctx: TurnContext, kind: str, name: str, **fields: Any) -> None:

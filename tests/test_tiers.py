@@ -5,8 +5,9 @@ from __future__ import annotations
 import pytest
 
 from candidate_line import tiers
-from candidate_line.persona import KILL_LINE, REFUSAL_LINE, STOP_LINE
+from candidate_line.persona import KILL_LINE, OUTBOUND_STOP_LINE, PIN_ASK, REFUSAL_LINE, STOP_LINE
 from candidate_line.tiers import Tier, assign, write_ups
+from candidate_line.tools import HandOff
 from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext
 
@@ -99,3 +100,64 @@ def test_the_hand_off_carries_the_masked_caller_and_the_trace_link() -> None:
     bare = TurnContext(call_id="text-1", channel="text", system="")
     assert tiers.escalation(bare, "3", "x", "read the trace").caller == "-"
     assert tiers.submit(bare, hand_off) is False  # no queue, nothing posted
+
+
+# Tiers by outcome (DR-025 section 15, fix 10): the hand-offs a turn posted, not only the tool names.
+
+SCREENING = HandOff(
+    reason="screening hand-off from ACME-3108 (Lerato): Home Care Aide; recruiter call promised by 6:00 PM Central",
+    suggested_action="read the answers on the record",
+    record_code="ACME-3108",
+)
+
+
+def test_any_turn_that_posted_a_hand_off_is_tier_two_whatever_the_tool() -> None:
+    tier = assign(["record_answer"], hand_offs=(SCREENING,))
+    assert tier == Tier("2", "a screening hand-off went to the role's recruiter")
+    # The same tool ending a screen with a booking offer posts nothing and is tier 1.
+    assert assign(["record_answer"]).tier == "1"
+    callback = HandOff(
+        "callback request from ACME-3108 (Lerato): no reason given; best time not given", "call"
+    )
+    assert assign(["request_callback"], hand_offs=(callback,)) == Tier(
+        "2", "a callback request went to the coordinator"
+    )
+    odd = HandOff("a new kind from someone", "act")
+    assert assign([], hand_offs=(odd,)) == Tier("2", "a hand-off went to a person (a new kind)")
+
+
+def test_a_screening_hand_off_outranks_a_guard_write_up_and_names_it() -> None:
+    tier = assign(["record_answer"], guard_hits=("screen-01",), hand_offs=(SCREENING,))
+    assert (
+        tier.tier == "2"
+        and "to write up after the call: the guard replaced a sentence (screen-01)" in tier.reason
+    )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"tools_called": ["confirm_applicant"]}, "handled alone: confirmed the applicant by PIN"),
+        ({"tools_called": ["confirm_applicant", "record_answer"]}, "recorded an answer"),
+        ({"tools_called": ["stop_calls"], "spoken": "x"}, "stopped every further call"),
+        ({"tools_called": [], "spoken": OUTBOUND_STOP_LINE}, "the applicant asked for no more calls"),
+        ({"tools_called": [], "spoken": PIN_ASK}, "the PIN ask, said again by code"),
+    ],
+)
+def test_the_outbound_tools_handled_alone_are_tier_one(kwargs: dict, reason: str) -> None:
+    tier = assign(**kwargs)
+    assert tier.tier == "1" and reason in tier.reason
+
+
+def test_a_second_pin_miss_is_tier_three_by_the_shared_count() -> None:
+    tier = assign(["confirm_applicant"], verify_failures=2)
+    assert tier == Tier("3", "verification failed 2 times on this call")
+
+
+def test_a_screening_escalation_carries_the_applicants_record_link() -> None:
+    ctx = TurnContext(call_id="CA-out", channel="voice", system="")
+    hand_off = tiers.escalation(
+        ctx, "2", SCREENING.reason, SCREENING.suggested_action, record_code="ACME-3108"
+    )
+    assert hand_off.record_url == "http://127.0.0.1:8001/applicants/ACME-3108"
+    assert tiers.escalation(ctx, "2", "x", "y").record_url is None

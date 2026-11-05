@@ -31,6 +31,9 @@ log = logging.getLogger("candidate_line.escalation")
 
 SNS_SUBJECT = "Candidate Line hand-off"
 SNS_SUBJECT_MAX = 100  # SNS refuses a longer subject, and it must be one line of printable ASCII
+# The kind of hand-off a screen posts when a recruiter must call (DR-025 section 15). Its email is built from the
+# reason's fixed parts and never from free text, so no answer, heard word or unmet requirement can reach it.
+SCREENING_HAND_OFF = "screening hand-off"
 
 TEMPLATE = (
     "Candidate Line: {tier} on call {call_id}\n"
@@ -54,6 +57,8 @@ class Escalation:
     caller: str = "-"
     # When the hand-off was raised, in Central time, for the email: the operator reads it hours later.
     raised_at: str = field(default_factory=lambda: central_now())
+    # The applicant's record on the cockpit, for a screening hand-off: the answers are read there, never in mail.
+    record_url: str | None = None
 
 
 def central_now() -> str:
@@ -90,7 +95,39 @@ def _when(raised_at: str) -> str:
         stamp = datetime.strptime(raised_at, "%Y-%m-%d %H:%M")
     except ValueError:
         return f"{raised_at} Central"
-    return stamp.strftime("%-I:%M %p Central on %A %-d %B %Y")
+    return stamp.strftime(_CENTRAL_WORDS)
+
+
+_CENTRAL_WORDS = "%-I:%M %p Central on %A %-d %B %Y"
+
+
+def spoken_central(when: datetime) -> str:
+    """An instant in the words a recruiter reads it in Central time: "4:05 PM Central on Friday 6 November 2026"."""
+    return when.astimezone(ZoneInfo("America/Chicago")).strftime(_CENTRAL_WORDS)
+
+
+_SCREENING_DETAIL = re.compile(r"^(?P<role>.+?); recruiter call promised by (?P<when>.+)$")
+
+
+def _screening_email(e: Escalation, who: str, detail: str) -> str:
+    """The recruiter's note for a screening hand-off (DR-025 section 15): who, the role, the promised time and the
+    record link, and nothing from the answers. Only the reason's two fixed parts are read; anything else in it is
+    dropped rather than mailed."""
+    parts = _SCREENING_DETAIL.match(detail)
+    role = f" for the {parts.group('role')} role" if parts else ""
+    when = f" by {parts.group('when')}" if parts else " by the time on the record"
+    first = f"{who or 'An applicant'} answered the screening questions{role} on the ACME line, and the line promised that a recruiter will call{when}."
+    record = e.record_url or "the applicant's page on the line's cockpit"
+    return (
+        f"{first}\n"
+        "\n"
+        f"Read the answers on the applicant's record: {record}\n"
+        "\n"
+        "What to do: read the answers on the record and call the applicant by the promised time; a person decides "
+        "every application.\n"
+        "\n"
+        f"Call record {e.call_id}, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
+    )
 
 
 def format_subject(e: Escalation) -> str:
@@ -113,6 +150,8 @@ def format_email(e: Escalation) -> str:
     record's id. No template lines, no internal words: the first hand-off email of 2026-11-04 arrived as the
     Slack template's bare lines and the operator called it messy."""
     kind, who, detail = _parts(e)
+    if kind == SCREENING_HAND_OFF:
+        return _screening_email(e, who, detail)
     ask = {"callback request": "for a callback", "move request": "to move a first-round slot"}.get(
         kind, f"for {kind}"
     )
@@ -140,7 +179,7 @@ def format_email(e: Escalation) -> str:
 
 
 def format_message(e: Escalation) -> str:
-    return TEMPLATE.format(
+    text = TEMPLATE.format(
         tier=e.tier,
         call_id=e.call_id,
         caller=e.caller,
@@ -148,12 +187,18 @@ def format_message(e: Escalation) -> str:
         suggested_action=e.suggested_action,
         trace_url=e.trace_url,
     )
+    return f"{text}\nRecord: {e.record_url}" if e.record_url else text
 
 
 def trace_link(base_url: str, call_id: str) -> str:
     """The cockpit page for one call. The base comes from Settings.cockpit_base_url, so a hand-off posted from a
     tunnel or another host can point at a cockpit the recruiter can reach; a trailing slash is not doubled."""
     return f"{base_url.rstrip('/')}/calls/{urllib.parse.quote(call_id, safe='')}"
+
+
+def record_link(base_url: str, code: str) -> str:
+    """The cockpit page for one application, where the recruiter reads the answers (DR-025 section 16)."""
+    return f"{base_url.rstrip('/')}/applicants/{urllib.parse.quote(code, safe='')}"
 
 
 class Poster(Protocol):

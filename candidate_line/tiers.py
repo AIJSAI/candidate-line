@@ -13,12 +13,20 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from candidate_line.escalation import Escalation, trace_link
-from candidate_line.persona import HOLD_LIMIT_LINE, KILL_LINE, REFUSAL_LINE, STOP_LINE
+from candidate_line.escalation import SCREENING_HAND_OFF, Escalation, record_link, trace_link
+from candidate_line.persona import (
+    HOLD_LIMIT_LINE,
+    KILL_LINE,
+    OUTBOUND_STOP_LINE,
+    PIN_ASK,
+    REFUSAL_LINE,
+    STOP_LINE,
+)
 from candidate_line.settings import DEFAULT_COCKPIT_BASE_URL, Settings
 from candidate_line.text import straighten
 
 if TYPE_CHECKING:
+    from candidate_line.tools import HandOff
     from candidate_line.turn import TurnContext
 
 log = logging.getLogger("candidate_line.tiers")
@@ -30,6 +38,14 @@ HAND_OFF_TOOLS = {
     "move_slot": "a move request went to the coordinator",
     "request_callback": "a callback request went to the coordinator",
 }
+# A posted hand-off in the words the tier span reads, by the kind its reason starts with. One tool,
+# record_answer, ends one screen with a booking offer and another with a hand-off, so the tier reads the hand-off
+# the turn posted and not the tool's name (spec section 7, DR-025 fix 10).
+_HAND_OFF_KINDS = {
+    "move request": HAND_OFF_TOOLS["move_slot"],
+    "callback request": HAND_OFF_TOOLS["request_callback"],
+    SCREENING_HAND_OFF: "a screening hand-off went to the role's recruiter",
+}
 # Spec section 7 writes up the second failed verification, not the first, which is a mishearing more often than not.
 SECOND_MISS = 2
 _DONE_ALONE = {
@@ -38,6 +54,9 @@ _DONE_ALONE = {
     "book_slot": "booked a slot",
     "answer_question": "answered from the FAQ",
     "end_call": "said goodbye",
+    "confirm_applicant": "confirmed the applicant by PIN",
+    "record_answer": "recorded an answer",
+    "stop_calls": "stopped every further call",
 }
 
 
@@ -68,12 +87,18 @@ def assign(
     refused: bool = False,
     verify_failures: int = 0,
     spoken: str = "",
+    hand_offs: Sequence[HandOff] = (),
 ) -> Tier:
     """The turn's tier. `tools_called` are the tools that did what was asked this turn (a refused move posts no
-    hand-off); `verify_failures` is the call's count when this turn added a miss, else 0, so a booking after two
-    misses is not written up again. A hand-off outranks a write-up, because it is posted at once either way; the
-    write-up still reaches the call's end through write_ups()."""
-    handed = [HAND_OFF_TOOLS[name] for name in dict.fromkeys(tools_called) if name in HAND_OFF_TOOLS]
+    hand-off); `hand_offs` are the hand-offs the turn's outcomes carried, and any one makes the turn tier 2
+    whatever the tool; the tool-name rule stays for a caller that passes none. `verify_failures` is the call's
+    count when this turn added a miss, else 0, so a booking after two misses is not written up again. A hand-off
+    outranks a write-up, because it is posted at once either way; the write-up still reaches the call's end
+    through write_ups()."""
+    if hand_offs:
+        handed = list(dict.fromkeys(_hand_off_words(h.reason) for h in hand_offs))
+    else:
+        handed = [HAND_OFF_TOOLS[name] for name in dict.fromkeys(tools_called) if name in HAND_OFF_TOOLS]
     notes = write_ups(guard_hits, refused, verify_failures, spoken)
     if handed:
         also = f"; to write up after the call: {'; '.join(notes)}" if notes else ""
@@ -83,21 +108,35 @@ def assign(
     return Tier("1", _alone(tools_called, spoken))
 
 
+def _hand_off_words(reason: str) -> str:
+    kind = reason.split(" from ", 1)[0].strip()
+    return _HAND_OFF_KINDS.get(
+        kind, f"a hand-off went to a person ({kind})" if kind else "a hand-off went to a person"
+    )
+
+
 def _alone(tools_called: Sequence[str], spoken: str) -> str:
     said = straighten(spoken).strip()
     if said == KILL_LINE:
         return "handled alone: the kill switch closed the call"
     if said == STOP_LINE:
         return "handled alone: the caller said stop"
+    if said == OUTBOUND_STOP_LINE:
+        return "handled alone: the applicant asked for no more calls, and every dial still due was cancelled"
+    if said == PIN_ASK:
+        return "handled alone: the PIN ask, said again by code"
     if said == HOLD_LIMIT_LINE:
         return "handled alone: the caller went quiet past the hold limit"
     done = [_DONE_ALONE[name] for name in dict.fromkeys(tools_called) if name in _DONE_ALONE]
     return f"handled alone: {', '.join(done)}" if done else "handled alone: a spoken answer, no tool"
 
 
-def escalation(ctx: TurnContext, tier: str, reason: str, suggested_action: str) -> Escalation:
+def escalation(
+    ctx: TurnContext, tier: str, reason: str, suggested_action: str, record_code: str | None = None
+) -> Escalation:
     """A hand-off for this call: the cockpit link and the caller's number as the store masked it ("-" in text
-    mode, where there is none). Never a raw number (AGENTS.md rule 7)."""
+    mode, where there is none), and for a screening hand-off the applicant's record link. Never a raw number
+    (AGENTS.md rule 7)."""
     caller = "-"
     if ctx.store is not None:
         try:
@@ -107,13 +146,15 @@ def escalation(ctx: TurnContext, tier: str, reason: str, suggested_action: str) 
             row = None
         if row is not None and row.caller_masked:
             caller = row.caller_masked
+    base = _cockpit_base_url()
     return Escalation(
         call_id=ctx.call_id,
         tier=tier,
         reason=reason,
         suggested_action=suggested_action,
-        trace_url=trace_link(_cockpit_base_url(), ctx.call_id),
+        trace_url=trace_link(base, ctx.call_id),
         caller=caller,
+        record_url=record_link(base, record_code) if record_code else None,
     )
 
 

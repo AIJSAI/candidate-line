@@ -19,7 +19,7 @@ from typing import Any, Literal
 
 from candidate_line import tiers
 from candidate_line.brain import Brain, Message, Reply, ToolCall, ToolResult, ToolSpec
-from candidate_line.escalation import EscalationQueue
+from candidate_line.escalation import Escalation, EscalationQueue
 from candidate_line.evals.rates import cost_usd
 from candidate_line.hooks import Hooks
 from candidate_line.persona import RECOVERY_LINE, REFUSAL_LINE, REPLY_MAX_TOKENS, STOP_LINE
@@ -42,8 +42,11 @@ MAX_MODEL_CALLS = 5
 # Said when end_call came with no words of its own, so the caller never hangs up on silence.
 GOODBYE_LINE = "Goodbye."
 _TOOL_FAILED = json.dumps({"error": "That did not work. Offer a callback from the coordinator."})
-# Arguments that are ids, kept as given in a tool span; every other text argument has its digit runs masked.
-_ID_ARGS = frozenset({"slot_id", "section_ids", "day", "time_zone"})
+# Arguments that are ids, kept as given in a tool span; every other text argument has its digit runs masked. An
+# answer's value is a posted id or a number of three digits at most, never a PIN (DR-025 section 3); one that is
+# anything else is masked like free text, since the model may have put a PIN there by mistake.
+_ID_ARGS = frozenset({"slot_id", "section_ids", "day", "time_zone", "question_id", "value"})
+_PLAIN_VALUE = re.compile(r"[A-Za-z_-]{1,40}|[0-9]{1,3}")
 # A refusal in the model's own words (the review walk of 2026-11-04: salary, dress code, other applicants), which
 # skips the spec's refusal line and its tier-3 write-up, so the loop says the line itself (spec sections 6 and 7).
 _OWN_REFUSAL = re.compile(
@@ -96,6 +99,8 @@ class TurnResult:
     # Card 06's kill switch sets this on the turn that says the closing line; the phone then ends the call after
     # the line has played, and text mode ends the session.
     hang_up: bool = False
+    # The hand-offs posted on the turn, for the eval's hand-off checks (DR-025 section 18).
+    hand_offs: tuple[Escalation, ...] = ()
 
 
 @dataclass
@@ -113,6 +118,11 @@ class _Loop:
     hang_up: bool = False
     refused: bool = False
     tool_ms: int = 0
+    # The last `say` a tool outcome carried, and whether the loop spoke code's words in place of the model's.
+    say: str | None = None
+    said_by_code: bool = False
+    carried: list[HandOff] = field(default_factory=list)  # the hand-offs the turn's outcomes carried
+    posted: list[Escalation] = field(default_factory=list)  # the ones the turn posted
 
 
 def run_turn(
@@ -129,6 +139,7 @@ def run_turn(
     # The per-turn keys. The undo list is what the phone runs if the caller's next words supersede this turn.
     ctx.data["undo"] = []
     ctx.data.pop("guard", None)
+    # A hook's request that the turn be written up (a wrong person answered the dial): the reason, said by no one.
     ctx.data.pop("tier_request", None)
     ctx.data.pop("missed_this_turn", None)
     failures_before = int(ctx.data.get("verify_failures", 0))
@@ -140,12 +151,17 @@ def run_turn(
         # On a call media.py writes the heard span, with the transcriber's confidence and lag (card 03).
         _span(ctx, "transcribe", "heard", text=_masked(heard))
     loop = _Loop()
-    if ctx.data.get("hang_up"):
-        # The kill switch or the caller's "stop": the fixed line, and no model call to wait for or to reword it.
-        text = str(ctx.data.pop("say", STOP_LINE))
+    if ctx.data.get("hang_up") or ctx.data.get("say"):
+        # The kill switch, the caller's "stop", an opt-out, or the PIN ask said again for a hello: the fixed line,
+        # and no model call to wait for or to reword it.
+        text = str(ctx.data.pop("say", None) or STOP_LINE)
     else:
         text = _tool_loop(brain, hooks, ctx, cap, specs, loop)
-        if (
+        if loop.said_by_code:
+            # Fixed lines and posted questions are said whole: the cap would cut the met line before its slots and
+            # its question (DR-025 fix 3), and none of them is the model's refusal or names a section.
+            pass
+        elif (
             not loop.refused
             and set(loop.done) <= _REFUSAL_MAY_REPLACE
             and _OWN_REFUSAL.search(straighten(text))
@@ -178,9 +194,14 @@ def run_turn(
     _span(ctx, "hook", "guard", text=" ".join(labels) or "clean", meta={"hits": list(guard_hits)})
     failures_now = int(ctx.data.get("verify_failures", 0))
     added_miss = failures_now if failures_now > failures_before else 0
-    tier = tiers.assign(loop.done, guard_hits, refused, added_miss, spoken)
+    tier = tiers.assign(loop.done, guard_hits, refused, added_miss, spoken, hand_offs=tuple(loop.carried))
+    requested = ctx.data.get("tier_request")
+    if requested and tier.tier == "1":
+        tier = tiers.Tier("3", str(requested))
     # The guard's own write-up is added by its hook; the refusal and the second miss are added here.
     ctx.data.setdefault("tier3", []).extend(tiers.write_ups((), refused, added_miss, spoken))
+    if requested:
+        ctx.data["tier3"].append(str(requested))
     _undo_scratch(ctx, failures_before, tier3_before)
     state = loop.state if loop.state is not None else _current_state(ctx)
     model_ms = sum(r.latency_ms for r in loop.replies)
@@ -209,6 +230,7 @@ def run_turn(
         state=state,
         tier=tier.tier,
         hang_up=hang_up,
+        hand_offs=tuple(loop.posted),
     )
 
 
@@ -249,6 +271,12 @@ def _tool_loop(
             ctx.history.append(Message("assistant", reply.text, tool_calls=reply.tool_calls))
             results = tuple(_run_call(hooks, ctx, call, loop) for call in reply.tool_calls)
             ctx.history.append(Message("tool", tool_results=results))
+            if loop.say is not None:
+                # A tool gave the words (a fixed line of spec 9.9 or a posted question): said as given, with no
+                # further model call, so no applicant hears a reaction the model worded (DR-025 section 3). A
+                # refusal beside it is not said, so it is not written up as said either.
+                loop.said_by_code, loop.refused = True, False
+                return loop.say
             if loop.refused and all(call.name in _REFUSAL_MAY_REPLACE for call in reply.tool_calls):
                 # Asked to say the refusal line, the model rewords it (card 04's dry run), so the loop says it.
                 return REFUSAL_LINE
@@ -348,6 +376,8 @@ def _run_call(hooks: Hooks, ctx: TurnContext, call: ToolCall, loop: _Loop) -> To
         ctx.data.setdefault("undo", []).append(outcome.undo)
     if outcome.hang_up:
         loop.hang_up = True
+    if outcome.say:
+        loop.say = outcome.say
     if call.name == "answer_question" and not outcome.is_error and not outcome.cited:
         loop.refused = True
     if call.name == "answer_question":
@@ -362,7 +392,10 @@ def _run_call(hooks: Hooks, ctx: TurnContext, call: ToolCall, loop: _Loop) -> To
             meta[key] = body[key]
     _span(ctx, "tool", call.name, ms=ms, text=_one_line(call.name, body, outcome), meta=meta)
     if outcome.escalate is not None:
-        _hand_off(ctx, call.name, outcome.escalate)
+        loop.carried.append(outcome.escalate)
+        posted = _hand_off(ctx, call.name, outcome.escalate)
+        if posted is not None:
+            loop.posted.append(posted)
     return ToolResult(call.id, outcome.content, outcome.is_error)
 
 
@@ -375,6 +408,8 @@ def _traced_args(args: Mapping[str, Any]) -> dict[str, Any]:
         if key == "code":
             digits = code_digits(value)
             traced[key] = code_label(digits) if digits else _masked(str(value))
+        elif key == "value" and not _PLAIN_VALUE.fullmatch(str(value).strip()):
+            traced[key] = _masked(str(value))
         elif isinstance(value, str) and key not in _ID_ARGS:
             traced[key] = _masked(value)
         else:
@@ -382,14 +417,16 @@ def _traced_args(args: Mapping[str, Any]) -> dict[str, Any]:
     return traced
 
 
-def _hand_off(ctx: TurnContext, tool: str, escalate: HandOff) -> None:
-    """Posts a tier-2 hand-off at once (spec section 7: nobody staffs the cockpit, so no hold). The same request
-    posted twice on one call, as a superseded turn's carried words would, goes once."""
+def _hand_off(ctx: TurnContext, tool: str, escalate: HandOff) -> Escalation | None:
+    """Posts a tier-2 hand-off at once (spec section 7: nobody staffs the cockpit, so no hold) and returns it. The
+    same request posted twice on one call, as a superseded turn's carried words would, goes once."""
     posted: list[str] = ctx.data.setdefault("handed_off", [])
     if escalate.reason in posted:
         _span(ctx, "escalation", escalate.tier, text=escalate.reason, meta={"tool": tool, "duplicate": True})
-        return
-    hand_off = tiers.escalation(ctx, escalate.tier, escalate.reason, escalate.suggested_action)
+        return None
+    hand_off = tiers.escalation(
+        ctx, escalate.tier, escalate.reason, escalate.suggested_action, record_code=escalate.record_code
+    )
     submitted = tiers.submit(ctx, hand_off)
     posted.append(escalate.reason)
     _span(
@@ -399,6 +436,7 @@ def _hand_off(ctx: TurnContext, tool: str, escalate: HandOff) -> None:
         text=escalate.reason,
         meta={"tool": tool, "suggested_action": escalate.suggested_action, "submitted": submitted},
     )
+    return hand_off
 
 
 def _undo_scratch(ctx: TurnContext, failures_before: int, tier3_before: int) -> None:
@@ -413,8 +451,11 @@ def _undo_scratch(ctx: TurnContext, failures_before: int, tier3_before: int) -> 
 
 def _current_state(ctx: TurnContext) -> dict[str, Any] | None:
     """The verified candidate's state when no tool reported one this turn, so a check on a later turn reads the
-    call's bookings and not a pending verdict."""
-    code = ctx.data.get("candidate")
+    call's bookings and not a pending verdict. On an outbound call before the PIN it is the dialled applicant's,
+    so a wrong person's opt-out is checkable; it is never spoken (DR-025 section 18)."""
+    seed = ctx.data.get("outbound")
+    dialled = seed.get("code") if isinstance(seed, Mapping) else None
+    code = ctx.data.get("candidate") or dialled
     if not code or ctx.ledger is None:
         return None
     try:
@@ -493,6 +534,16 @@ def _one_line(name: str, body: Mapping[str, Any], outcome: ToolOutcome) -> str:
         return f"callback recorded, best time {body.get('best_time') or 'not given'}"
     if name == "end_call":
         return "ending the call"
+    if name == "confirm_applicant":
+        if body.get("confirmed"):
+            return "confirmed the applicant"
+        return f"no match, {body.get('failures')} failed on this call"
+    if name == "record_answer":
+        if body.get("asked_again"):
+            return f"asked {body.get('question_id')} again"
+        return f"recorded {body.get('question_id')}: {body.get('value')}"
+    if name == "stop_calls":
+        return "stopped every further call"
     return "done"
 
 

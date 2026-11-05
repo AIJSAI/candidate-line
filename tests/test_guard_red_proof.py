@@ -152,6 +152,38 @@ NEW_RULE_CLEAN = (
     "The interviewer takes brief notes for the hiring team; that is from F2.3.",
 )
 
+# The screening rules of card 08 (DR-025, spec 9.9 and the proposed Never 7): the line never tells an applicant
+# they qualify, are eligible, meet or fail a requirement, or have or lack what the posting asks for. Each sentence
+# got through the lexicon before its rule, so each must be caught by that rule and no older one.
+SCREENING_RULE_SENTENCES = (
+    ("screen-01", "You qualify for an interview."),
+    ("screen-01", "You don't qualify for this role."),
+    ("screen-01", "Sorry, you do not qualify."),
+    ("screen-01", "You didn't qualify on the hours."),
+    ("screen-02", "You're eligible for the role."),
+    ("screen-02", "You're not eligible for the role."),
+    ("screen-02", "You aren't eligible for this job."),
+    ("screen-03", "You meet the requirements."),
+    ("screen-03", "Your answer meets the requirement."),
+    ("screen-03", "Your answer doesn't meet the requirement."),
+    ("screen-03", "You didn't meet the requirement for weekends."),
+    ("screen-03", "Your answer fails the requirement."),
+    ("screen-03", "Your answer falls short of the requirement."),
+    ("screen-04", "You don't have what the posting asks for."),
+    ("screen-04", "You have what the posting asks for."),
+    ("screen-05", "You passed the screening."),
+    ("screen-05", "You failed the screen."),
+    ("screen-05", "You've been rejected."),
+    ("screen-05", "Your application was rejected."),
+)
+
+# Refusals that quote a screening phrase, which the refusal cues must still excuse.
+SCREENING_REFUSALS = (
+    "I can't say whether you qualify; a recruiter reads every answer.",
+    "I can't tell you if you meet the requirements.",
+    "I don't decide whether you're eligible for the role.",
+)
+
 # Refusals that quote the phrase they refuse. Each one trips a bare pattern, which the test checks, so a pass
 # here is the negation rule at work and not a sentence the lexicon never looked at.
 QUOTED_REFUSALS = (
@@ -203,6 +235,48 @@ CAUGHT = (
     + SPOKEN_PIN
     + PASSING_FOR_A_PERSON
 )
+
+
+def _screening_lines() -> list[str]:
+    """Every fixed line of spec 9.9 as the persona fills it, every posted question in data/roles.yaml, and each
+    question's line after an answer, for every value it takes. The guard reads them all on an outbound call, so it
+    must replace none."""
+    from candidate_line import persona
+    from candidate_line.tools.roles import DECLINED, UNCLEAR, load_roles, spoken_value
+
+    roles = load_roles()
+    lines = [
+        persona.outbound_opening("Lerato"),
+        persona.PIN_ASK,
+        persona.PIN_RETRY_LINE,
+        persona.PIN_SECOND_MISS_LINE,
+        persona.UNCLEAR_LINE,
+        persona.NO_SLOT_LINE,
+        persona.OUTBOUND_STOP_LINE,
+        persona.verified_applicant_line("3 1 0 8"),
+        persona.voicemail_line("Lerato", "+15555550100"),  # a fictional 555-01xx number
+        persona.met_line(
+            [
+                "Thursday 5 November at 9:00 AM Central (10:00 AM New York time)",
+                "Thursday 5 November at 1:00 PM Central",
+                "Friday 6 November at 9:00 AM Central",
+            ]
+        ),
+    ]
+    for role in roles.values():
+        lines.append(persona.intro_line(len(role.questions), role.title))
+        lines.append(persona.not_met_line([q.asks for q in role.questions]))
+        for q in role.questions:
+            lines += [q.say, persona.not_met_line([q.asks])]
+            values = [DECLINED, UNCLEAR] + (
+                ["yes", "no"]
+                if q.kind == "yes_no"
+                else [o.id for o in q.options]
+                if q.kind == "choice"
+                else [str(q.range.min), "1", str(q.range.max)]
+            )
+            lines += [f"{persona.ack_line(spoken_value(q, v))} {q.say}" for v in values]
+    return lines
 
 
 @functools.cache
@@ -263,6 +337,23 @@ def test_a_spoken_pin_is_caught(sentence: str) -> None:
 @pytest.mark.parametrize("sentence", PASSING_FOR_A_PERSON)
 def test_passing_for_a_person_is_caught(sentence: str) -> None:
     assert _verdict(sentence) is not None
+
+
+@pytest.mark.parametrize(("rule_id", "sentence"), SCREENING_RULE_SENTENCES)
+def test_each_screening_rule_catches_its_own_sentences(rule_id: str, sentence: str) -> None:
+    assert _verdict(sentence) == rule_id
+
+
+@pytest.mark.parametrize("sentence", SCREENING_REFUSALS)
+def test_a_refusal_that_quotes_a_screening_phrase_passes(sentence: str) -> None:
+    straight = straighten(sentence)
+    assert any(rule.regex.search(straight) for rule in _guard().rules), "a screening rule must trip it"
+    assert _verdict(sentence) is None
+
+
+def test_every_fixed_outbound_line_and_every_posted_question_passes() -> None:
+    hits = [(v.sentence, v.rule_id) for line in _screening_lines() for v in _guard().check(line) if v.rule_id]
+    assert hits == []
 
 
 @pytest.mark.parametrize("sentence", QUOTED_REFUSALS)

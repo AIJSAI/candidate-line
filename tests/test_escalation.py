@@ -375,3 +375,71 @@ def test_a_hand_off_with_no_number_says_so_and_an_unverified_caller_is_a_caller(
         "a caller asked the ACME candidate line for a callback: no reason given; best time not given."
     )
     assert "no number is on record for it" in body
+
+
+# The screening hand-off (DR-025 section 15, fix 9): the record link and the promised time, never an answer.
+
+SCREENING = Escalation(
+    call_id="CA-out",
+    tier="2",
+    reason=(
+        "screening hand-off from ACME-3108 (Lerato): Home Care Aide; recruiter call promised by "
+        "4:05 PM Central on Friday 6 November 2026"
+    ),
+    suggested_action="read the answers on the applicant's record and call them by the promised time",
+    trace_url="http://127.0.0.1:8001/calls/CA-out",
+    caller="***-***-0142",
+    raised_at="2026-11-05 16:05",
+    record_url="http://127.0.0.1:8001/applicants/ACME-3108",
+)
+
+
+def test_the_screening_email_names_who_the_role_the_promised_time_and_the_record_link() -> None:
+    from candidate_line.escalation import format_email, format_subject
+
+    assert format_subject(SCREENING) == "Screening hand-off: Lerato (ACME-3108)"
+    assert format_email(SCREENING) == (
+        "Lerato (ACME-3108) answered the screening questions for the Home Care Aide role on the ACME line, and the "
+        "line promised that a recruiter will call by 4:05 PM Central on Friday 6 November 2026.\n"
+        "\n"
+        "Read the answers on the applicant's record: http://127.0.0.1:8001/applicants/ACME-3108\n"
+        "\n"
+        "What to do: read the answers on the record and call the applicant by the promised time; a person decides "
+        "every application.\n"
+        "\n"
+        "Call record CA-out, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
+    )
+
+
+def test_the_screening_email_drops_anything_but_the_reasons_fixed_parts() -> None:
+    from dataclasses import replace
+
+    from candidate_line.escalation import format_email
+
+    # A reason in any other shape is never mailed as it stands: its free words could hold an answer.
+    odd = replace(
+        SCREENING, reason="screening hand-off from ACME-3108 (Lerato): said no to weekends", record_url=None
+    )
+    body = format_email(odd)
+    assert "weekends" not in body and "said no" not in body and "***-***-0142" not in body
+    assert body.startswith("Lerato (ACME-3108) answered the screening questions on the ACME line")
+    assert "by the time on the record" in body and "the applicant's page on the line's cockpit" in body
+
+
+def test_the_slack_form_of_a_screening_hand_off_carries_the_record_link() -> None:
+    assert format_message(SCREENING).endswith("\nRecord: http://127.0.0.1:8001/applicants/ACME-3108")
+    assert "Record:" not in format_message(E)
+
+
+def test_the_record_link_is_the_cockpit_page_for_the_application() -> None:
+    from candidate_line.escalation import record_link, spoken_central
+
+    assert (
+        record_link("https://cockpit.example/", "ACME-3108") == "https://cockpit.example/applicants/ACME-3108"
+    )
+    from datetime import UTC, datetime
+
+    assert (
+        spoken_central(datetime(2026, 11, 6, 22, 5, tzinfo=UTC))
+        == "4:05 PM Central on Friday 6 November 2026"
+    )
