@@ -600,3 +600,32 @@ def test_a_comma_grouped_run_is_otherwise_only_its_digits() -> None:
     # a PIN word already there keeps the run a PIN, and a list of small numbers is not a thousands run
     assert normalise_transcript("ACME-3233 PIN 9,683") == "ACME-3233 PIN 9683"
     assert normalise_transcript("I have 2,3 questions") == "I have 2,3 questions"
+
+
+@pytest.mark.parametrize(
+    ("heard", "brain_reads"),
+    [
+        # CL-024's second line, "Sorry, PIN 2222.", as Transcribe wrote it on 2026-11-05 (DR-024)
+        ("Sorry, 102222.", "Sorry, PIN 2222."),
+        ("Sorry, ten 2222.", "Sorry, PIN 2222."),
+        ("Sorry, 102,222.", "Sorry, PIN 2222."),
+    ],
+)
+def test_the_pin_word_heard_as_ten_before_four_digits_is_the_pin(heard: str, brain_reads: str) -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    assert normalise_transcript(heard) == brain_reads
+
+
+def test_a_ten_before_four_digits_is_left_alone_unless_it_is_the_whole_mishearing() -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    # six digits that do not start with 10, and runs of five or seven that do, are not a PIN heard as ten
+    assert normalise_transcript("Sorry, 512222.") == "Sorry, 512222."
+    assert normalise_transcript("Sorry, 10222.") == "Sorry, 10222."
+    assert normalise_transcript("Sorry, 1022222.") == "Sorry, 1022222."
+    # a PIN word or a code already there keeps the rules that read them
+    assert normalise_transcript("PIN 102222") == "PIN 102222"
+    assert normalise_transcript("ACME-3233, 102222") == "ACME-3233, 102222"
+    # eight comma-grouped digits that start with 10 go to the code-and-PIN rule first (ACME-1022 is Mei's code)
+    assert normalise_transcript("it's 10,227,613") == "it's ACME-1022 PIN 7613"

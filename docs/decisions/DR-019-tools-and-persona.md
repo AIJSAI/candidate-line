@@ -35,6 +35,7 @@ A cite to the wrong section, measured; the FAQ outgrowing an index; the brain's 
 - DR-001's budget is 2,000 ms for the median turn, from the caller's last word to the first audio byte. The brain alone is inside it. With arm A's measured floor of 740 to 780 ms the sum is about 2,300 ms, over it [inference: the floor was measured with no model, and a tool turn speaks only after its last model call]. The phone's own number is the probe caller's to measure.
 - Cost: 0.00024 USD a call over 36 priced cases (`rates.py`: Haiku 5.5 at 0.10 and 0.50 USD per million tokens, cache reads at a tenth).
 - Text walk, 2026-11-04 (scratch store, in-memory ledger): "I'm calling about application 3233 PI 9683" was verified at once, then a booking by day and time, F2.3 named aloud, a move handed off, and "stop".
+- 2026-11-05, from the voice regression (DR-024, the commit that fixes its three defects): the normaliser reads the word PIN heard as "10" or "ten" before four digits, in words with no code and no PIN word, so CL-024's "Sorry, 102222." reaches the model as "Sorry, PIN 2222." (`candidate_line/tools/codes.py`, `tests/test_tools.py`); and the spoken cap counts sentences with a splitter that keeps "a.m.", "p.m.", "e.g.", "i.e.", "vs." and a single capital initial inside a sentence, so CL-033's "after 3 p.m. about your notice period" no longer costs the one-business-day promise (`candidate_line/telephony/audio.py`, `tests/test_turn.py`, `tests/test_media.py`).
 
 ## Say it like this
 

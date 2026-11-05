@@ -46,6 +46,61 @@ def test_codec_round_trip_and_sentence_split() -> None:
     assert split_sentences("  one line no period ") == ["one line no period"]
 
 
+# What the model wrote on CL-033 by voice (the voice regression of 2026-11-05, DR-024), read from its model span.
+CL_033_REPLY = (
+    "I've asked the coordinator to call you back tomorrow after 3 p.m. about your notice period. "
+    "They'll call within one business day."
+)
+CL_033_SENTENCES = [
+    "I've asked the coordinator to call you back tomorrow after 3 p.m. about your notice period.",
+    "They'll call within one business day.",
+]
+
+
+@pytest.mark.parametrize(
+    ("text", "sentences"),
+    [
+        (CL_033_REPLY, CL_033_SENTENCES),
+        (
+            "Slots at 9:30 a.m. and 2 P.M. are open. Which one?",
+            ["Slots at 9:30 a.m. and 2 P.M. are open.", "Which one?"],
+        ),
+        (
+            "Your slot is at 2 p.m. Central. Anything else?",
+            ["Your slot is at 2 p.m. Central.", "Anything else?"],
+        ),
+        ("Say a weekday, e.g. Friday. Or a date.", ["Say a weekday, e.g. Friday.", "Or a date."]),
+        (
+            "Bring the invitation, i.e. the email. That's all.",
+            ["Bring the invitation, i.e. the email.", "That's all."],
+        ),
+        ("Booking vs. moving is F3.1. A move waits.", ["Booking vs. moving is F3.1.", "A move waits."]),
+        (
+            "The panel is J. Doe and team. It is on video.",
+            ["The panel is J. Doe and team.", "It is on video."],
+        ),
+        # a word in capitals is not an initial
+        ("You called ACME. Goodbye.", ["You called ACME.", "Goodbye."]),
+    ],
+)
+def test_a_full_stop_in_an_abbreviation_or_after_an_initial_does_not_end_the_sentence(
+    text: str, sentences: list[str]
+) -> None:
+    assert split_sentences(text) == sentences
+
+
+def test_polly_is_called_by_the_same_splitter_so_the_cl_033_reply_is_said_whole_in_two_sentences() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        transcriber.hear(CL_033_REPLY, is_partial=False)  # the echo brain says it back through the turn's cap
+        await settle(lambda: len(speaker.said) == 3)
+        yield {"event": "stop", "streamSid": SID}
+
+    run_session(transcriber, speaker, script)
+    assert speaker.said == [GREETING, *CL_033_SENTENCES]
+
+
 def run_session(
     transcriber: ScriptedTranscriber, speaker: FakeSpeaker, script, greeting=GREETING, grace_ms=(50, 150)
 ) -> tuple[list[dict], MediaSession]:

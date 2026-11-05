@@ -383,15 +383,19 @@ def _traced_args(args: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _hand_off(ctx: TurnContext, tool: str, escalate: HandOff) -> None:
-    """Posts a tier-2 hand-off at once (spec section 7: nobody staffs the cockpit, so no hold). The same request
-    posted twice on one call, as a superseded turn's carried words would, goes once."""
-    posted: list[str] = ctx.data.setdefault("handed_off", [])
-    if escalate.reason in posted:
+    """Posts a tier-2 hand-off at once (spec section 7: nobody staffs the cockpit, so no hold). One request on one
+    call goes once, keyed on the call, the tool and the candidate, never on the reason's words: a superseded turn
+    posts before the phone knows it is superseded, and its carried words ask again with more of them ("call me
+    back after 3" and then "about my notice period"), which on CL-033 and CL-034 sent the operator two emails
+    (DR-024). The repeat's fuller words stay in its span, which the posted hand-off links to."""
+    posted: list[tuple[str, str, str | None]] = ctx.data.setdefault("handed_off", [])
+    key = (ctx.call_id, tool, ctx.data.get("candidate"))
+    if key in posted:
         _span(ctx, "escalation", escalate.tier, text=escalate.reason, meta={"tool": tool, "duplicate": True})
         return
     hand_off = tiers.escalation(ctx, escalate.tier, escalate.reason, escalate.suggested_action)
     submitted = tiers.submit(ctx, hand_off)
-    posted.append(escalate.reason)
+    posted.append(key)
     _span(
         ctx,
         "escalation",

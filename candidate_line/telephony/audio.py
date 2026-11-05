@@ -17,7 +17,12 @@ FRAME_MS = 20
 MULAW_FRAME_BYTES = SAMPLE_RATE * FRAME_MS // 1000  # 160 bytes of mu-law per 20 ms frame
 PCM_FRAME_BYTES = MULAW_FRAME_BYTES * 2
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+# A full stop after a.m., p.m., e.g., i.e., vs. or a single capital initial ("J. Smith") sits inside a sentence. By
+# voice the model echoes Transcribe's "p.m.", and a split there made "after 3 p.m." a sentence of its own, so the
+# two-sentence cap cut the promise that came after it (CL-033, DR-024). One lookbehind each, because Python's are
+# fixed width; the case is spelled out, not a flag, because a lower-case letter alone is a word ("plan a.").
+_NOT_AN_END = r"(?<!\b[aApP]\.[mM]\.)(?<!\b[eE]\.[gG]\.)(?<!\b[iI]\.[eE]\.)(?<!\b[vV][sS]\.)(?<!\b[A-Z]\.)"
+_SENTENCE_END = re.compile(rf"(?<=[.!?]){_NOT_AN_END}\s+")
 
 
 def mulaw_to_pcm16(data: bytes) -> bytes:

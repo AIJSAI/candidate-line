@@ -79,6 +79,7 @@ A person in the cockpit, which brings back the hold and the override. James's wo
 
 - `tests/test_tiers.py`, 17 tests. The baseline eval run: tier 2 on CL-033, CL-034 and CL-039, tier 3 on the second miss (CL-024), tier 1 on a booking (CL-025) and on stop (CL-035), all passed.
 - The text walk of 2026-11-04 (scratch store, in-memory ledger): the move request posted a tier-2 hand-off at once, to the log poster, since no Slack webhook is stored on this Mac.
+- 2026-11-05, from the voice regression (DR-024, the commit that fixes its three defects): `_hand_off` in `candidate_line/turn.py` keys its duplicate check on the call, the tool and the verified candidate instead of the reason's words, the first half of "One hand-off per tool and caller" under Next. A superseded turn's callback asked again with a reason now posts once (CL-033's shape), and a move and a callback on one call still post two (`tests/test_turn.py`). The second half, an undo for the ledger rows `move_slot` and `request_callback` write, is still open, so a superseded request still leaves two rows in `var/state.json`.
 
 ## Say it like this
 

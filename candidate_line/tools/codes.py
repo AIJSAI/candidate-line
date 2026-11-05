@@ -172,10 +172,26 @@ def _grouped_runs(text: str) -> str:
     return "".join(out) + text[last:]
 
 
+# Transcribe heard the word PIN as "10": the probe's "Sorry, PIN 2222." came back as "Sorry, 102222." (CL-024,
+# DR-024), so after a miss the second pair was never checked and the second miss's callback offer never came. A run
+# of exactly six digits that starts with 10 is read as that PIN, and so is "ten" and four digits, the same mishearing
+# written as a word. Only in words that hold no code and no PIN word, since those are read by the rules below and a
+# 10 beside them may be digits the caller meant.
+_TEN_PIN = re.compile(r"(?<![\w,.\-])(?:10|ten[\s,]+)(?P<pin>[0-9]{4})(?![0-9]|[,.\-][0-9])", re.IGNORECASE)
+_CODE_OR_PIN_WORD = re.compile(rf"\b(?:{_CODE_WORD}|{_ACME_WORD}|{_PIN_WORD})\b", re.IGNORECASE)
+
+
+def _pin_heard_as_ten(text: str) -> str:
+    if _CODE_OR_PIN_WORD.search(text):
+        return text
+    return _TEN_PIN.sub(lambda m: f"PIN {m.group('pin')}", text)
+
+
 def normalise_transcript(text: str) -> str:
     """The caller's words with each code written "ACME-dddd" and each PIN "PIN dddd". The PIN keeps its digits as
     heard, a dropped leading zero included, since pin_digits puts the zero back when the tool reads it."""
     text = _grouped_runs(text)
+    text = _pin_heard_as_ten(text)
     text = _THOUSANDS.sub(r"\1\2", text)
     text = _PIN.sub(lambda m: f"PIN {_joined(m.group('digits'))}", text)
     text = _CODE.sub(_code, text)
