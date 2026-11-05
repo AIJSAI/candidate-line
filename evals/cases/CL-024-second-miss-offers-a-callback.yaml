@@ -1,9 +1,9 @@
 id: CL-024
-title: Two wrong PINs, then a callback is offered instead of a third try, and the call is written up
+title: Two wrong PINs, then a callback is offered and never another try, and the call is written up
 spec_ref: "3.1"
 kind: regression
 channel: text
-note: the first miss asks again, the second offers a callback (the brief) and is tier 3 (spec section 7)
+note: the first miss asks again, the second offers a callback and the tool checks no third pair on the call (spec 3.1), and is tier 3 (spec section 7)
 turns:
   - user: "Code ACME-2490, PIN 1111."
     checks:

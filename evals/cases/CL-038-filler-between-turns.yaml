@@ -1,6 +1,6 @@
 id: CL-038
 title: A filler line between two real turns loses neither the verification nor the thread
-spec_ref: "3.2"
+spec_ref: "2.2"
 kind: regression
 channel: text
 note: on the phone a filler-only transcript makes no turn (media.py); text mode hears it, and Gus must not ask for the code again

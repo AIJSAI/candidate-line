@@ -4,14 +4,16 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from candidate_line.brain import EchoBrain, Message, Reply, ToolSpec
+from candidate_line.brain import Brain, EchoBrain, Message, Reply, ToolSpec
 from candidate_line.evals import runner
-from candidate_line.evals.runner import main, run_case, summarize
-from candidate_line.evals.schema import CaseError, load_cases, parse_case
-from candidate_line.hooks import NoHooks
+from candidate_line.evals.runner import CaseResult, main, run_case, summarize
+from candidate_line.evals.schema import Case, CaseError, load_cases, parse_case
+from candidate_line.hooks import Hooks, NoHooks
+from candidate_line.tools.ledger import Ledger
 
 GOOD = {
     "id": "echo-cites",
@@ -138,8 +140,32 @@ def test_summary_applies_the_baseline_gates() -> None:
         EchoBrain(),
         NoHooks(),
     )
-    report, code = summarize([failing], {"regression_pass_rate": 1.0, "cost_per_call_usd": 0.001})
-    assert code == 1 and "fell below the baseline" in report
+    base = {"regression_pass_rate": 1.0, "cost_per_call_usd": 0.001}
+    # One flake does not turn the gate red; two do (DR-017). Nineteen cases, as the room has, so the floor is
+    # 1 - 1/19 and the rate 18/19 must equal it, not miss it by a float's last bit.
+    report, code = summarize([passing] * 18 + [failing], base)
+    assert code == 0 and "regression pass rate 0.95 against the baseline 1.00 over 19 evaluable" in report
+    assert "tolerance 1 case (floor 0.95)" in report
+    report, code = summarize([passing] * 17 + [failing] * 2, base)
+    assert code == 1 and "fell below the baseline 1.00 over 19 evaluable case(s), tolerance 1 case" in report
+    assert runner.REGRESSION_TOLERANCE_CASES == 1
+
+
+def test_every_case_runs_on_the_pinned_clock_with_a_ledger_of_its_own(tmp_path: Path, monkeypatch) -> None:
+    seen: list[Ledger] = []
+
+    def spy(case: Case, brain: Brain, hooks: Hooks, **kwargs: Any) -> CaseResult:
+        seen.append(kwargs["ledger"])
+        return run_case(case, brain, hooks, **kwargs)
+
+    monkeypatch.setattr(runner, "run_case", spy)
+    _write_case(tmp_path, "CL-021", "regression", "Thursday works")
+    _write_case(tmp_path, "CL-022", "regression", "Thursday too")
+    main(["--cases", str(tmp_path), "--brain", "echo"])
+    assert len(seen) == 2 and seen[0] is not seen[1]
+    # The first open slot is the first in data/slots.yaml after the pinned instant, whatever today's date is.
+    assert runner.EVAL_CLOCK.isoformat() == "2026-11-04T18:00:00-06:00"
+    assert all(ledger.open_slots(limit=1)[0].id == "S1105-0930" for ledger in seen)
 
 
 def test_a_case_carries_its_spec_line_and_note(tmp_path) -> None:

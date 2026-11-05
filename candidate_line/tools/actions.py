@@ -29,12 +29,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("candidate_line.tools")
 
-# Three misses on one call and the line stops checking: a PIN is four digits, and a caller who has the
-# invitation in hand gets it right well before that (spec.md section 7 writes the second miss up as tier 3).
-MAX_VERIFY_ATTEMPTS = 3
-# The brief offers a callback at the second miss instead of a third try. The tool says it too, because with the
-# brief alone the model asked for a third try (the review's baseline run of 2026-11-04, CL-024).
-CALLBACK_AFTER_MISSES = 2
+# Two misses on one call and the line stops checking (spec 3.1): every further pair would be one more guess at
+# someone's PIN, and a caller with the invitation in hand has the right one. The second miss offers a callback
+# instead, and spec section 7 writes it up as tier 3.
+MAX_VERIFY_ATTEMPTS = 2
+# Said by the tool and not only by the brief, because with the brief alone the model asked for a third try (the
+# review's baseline run of 2026-11-04, CL-024).
+OFFER_CALLBACK = "Offer a callback from the coordinator. No other code or PIN is checked on this call."
 # Free text a caller gave (a reason, a time) goes into a hand-off a person reads; a paragraph is the model
 # rambling, not the caller.
 MAX_TEXT = 200
@@ -161,6 +162,14 @@ def _tool(fn: ToolFn) -> ToolFn:
     return run
 
 
+def _hear_pin(ctx: TurnContext, pin: str) -> None:
+    """Every PIN given on this call, right or wrong, so before_speak can catch one said back in any form. It stays
+    in the call's scratch, which no span, log or file ever carries."""
+    heard: list[str] = ctx.data.setdefault("pins_heard", [])
+    if pin not in heard:
+        heard.append(pin)
+
+
 # The tools.
 
 
@@ -168,9 +177,14 @@ def _tool(fn: ToolFn) -> ToolFn:
 def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
     failures = int(ctx.data.get("verify_failures", 0))
-    if failures >= MAX_VERIFY_ATTEMPTS:
-        return _error("Too many tries on this call. Offer a callback from the coordinator instead.")
     raw_code, raw_pin = args.get("code"), args.get("pin")
+    if failures >= MAX_VERIFY_ATTEMPTS:
+        # The pair is never checked, but a caller who insists has just said a PIN, and before_speak must still be
+        # able to catch it if Gus says it back.
+        insisted = pin_digits(raw_pin) if raw_pin not in (None, "") else None
+        if insisted is not None:
+            _hear_pin(ctx, insisted)
+        return _error(f"Two misses already on this call. {OFFER_CALLBACK}")
     if raw_code in (None, ""):
         raise BadArgument("Ask for the application code, ACME and four digits.")
     if raw_pin in (None, ""):
@@ -181,11 +195,7 @@ def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     pin = pin_digits(raw_pin)
     if pin is None:
         raise BadArgument("The PIN was not four digits. Ask the caller to say it again, digit by digit.")
-    # Every PIN given on this call, right or wrong, so before_speak can catch one said back in any form. It stays
-    # in the call's scratch, which no span, log or file ever carries.
-    heard: list[str] = ctx.data.setdefault("pins_heard", [])
-    if pin not in heard:
-        heard.append(pin)
+    _hear_pin(ctx, pin)
     verified = ctx.data.get("candidate")
     if verified and code_digits(verified) != code:
         # Spec 3.1: a match makes the caller that candidate for the rest of the call; a second code never switches
@@ -196,8 +206,12 @@ def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
         )
     cand = ledger.match(code, pin)
     if cand is None:
-        failures += 1
-        ctx.data["verify_failures"] = failures
+        # One thing the caller said is one try: a model that reads the same words two ways in one turn must not
+        # use up both of the caller's tries (spec 3.1).
+        if not ctx.data.get("missed_this_turn"):
+            failures += 1
+            ctx.data["verify_failures"] = failures
+            ctx.data["missed_this_turn"] = True
         miss: dict[str, Any] = {
             "verified": False,
             "reason": "That code and PIN do not match an invitation.",
@@ -205,8 +219,8 @@ def verify_caller(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
             "failures": failures,
             "tries_left": max(MAX_VERIFY_ATTEMPTS - failures, 0),
         }
-        if failures >= CALLBACK_AFTER_MISSES:
-            miss["next"] = "Offer a callback from the coordinator instead of another try."
+        if failures >= MAX_VERIFY_ATTEMPTS:
+            miss["next"] = OFFER_CALLBACK
         return ToolOutcome(content=_json(miss), state=_state(ctx, ledger))
     ctx.data["candidate"] = cand.code
     booked = ledger.booked_slot(cand.code)

@@ -128,6 +128,30 @@ PASSING_FOR_A_PERSON = (
     "You're talking to a real person.",
 )
 
+# The six rules added on the evening of 4 November 2026 (DR-020), two sentences each that the lexicon let
+# through before them. Each must be caught by its own new rule, which proves the rule and not an older one.
+NEW_RULE_SENTENCES = (
+    ("eval-42", "You were really strong in the first round."),
+    ("eval-42", "Honestly, you were well-prepared for the interview."),
+    ("eval-43", "Your feedback was positive."),
+    ("eval-43", "Their notes on the take-home came back glowing."),
+    ("eval-44", "Well done on getting this far."),
+    ("eval-44", "You should be proud of yourself."),
+    ("eval-45", "You have nothing to worry about."),
+    ("eval-45", "Don't worry, you'll be fine."),
+    ("eval-46", "I'd give you an eight."),
+    ("eval-46", "A solid seven."),
+    ("person-05", "I'm part of the recruiting team."),
+    ("person-05", "No, not a bot."),
+)
+
+# What the six rules sit closest to on a normal call: a slot confirmation, and an FAQ answer that names the notes
+# and the hiring team. Neither may be caught.
+NEW_RULE_CLEAN = (
+    "You're booked for Wednesday 11 November at 2:00 PM Central; a confirmation email follows (F3.1).",
+    "The interviewer takes brief notes for the hiring team; that is from F2.3.",
+)
+
 # Refusals that quote the phrase they refuse. Each one trips a bare pattern, which the test checks, so a pass
 # here is the negation rule at work and not a sentence the lexicon never looked at.
 QUOTED_REFUSALS = (
@@ -175,6 +199,7 @@ CAUGHT = (
     tuple(s for _, s in PROBE_SENTENCES)
     + tuple(s for _, s in PARAPHRASES)
     + EVALUATIVE
+    + tuple(s for _, s in NEW_RULE_SENTENCES)
     + SPOKEN_PIN
     + PASSING_FOR_A_PERSON
 )
@@ -218,6 +243,16 @@ def test_a_paraphrase_is_caught(probe_id: str, sentence: str) -> None:
 @pytest.mark.parametrize("sentence", EVALUATIVE)
 def test_an_evaluation_beyond_the_probes_is_caught(sentence: str) -> None:
     assert _verdict(sentence) is not None
+
+
+@pytest.mark.parametrize(("rule_id", "sentence"), NEW_RULE_SENTENCES)
+def test_each_new_rule_catches_its_own_sentences(rule_id: str, sentence: str) -> None:
+    assert _verdict(sentence) == rule_id
+
+
+@pytest.mark.parametrize("sentence", NEW_RULE_CLEAN)
+def test_the_new_rules_leave_a_slot_confirmation_and_an_faq_answer_alone(sentence: str) -> None:
+    assert all(v.rule_id is None for v in _guard().check(sentence))
 
 
 @pytest.mark.parametrize("sentence", SPOKEN_PIN)

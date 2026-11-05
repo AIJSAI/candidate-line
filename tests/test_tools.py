@@ -48,6 +48,11 @@ def _run(ctx: TurnContext, name: str, **args: Any) -> tuple[ToolOutcome, dict[st
     return outcome, json.loads(outcome.content)
 
 
+def _next_turn(ctx: TurnContext) -> None:
+    """What run_turn does at a turn's start for the miss count: one try per thing the caller said."""
+    ctx.data.pop("missed_this_turn", None)
+
+
 def _verify(ctx: TurnContext, who: tuple[str, str] = HANNAH) -> dict[str, Any]:
     _, body = _run(ctx, "verify_caller", code=who[0], pin=who[1])
     assert body.get("verified") is True, body
@@ -113,7 +118,11 @@ def test_a_miss_is_counted_and_never_echoes_the_pin() -> None:
     assert not outcome.is_error and body["verified"] is False
     assert ctx.data["verify_failures"] == 1 and "candidate" not in ctx.data
     assert body["code_heard"] == "3 2 3 3" and "1234" not in outcome.content
+    # A second reading of the same words in the same turn spends no second try.
+    _run(ctx, "verify_caller", code="ACME-3233", pin="1243")
+    assert ctx.data["verify_failures"] == 1
     # A real code with the wrong PIN reads exactly like a code that does not exist.
+    _next_turn(ctx)
     _, unknown = _run(ctx, "verify_caller", code="ACME-0000", pin="1234")
     assert unknown["reason"] == body["reason"] and ctx.data["verify_failures"] == 2
     assert "next" not in body and "callback" in unknown["next"]  # the second miss offers a callback
@@ -142,12 +151,20 @@ def test_an_unreadable_pin_is_asked_again_and_not_counted() -> None:
     assert ctx.data.get("verify_failures", 0) == 0
 
 
-def test_the_line_stops_checking_after_three_misses() -> None:
+def test_the_line_stops_checking_after_two_misses_even_for_the_right_pair() -> None:
+    # Spec 3.1: a second miss offers a callback and ends the checking, even when the caller insists.
+    assert actions.MAX_VERIFY_ATTEMPTS == 2
     ctx = _ctx()
-    for _ in range(actions.MAX_VERIFY_ATTEMPTS):
-        _run(ctx, "verify_caller", code="ACME-3233", pin="1111")
+    _run(ctx, "verify_caller", code="ACME-3233", pin="1111")
+    _next_turn(ctx)
+    _, second = _run(ctx, "verify_caller", code="ACME-3233", pin="2222")
+    _next_turn(ctx)
+    assert second["tries_left"] == 0 and "No other code or PIN is checked" in second["next"]
     outcome, body = _run(ctx, "verify_caller", code=HANNAH[0], pin=HANNAH[1])
     assert outcome.is_error and "callback" in body["error"] and "candidate" not in ctx.data
+    assert ctx.data["verify_failures"] == 2 and HANNAH[1] not in outcome.content
+    # Never checked, but kept, so the guard still catches the insisted PIN if Gus says it back.
+    assert HANNAH[1] in ctx.data["pins_heard"]
 
 
 @pytest.mark.parametrize("heard", ["963", "0963", "0 9 6 3", "zero nine six three"])
@@ -517,3 +534,23 @@ def test_a_failure_inside_a_tool_is_one_sentence_and_logs_no_argument(
     outcome = actions.run_tool("verify_caller", {"code": HANNAH[0], "pin": HANNAH[1]}, ctx)
     assert outcome.is_error and "callback" in json.loads(outcome.content)["error"]
     assert "RuntimeError" in caplog.text and "9683" not in caplog.text
+
+
+def test_a_bare_code_beside_a_pin_is_the_code_whatever_the_transcriber_put_between_its_digits() -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    # the operator's first call to the container, 2026-11-04 20:14 CT: the hyphen cost a turn
+    assert (
+        normalise_transcript("OK, it's 323-3 and the PIN is 9683.") == "OK, it's ACME-3233 and the PIN 9683."
+    )
+    assert normalise_transcript("32 33, pin 9683") == "ACME-3233, PIN 9683"
+    assert (
+        normalise_transcript("three two three three and pin nine six eight three") == "ACME-3233 and PIN 9683"
+    )
+    # a time is not a code, and a code already written stays as it is
+    assert normalise_transcript("Thursday at 9:30, PIN 9683") == "Thursday at 9:30, PIN 9683"
+    assert (
+        normalise_transcript("ACME-3233, PIN 9683, and 1234 is my street")
+        == "ACME-3233, PIN 9683, and 1234 is my street"
+    )
+    assert normalise_transcript("it's 3233") == "it's 3233"  # no PIN beside it: four digits may be anything

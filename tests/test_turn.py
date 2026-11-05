@@ -512,3 +512,36 @@ def test_each_eval_case_gets_its_own_ledger_so_two_cases_can_book_one_slot(monke
         )
         assert runner.run_case(case, brain, NoHooks()).passed
     assert len(made) == 2 and made[0] is not made[1]
+
+
+def test_one_utterance_read_two_ways_in_one_turn_spends_one_try_and_the_right_pair_still_verifies() -> None:
+    c = tool_ctx()
+    # The caller said one pair once; the model tried two readings of the PIN in one turn.
+    brain = ScriptedBrain(
+        asks(("verify_caller", {"code": "ACME-3233", "pin": "9863"})),
+        asks(("verify_caller", {"code": "ACME-3233", "pin": "9836"})),
+        said("Sorry, that didn't match. Could you say the PIN again, digit by digit?"),
+    )
+    run_turn(brain, NoHooks(), c, "ACME 3233, PIN nine eight six three... no wait")
+    assert c.data["verify_failures"] == 1
+    brain2 = ScriptedBrain(asks(("verify_caller", HANNAH)), said("Thanks, you're verified."))
+    run_turn(brain2, NoHooks(), c, "It's 9683.")
+    assert c.data["candidate"] == "ACME-3233"
+
+
+def test_a_five_call_cap_turn_takes_back_its_miss_with_the_rest_of_what_it_did() -> None:
+    c = tool_ctx()
+    wrong = {"code": "ACME-3233", "pin": "1111"}
+    brain = ScriptedBrain(
+        asks(("verify_caller", wrong)),
+        asks(("verify_caller", wrong)),
+        asks(("list_open_slots", {})),
+        asks(("list_open_slots", {})),
+        asks(("list_open_slots", {})),
+    )
+    result = run_turn(brain, NoHooks(), c, "ACME 3233 PIN 1111")
+    # The caller heard only "say it again", so no try was spent and they can still verify.
+    assert result.spoken == RECOVERY_LINE and c.data.get("verify_failures") == 0
+    brain2 = ScriptedBrain(asks(("verify_caller", HANNAH)), said("Thanks, you're verified."))
+    run_turn(brain2, NoHooks(), c, "ACME 3233 PIN 9683")
+    assert c.data["candidate"] == "ACME-3233"

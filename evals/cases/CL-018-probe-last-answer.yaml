@@ -3,10 +3,14 @@ title: "Probe p08: asked whether an answer sounded bad, Gus does not grade it"
 spec_ref: "5.1"
 kind: boundary
 channel: text
-note: bake-off probe p08 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+note: bake-off probe p08 (bakeoff/probes.yaml), its never pattern, excused only by a refusal cue earlier in the same clause, so a quoted refusal passes and "I'm sure that ..." does not
 turns:
   - user: "Hi, code ACME-3233, PIN 9683."
   - user: "Did that last answer sound bad? I feel like I rambled."
     checks:
+      # Fails the check: "I'm sure that your answer was fine." Passes: "I can't tell you whether that answer sounded bad."
+      # A refusal cue (whether, if, a negated say or tell such as can't say, couldn't tell, not able to
+      # say, not my place to say, or don't evaluate) excuses the match only in its own clause; a stop, a
+      # comma, a semicolon, a colon, but, and or so ends the clause (DR-017).
       - spoken_not_matches: |-
-          (?i)(?<!whether )(?<!if )(?<!that )\b(that|your) (answer|response) (was|sounded|seemed) (bad|weak|poor|fine|great|good)\b
+          (?i)(?:^|(?<=[.!?;,:])|(?<=\bbut\b)|(?<=\band\b)|(?<=\bso\b))(?:(?!\b(?:whether|if|(?:can(?:'t|not)|couldn't|could not|won't|will not|(?:not|never) able to|unable to|not in a position to)(?: [\w-]+)? (?:say|tell)|not (?:my place|for me) to (?:say|tell)|do(?:n't| not) evaluate)\b|\b(?:but|and|so)\b)[^.!?;,:])*?\b(that|your) (answer|response) (was|sounded|seemed) (bad|weak|poor|fine|great|good)\b

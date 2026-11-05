@@ -1,8 +1,8 @@
 """`make eval`: runs every case in evals/cases through the same turn loop as the phone and prints a verdict.
 
 Boundary cases are an absolute bar: one failure fails the run. Regression cases are a gate against the
-committed baseline (evals/baseline.json): the pass rate may not fall and the cost per call may not rise more
-than 20 percent. A case whose only unmet checks are pending (their component has not landed, DR-010) is printed
+committed baseline (evals/baseline.json): the pass rate may fall by at most one evaluable regression case and the
+cost per call may not rise more than 20 percent. Every case runs at one pinned instant, EVAL_CLOCK. A case whose only unmet checks are pending (their component has not landed, DR-010) is printed
 as PENDING and counts for neither side. With zero cases it prints that and exits 0 (PREBUILT.md row 9). The run
 speaks with the same persona and the same hooks as the phone and text mode (Settings.system_prompt, default_hooks).
 
@@ -38,6 +38,17 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 CASES = ROOT / "evals" / "cases"
 BASELINE = ROOT / "evals" / "baseline.json"
 COST_TOLERANCE = 0.20
+# The regression gate allows this many evaluable cases below the baseline's rate. The baseline is 1.00 from one
+# run, and in the build's seven live runs five regression cases each failed at least once, so with no slack one
+# flake turned the gate red. One flake does not turn it red; two do (DR-017; proposed 2026-11-04, James reads this
+# diff before it is committed).
+REGRESSION_TOLERANCE_CASES = 1
+# Slack for float rounding only: 18/19 and 1 - 1/19 can differ in the last bit, and they are the same rate.
+_RATE_EPS = 1e-9
+# The instant every case runs at. The cases name real slots, a slot in the past is never open, and the first
+# named slot (CL-025, Wednesday 11 November) would expire on that day; pinned to the evening the cases were
+# written, every case stays valid on any later day (DR-017).
+EVAL_CLOCK = datetime.fromisoformat("2026-11-04T18:00:00-06:00")
 LAST_RUN_NAME = "eval-last.json"
 
 
@@ -197,9 +208,17 @@ def summarize(results: list[CaseResult], baseline: dict | None, moved: str | Non
         lines.append(f"cost per call: {cost_per_call:.5f} USD{cache}")
     if baseline:
         base_rate, base_cost = baseline.get("regression_pass_rate"), baseline.get("cost_per_call_usd")
-        if pass_rate is not None and base_rate is not None and pass_rate < base_rate:
-            lines.append(f"regression pass rate {pass_rate:.2f} fell below the baseline {base_rate:.2f}")
-            code = 1
+        if pass_rate is not None and base_rate is not None:
+            evaluable = len(numbers.regression)
+            floor = base_rate - REGRESSION_TOLERANCE_CASES / evaluable
+            held = pass_rate + _RATE_EPS >= floor
+            verb = "against" if held else "fell below"
+            lines.append(
+                f"regression pass rate {pass_rate:.2f} {verb} the baseline {base_rate:.2f} over {evaluable} evaluable case(s), "
+                f"tolerance {REGRESSION_TOLERANCE_CASES} case (floor {floor:.2f})"
+            )
+            if not held:
+                code = 1
         if cost_per_call is not None and base_cost:
             delta = (cost_per_call - base_cost) / base_cost
             lines.append(
@@ -348,7 +367,14 @@ def main(argv: list[str] | None = None) -> int:
     results = []
     for case in cases:
         result = run_case(
-            case, brain, default_hooks(), system=settings.system_prompt(), store=store, escalations=queue
+            case,
+            brain,
+            default_hooks(),
+            system=settings.system_prompt(),
+            store=store,
+            escalations=queue,
+            # A fresh ledger per case, as run_case would make, but on the pinned clock.
+            ledger=Ledger(now=lambda: EVAL_CLOCK),
         )
         store.end_call(result.ctx_call_id, result.verdict)
         results.append(result)

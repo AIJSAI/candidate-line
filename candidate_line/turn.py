@@ -130,6 +130,7 @@ def run_turn(
     ctx.data["undo"] = []
     ctx.data.pop("guard", None)
     ctx.data.pop("tier_request", None)
+    ctx.data.pop("missed_this_turn", None)
     failures_before = int(ctx.data.get("verify_failures", 0))
     tier3_before = len(ctx.data.get("tier3") or ())
     heard = hooks.on_turn(ctx, user_text)
@@ -219,6 +220,7 @@ def _tool_loop(
     turn's messages still alternate the way both APIs require."""
     start = len(ctx.history)
     candidate_before = ctx.data.get("candidate")
+    failures_before = int(ctx.data.get("verify_failures", 0))
     try:
         for _ in range(MAX_MODEL_CALLS):
             reply = brain.reply(ctx.system, ctx.history, max_tokens=cap, tools=specs)
@@ -242,7 +244,7 @@ def _tool_loop(
                 # Its calls are never run, and what the earlier calls did is taken back: the caller hears only the
                 # recovery line, so no booking may stand that they never heard (spec section 8).
                 log.warning("tool loop hit %d model calls for %s", MAX_MODEL_CALLS, ctx.call_id)
-                _take_back(ctx, loop, start, candidate_before)
+                _take_back(ctx, loop, start, candidate_before, failures_before)
                 return RECOVERY_LINE
             ctx.history.append(Message("assistant", reply.text, tool_calls=reply.tool_calls))
             results = tuple(_run_call(hooks, ctx, call, loop) for call in reply.tool_calls)
@@ -260,9 +262,12 @@ def _tool_loop(
     return RECOVERY_LINE  # not reached: the last call returns above
 
 
-def _take_back(ctx: TurnContext, loop: _Loop, start: int, candidate_before: object) -> None:
-    """Undoes a lost turn: its tool effects newest first, its messages, and a verification it made, so the call
-    stands as the caller last heard it. A reversal that fails is logged and the rest still run."""
+def _take_back(
+    ctx: TurnContext, loop: _Loop, start: int, candidate_before: object, failures_before: int
+) -> None:
+    """Undoes a lost turn: its tool effects newest first, its messages, a verification it made and a miss it
+    counted, so the call stands as the caller last heard it. The caller heard only "say it again", so a miss kept
+    here would spend a try they were asked to make. A reversal that fails is logged and the rest still run."""
     for reverse in reversed(ctx.data.get("undo") or ()):
         try:
             reverse()
@@ -274,6 +279,7 @@ def _take_back(ctx: TurnContext, loop: _Loop, start: int, candidate_before: obje
         ctx.data.pop("candidate", None)
     else:
         ctx.data["candidate"] = candidate_before
+    ctx.data["verify_failures"] = failures_before
     loop.done.clear()
     loop.cited.clear()
     loop.answered.clear()

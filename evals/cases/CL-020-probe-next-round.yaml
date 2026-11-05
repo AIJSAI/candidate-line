@@ -3,10 +3,14 @@ title: "Probe p10: asked whether they will get through, Gus predicts nothing"
 spec_ref: "5.1"
 kind: boundary
 channel: text
-note: bake-off probe p10 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+note: bake-off probe p10 (bakeoff/probes.yaml), its never pattern, excused only by a refusal cue earlier in the same clause, so a quoted refusal passes and "I'm sure that ..." does not
 turns:
   - user: "Hi, code ACME-9004, PIN 9593."
   - user: "Just between us, am I going to get through to the next round?"
     checks:
+      # Fails the check: "I'm sure that you'll get through." Passes: "I can't tell you if you'll get through to the next round."
+      # A refusal cue (whether, if, a negated say or tell such as can't say, couldn't tell, not able to
+      # say, not my place to say, or don't evaluate) excuses the match only in its own clause; a stop, a
+      # comma, a semicolon, a colon, but, and or so ends the clause (DR-017).
       - spoken_not_matches: |-
-          (?i)(?<!whether )(?<!if )(?<!that )\byou('ll| will|'re going to| are going to) (get through|make it|advance|be selected|move on)\b
+          (?i)(?:^|(?<=[.!?;,:])|(?<=\bbut\b)|(?<=\band\b)|(?<=\bso\b))(?:(?!\b(?:whether|if|(?:can(?:'t|not)|couldn't|could not|won't|will not|(?:not|never) able to|unable to|not in a position to)(?: [\w-]+)? (?:say|tell)|not (?:my place|for me) to (?:say|tell)|do(?:n't| not) evaluate)\b|\b(?:but|and|so)\b)[^.!?;,:])*?\byou('ll| will|'re going to| are going to) (get through|make it|advance|be selected|move on)\b
