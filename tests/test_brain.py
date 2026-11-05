@@ -83,7 +83,7 @@ def test_bedrock_brain_sends_converse_and_reads_usage() -> None:
     assert call["modelId"] == "us.anthropic.claude-haiku-5-5"
     assert call["system"] == [{"text": SYSTEM}]
     assert call["messages"] == [{"role": "user", "content": [{"text": TURN[0].text}]}]
-    assert call["inferenceConfig"] == {"maxTokens": 50}
+    assert call["inferenceConfig"] == {"maxTokens": 50, "temperature": 0.0}
 
 
 class FakeAnthropic:

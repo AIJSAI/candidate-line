@@ -81,6 +81,10 @@ The question was reopened after the session, with the line rebuilt (DR-016 to DR
 
 **The spare's retries, split the same evening after review:** a live call's Bedrock client makes two attempts in all (one retry) with a 10 s read bound, so a throttle costs one retry and then the recovery line rather than seconds of silence; the eval runner's client makes seven, since nobody waits on an eval turn (`make_brain(settings, max_attempts=7)` in `candidate_line/evals/runner.py`). DR-001's 2,000 ms budget does not cover a throttled turn on the spare at all.
 
+## Re-examined 2026-11-05: temperature 0 on both providers
+
+Both providers now send temperature 0 (`candidate_line/brain/provider.py`, `TEMPERATURE`). At the default of 1.0, card 08's eval step saw one different case flake on each of five full runs of 52 (CL-039, CL-044, CL-057, CL-034, CL-055, CL-005): a reply the brief forbids, said one time in several, such as a callback turn that asks for a time first or a verify turn that names neither the code nor the PIN. The line's replies are routing, read-backs and short answers from a returned FAQ section, not prose, so the lowest setting loses nothing a caller would want and makes the same words get the same line. Measured after the change on the eval step's next run.
+
 ## Say it like this
 
 > (written after the teach-back)

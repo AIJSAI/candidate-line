@@ -14,6 +14,12 @@ from typing import Any, Literal, Protocol
 
 from candidate_line.settings import Settings
 
+# A caller hears the same line for the same words. At the providers' default of 1.0 the eval step of 2026-11-05 saw one
+# different case flake on each of five full runs of 52 (CL-039, CL-044, CL-057, CL-034, CL-055, CL-005), each a reply the
+# brief forbids said one time in several; the line's replies are routing and read-backs, not prose, so the lowest
+# setting is the right one (DR-003).
+TEMPERATURE = 0.0
+
 Role = Literal["user", "assistant", "tool"]
 
 
@@ -139,7 +145,7 @@ class BedrockConverseBrain:
             "modelId": self.model,
             "system": [{"text": system}],
             "messages": _converse_messages(messages),
-            "inferenceConfig": {"maxTokens": max_tokens},
+            "inferenceConfig": {"maxTokens": max_tokens, "temperature": TEMPERATURE},
         }
         if tools:
             request["toolConfig"] = {
@@ -236,6 +242,7 @@ class AnthropicMessagesBrain:
         request: dict[str, Any] = {
             "model": self.model,
             "max_tokens": max_tokens,
+            "temperature": TEMPERATURE,
             # The system prompt is marked for the prompt cache: the persona and the FAQ are the same on every turn
             # of every call, and a tool turn resends them. Below the model's minimum cacheable size the mark is a
             # no-op; above it the usage reports cached input tokens, which the cost line carries.
