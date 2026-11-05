@@ -5,78 +5,54 @@ that call leg's audio to the server, so both arms hear the same Polly voice thro
 call is recorded on Twilio (dual channel), the recording is downloaded, the turn gaps are read from it (DR-001's
 method of record) and from the probe's own clock (DR-011), both are printed, rows go to the bake-off CSV, and
 the recording is deleted from Twilio. Credentials and numbers come from the environment (scripts/env.sh).
+
+The answer mode (`--answer`, card 08) runs the other way round: the probe posts a signed synthetic application
+for its own number, points its number's voice URL at itself for the run, answers the line's outbound call with one
+short hello, says the PIN and one answer per posted question, and does it twice, once with every requirement met
+and once with one not met. Each call is recorded dual-channel and the recording is deleted from Twilio whatever
+else happens. It rings a real phone line and spends real money, so it runs only with `--watched`, with James
+watching (card 08, lane B).
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
+import contextlib
 import csv
+import hmac
 import json
 import logging
+import secrets
 import statistics
 import sys
 import time
-import urllib.parse
 import urllib.request
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape
 
+import yaml
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+
+from candidate_line.outbound.intake import APPLICATIONS_PATH, ROLES_PATH, signed_headers
 from candidate_line.probe.direct import load_case, score
 from candidate_line.probe.recording import gaps_from_recording, line_channel, transcribe_pcm16
 from candidate_line.probe.session import Exchange, ProbeSession, ProbeTranscript
 from candidate_line.settings import Settings
+from candidate_line.telephony.app import twilio_signature
 from candidate_line.telephony.speech import PollySpeaker, TranscribeStreamingTranscriber
+from candidate_line.telephony.twilio_rest import TwilioError, TwilioRest
 
 log = logging.getLogger("candidate_line.probe")
-API = "https://api.twilio.com/2010-04-01/Accounts"
 
 
-class Twilio:
-    """The four REST calls the dial mode needs, over the standard library; no SDK, nothing cached."""
-
-    def __init__(self, account_sid: str, auth_token: str) -> None:
-        self.sid = account_sid
-        self._auth = base64.b64encode(f"{account_sid}:{auth_token}".encode()).decode()
-
-    def _request(self, method: str, path: str, data: dict[str, str] | None = None, raw: bool = False) -> Any:
-        url = f"{API}/{self.sid}/{path}"
-        body = urllib.parse.urlencode(data).encode() if data else None
-        req = urllib.request.Request(
-            url, data=body, method=method, headers={"Authorization": f"Basic {self._auth}"}
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            payload = resp.read()
-        return payload if raw else json.loads(payload or b"{}")
-
-    def place_call(self, to: str, from_: str, probe_wss: str) -> str:
-        twiml = f'<Response><Connect><Stream url="{probe_wss}/probe-media" /></Connect></Response>'
-        call = self._request("POST", "Calls.json", {"To": to, "From": from_, "Twiml": twiml})
-        if "sid" not in call:
-            raise RuntimeError(f"Twilio refused the call: {call.get('message')}")
-        return str(call["sid"])
-
-    def call_status(self, call_sid: str) -> str:
-        return str(self._request("GET", f"Calls/{call_sid}.json").get("status"))
-
-    def start_recording(self, call_sid: str) -> str:
-        rec = self._request("POST", f"Calls/{call_sid}/Recordings.json", {"RecordingChannels": "dual"})
-        if "sid" not in rec:
-            raise RuntimeError(f"Twilio refused the recording: {rec.get('message')}")
-        return str(rec["sid"])
-
-    def hang_up(self, call_sid: str) -> None:
-        self._request("POST", f"Calls/{call_sid}.json", {"Status": "completed"})
-
-    def recording_ready(self, recording_sid: str) -> bool:
-        return self._request("GET", f"Recordings/{recording_sid}.json").get("status") == "completed"
-
-    def download_recording(self, recording_sid: str, to: Path) -> None:
-        to.write_bytes(self._request("GET", f"Recordings/{recording_sid}.wav?RequestedChannels=2", raw=True))
-
-    def delete_recording(self, recording_sid: str) -> None:
-        self._request("DELETE", f"Recordings/{recording_sid}.json")
+def probe_stream_twiml(probe_wss: str) -> str:
+    """The TwiML that connects the probe's call leg to its own WebSocket server."""
+    return f'<Response><Connect><Stream url="{probe_wss}/probe-media" /></Connect></Response>'
 
 
 async def serve_one_call(port: int, make_session) -> tuple[ProbeTranscript, dict[str, int]]:
@@ -167,9 +143,304 @@ def append_rows(csv_path: Path, arm: str, call: str, transcript: ProbeTranscript
     return len(rows)
 
 
+# The answer mode.
+
+# The first dial is two minutes after intake, the dialler ticks every 15 s and waits out its own first 120 s, and
+# the phone rings for up to 30 s: seven minutes covers all of it with room.
+ANSWER_WAIT_S = 420
+PROBE_FIRST_NAME = "Probe"  # synthetic, and no person's name (AGENTS.md rule 10)
+_DIGIT_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+# What the line must say for each case (spec 9.9): the met line's offer, or the not-met line's posted words.
+MET_PHRASE = "nearest open interview times"
+NOT_MET_PHRASE = "the posting asks for"
+
+
+@dataclass(frozen=True)
+class AnswerCase:
+    name: str  # "met" or "not_met"
+    pin: str
+    lines: list[str]
+    expect: str
+
+
+def _answer(question: Mapping[str, Any], meets: bool) -> str:
+    """The probe's answer to one posted question, chosen from its closed rule to meet it or to miss it."""
+    kind, rule = question["kind"], dict(question["rule"])
+    if kind == "yes_no":
+        wanted = str(rule["equals"])
+        said = wanted if meets else ("no" if wanted == "yes" else "yes")
+        return f"{said.capitalize()}."
+    if kind == "choice":
+        allowed = set(rule["one_of"])
+        option = next(o for o in question["options"] if (o["id"] in allowed) == meets)
+        return f"{str(option['say']).capitalize()}."
+    low, high = int(question["range"]["min"]), int(question["range"]["max"])
+    if "at_least" in rule:
+        n = int(rule["at_least"])
+        value = min(high, n + 5) if meets else max(low, n - 5)
+    elif "at_most" in rule:
+        n = int(rule["at_most"])
+        value = max(low, n - 5) if meets else min(high, n + 5)
+    else:
+        a, b = (int(x) for x in rule["between"])
+        value = (a + b) // 2 if meets else (a - 1 if a > low else b + 1)
+    return f"{value}."
+
+
+def answer_cases(role: Mapping[str, Any], pins: tuple[str, str] | None = None) -> list[AnswerCase]:
+    """The two calls: every posted requirement met, then the first one not met. Each opens with one short hello,
+    says its PIN digit by digit, answers every question in posted order, then picks the first time or says
+    goodbye."""
+    pins = pins or (f"{secrets.randbelow(10000):04d}", f"{secrets.randbelow(10000):04d}")
+    cases: list[AnswerCase] = []
+    for name, pin in zip(("met", "not_met"), pins, strict=True):
+        answers = [_answer(q, meets=name == "met" or i > 0) for i, q in enumerate(role["questions"])]
+        closing = "The first one, please." if name == "met" else "Thank you, goodbye."
+        lines = ["Hello?", " ".join(_DIGIT_WORDS[int(d)] for d in pin) + ".", *answers, closing]
+        cases.append(AnswerCase(name, pin, lines, MET_PHRASE if name == "met" else NOT_MET_PHRASE))
+    return cases
+
+
+def application_body(role_id: str, phone: str, zone: str, pin: str, now: datetime | None = None) -> bytes:
+    """A synthetic application for the probe's own number, in intake's closed schema (DR-025 section 10)."""
+    texts = (yaml.safe_load(APPLICATIONS_PATH.read_text(encoding="utf-8")) or {}).get("consent_texts") or {}
+    version = max(texts)
+    at = (now or datetime.now(UTC)).isoformat(timespec="seconds")
+    return json.dumps(
+        {
+            "first_name": PROBE_FIRST_NAME,
+            "role": role_id,
+            "phone": phone,
+            "zone": zone,
+            "pin": pin,
+            "consent": {"version": version, "accepted": True, "at": at, "source": "operator"},
+        },
+        separators=(",", ":"),
+    ).encode()
+
+
+def post_application(
+    line_url: str,
+    key: str,
+    body: bytes,
+    opener: Callable[[urllib.request.Request, float], bytes] | None = None,
+) -> dict[str, Any]:
+    """Posts one signed application to the line's intake and returns its answer: the code and the status."""
+    request = urllib.request.Request(
+        line_url.rstrip("/") + "/applications", data=body, method="POST", headers=signed_headers(key, body)
+    )
+
+    def urlopen(req: urllib.request.Request, timeout: float) -> bytes:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+
+    return json.loads((opener or urlopen)(request, 30.0))
+
+
+@contextlib.contextmanager
+def voice_url_pointed_at(twilio: TwilioRest, number: str, url: str) -> Iterator[None]:
+    """Points the probe's number at the probe for the run and puts back what it was, even when the run fails."""
+    before = twilio.incoming_number(number)
+    twilio.set_voice_url(before["sid"], url, "POST")
+    try:
+        yield
+    finally:
+        twilio.set_voice_url(before["sid"], before["voice_url"], before["voice_method"])
+
+
+def finish_recording(twilio: TwilioRest, recording_sid: str, wav: Path) -> tuple[list[Any], str]:
+    """Downloads the dual-channel recording, reads the gaps from it, and deletes it from Twilio in every case,
+    whether or not the download worked: Twilio keeps no audio of the line (spec section 5)."""
+    try:
+        if not wait_until(lambda: twilio.recording_ready(recording_sid), 60, 2.0):
+            return [], "recording not ready in 60 s"
+        twilio.download_recording(recording_sid, wav)
+        return gaps_from_recording(wav)
+    finally:
+        try:
+            twilio.delete_recording(recording_sid)
+        except TwilioError as error:
+            log.error("the recording could not be deleted from Twilio; delete it by hand: %s", error)
+
+
+@dataclass
+class AnswerCall:
+    """What the probe's server saw of one call: its CallSid and the transcript."""
+
+    call_sid: str | None = None
+    transcript: ProbeTranscript | None = None
+    done: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+def probe_app(
+    auth_token: str,
+    public_url: str,
+    line_number: str,
+    make_session: Callable[[Any], ProbeSession],
+    call: AnswerCall,
+) -> FastAPI:
+    """The probe's own small server: `/probe-voice` answers the line's call to the probe's number, signature
+    checked and only for a call from the line, and `/probe-media` runs the probe's session on that call's stream."""
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    base = public_url.rstrip("/")
+    wss = base.replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+
+    @app.post("/probe-voice")
+    async def voice(request: Request) -> Response:
+        form = {k: str(v) for k, v in (await request.form()).items()}
+        expected = twilio_signature(auth_token, base + "/probe-voice", form)
+        if not hmac.compare_digest(expected, request.headers.get("X-Twilio-Signature", "")):
+            raise HTTPException(status_code=403, detail="bad Twilio signature")
+        if form.get("From") != line_number or call.call_sid is not None:
+            # Only the line's one call is answered; anything else ringing the probe's number is hung up.
+            return Response(content="<Response><Hangup/></Response>", media_type="text/xml")
+        call.call_sid = form.get("CallSid")
+        twiml = f'<Response><Connect><Stream url="{escape(wss)}/probe-media" /></Connect></Response>'
+        return Response(content=twiml, media_type="text/xml")
+
+    @app.websocket("/probe-media")
+    async def media(ws: WebSocket) -> None:
+        await ws.accept()
+        if call.transcript is not None or call.call_sid is None:
+            await ws.close(code=1008)
+            return
+
+        async def incoming() -> Any:
+            while True:
+                try:
+                    message = await ws.receive_json()
+                except WebSocketDisconnect:
+                    return
+                yield message
+                if message.get("event") == "stop":
+                    return
+
+        session = make_session(ws.send_json)
+        try:
+            call.transcript = await asyncio.wait_for(session.run(incoming()), timeout=300)
+        except TimeoutError:
+            call.transcript = session.transcript
+        finally:
+            call.done.set()
+        with contextlib.suppress(Exception):
+            await ws.close()
+
+    return app
+
+
+def answer_main(args: argparse.Namespace, settings: Settings) -> int:
+    """The answer mode's run: two applications, two calls answered, two recordings deleted."""
+    import uvicorn
+
+    wanted = {
+        "TWILIO_ACCOUNT_SID": settings.twilio_account_sid,
+        "TWILIO_AUTH_TOKEN": settings.twilio_auth_token,
+        "TWILIO_LINE_NUMBER": settings.twilio_line_number,
+        "TWILIO_PROBE_NUMBER": settings.twilio_probe_number,
+        "INTAKE_SIGNING_KEY": settings.intake_signing_key,
+    }
+    for name, value in wanted.items():
+        if not value:
+            print(f"{name} is not set; store it with make secret NAME={name}", file=sys.stderr)
+            return 2
+    line_url = args.line_url or settings.public_base_url
+    if not line_url:
+        print("the line's public URL is needed: --line-url or PUBLIC_BASE_URL", file=sys.stderr)
+        return 2
+    roles = {r["id"]: r for r in (yaml.safe_load(ROLES_PATH.read_text(encoding="utf-8")) or {})["roles"]}
+    role = roles[args.role]
+    twilio = TwilioRest(str(settings.twilio_account_sid), str(settings.twilio_auth_token))
+    probe_number, line_number = str(settings.twilio_probe_number), str(settings.twilio_line_number)
+    failures = 0
+    with voice_url_pointed_at(twilio, probe_number, args.public_url.rstrip("/") + "/probe-voice"):
+        for case in answer_cases(role):
+            failures += asyncio.run(_answer_one(args, settings, twilio, case, line_url, line_number, uvicorn))
+    return 1 if failures else 0
+
+
+async def _answer_one(
+    args: argparse.Namespace,
+    settings: Settings,
+    twilio: TwilioRest,
+    case: AnswerCase,
+    line_url: str,
+    line_number: str,
+    uvicorn: Any,
+) -> int:
+    call = AnswerCall()
+
+    def make_session(send: Any) -> ProbeSession:
+        return ProbeSession(
+            send,
+            TranscribeStreamingTranscriber(settings.aws_region),
+            PollySpeaker(settings.aws_region, voice_id=args.voice),
+            case.lines,
+            stream_sid=f"probe-answer-{case.name}",
+            silence_ms=1500,  # the opening and the PIN ask come as two utterances with the stream's start between
+            reply_timeout_s=20.0,
+            twilio_side=True,
+        )
+
+    app = probe_app(str(settings.twilio_auth_token), args.public_url, line_number, make_session, call)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, log_level="warning"))
+    serving = asyncio.create_task(server.serve())
+    recording_sid: str | None = None
+    try:
+        body = application_body(args.role, str(settings.twilio_probe_number), args.zone, case.pin)
+        answer = await asyncio.to_thread(post_application, line_url, str(settings.intake_signing_key), body)
+        print(f"{case.name}: application {answer.get('code')} {answer.get('status')}")
+        if answer.get("status") != "scheduled":
+            print(f"{case.name}: the line will not dial this application ({answer.get('status')})")
+            return 1
+        if not await _wait_for(lambda: call.call_sid is not None, ANSWER_WAIT_S):
+            print(f"{case.name}: the line did not call within {ANSWER_WAIT_S} s")
+            return 1
+        sid = str(call.call_sid)
+        if await asyncio.to_thread(wait_until, lambda: twilio.call_status(sid) == "in-progress", 40):
+            recording_sid = await asyncio.to_thread(twilio.start_recording, sid)
+        await asyncio.wait_for(call.done.wait(), timeout=320)
+        if await asyncio.to_thread(twilio.call_status, sid) == "in-progress":
+            await asyncio.to_thread(twilio.hang_up, sid)
+    finally:
+        if recording_sid is not None:
+            args.recordings.mkdir(parents=True, exist_ok=True)
+            wav = args.recordings / f"answer-{case.name}-{call.call_sid}.wav"
+            recorded, note = await asyncio.to_thread(finish_recording, twilio, recording_sid, wav)
+            print(f"{case.name}: recording {note}; {len(recorded)} turn gaps read; deleted from Twilio")
+        server.should_exit = True
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(serving, timeout=10)
+    heard = " ".join(call.transcript.gus_lines() if call.transcript else [])
+    for e in call.transcript.exchanges if call.transcript else []:
+        print(f"{e.at_ms:6d} ms {e.who:>5}: {e.text}")
+    ok = "automated hiring line" in heard.lower() and case.expect in heard.lower()
+    print(f"{case.name}: {'PASS' if ok else 'FAIL'} (heard the opening and {case.expect!r})")
+    return 0 if ok else 1
+
+
+async def _wait_for(predicate: Callable[[], bool], timeout_s: float) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.5)
+    return predicate()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="the probe caller places a real call through its own number")
-    parser.add_argument("--case", type=Path, required=True)
+    parser.add_argument("--case", type=Path, help="the dial mode's case file")
+    parser.add_argument(
+        "--answer", action="store_true", help="apply for the probe's number and answer the line"
+    )
+    parser.add_argument(
+        "--watched", action="store_true", help="the answer mode runs only with James watching"
+    )
+    parser.add_argument(
+        "--line-url", default=None, help="the line's public https base (default PUBLIC_BASE_URL)"
+    )
+    parser.add_argument("--role", default="care-aide", help="the answer mode's role id")
+    parser.add_argument("--zone", default="America/Chicago", help="the answer mode's applicant zone")
     parser.add_argument(
         "--public-url", required=True, help="the probe server's public https host (its tunnel)"
     )
@@ -183,6 +454,13 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     settings = Settings.from_env()
+    if args.answer:
+        if not args.watched:
+            print("the answer mode rings a real line and spends money: run it with --watched, James watching")
+            return 2
+        return answer_main(args, settings)
+    if args.case is None:
+        parser.error("--case is needed in the dial mode")
     wanted = {
         "TWILIO_ACCOUNT_SID": settings.twilio_account_sid,
         "TWILIO_AUTH_TOKEN": settings.twilio_auth_token,
@@ -193,7 +471,7 @@ def main(argv: list[str] | None = None) -> int:
         if not value:
             print(f"{name} is not set; store it with make secret NAME={name}", file=sys.stderr)
             return 2
-    twilio = Twilio(str(settings.twilio_account_sid), str(settings.twilio_auth_token))
+    twilio = TwilioRest(str(settings.twilio_account_sid), str(settings.twilio_auth_token))
     case = load_case(args.case)
     lines = [t.user for t in case.turns if t.user is not None]
     wss = args.public_url.rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
@@ -214,7 +492,11 @@ def main(argv: list[str] | None = None) -> int:
         server = asyncio.create_task(serve_one_call(args.port, make_session))
         await asyncio.sleep(0.5)  # the server is listening before Twilio is asked to connect
         call_sid = await asyncio.to_thread(
-            twilio.place_call, str(settings.twilio_line_number), str(settings.twilio_probe_number), wss
+            lambda: twilio.place_call(
+                str(settings.twilio_line_number),
+                str(settings.twilio_probe_number),
+                twiml=probe_stream_twiml(wss),
+            )
         )
         log.info("call placed: %s", call_sid)
         recording_sid: str | None = None

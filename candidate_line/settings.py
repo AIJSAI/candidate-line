@@ -7,8 +7,10 @@ working agreements forbid raw os.environ reads outside the settings module. Noth
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import time
 from pathlib import Path
 from typing import Literal
 
@@ -28,6 +30,79 @@ DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent / "var" / "state.jso
 # callers of a week and bounds what a dialler left running can spend.
 DEFAULT_MAX_CALL_SECONDS = 300
 DEFAULT_MAX_CALLS_PER_DAY = 30
+# The outbound call (spec section 9, DR-025 section 11). Twenty dials a day bound the bill with nobody calling, one
+# call at a time fits the one 0.25 vCPU task, and 480 s fits five posted questions and a booking where the inbound
+# 300 does not. Thirty days for a raw number and four years for the answers are the retention defaults James took
+# on 2026-11-05 (four years is the California automated-decision minimum).
+DEFAULT_MAX_OUTBOUND_PER_DAY = 20
+DEFAULT_MAX_DIAL_ATTEMPTS = 3
+DEFAULT_CONTACTS_RETENTION_DAYS = 30
+DEFAULT_ANSWERS_RETENTION_DAYS = 1460
+DEFAULT_MAX_OUTBOUND_CALL_SECONDS = 480
+DEFAULT_CALL_WINDOW = "09:00-20:00 Mon-Sat"
+DEFAULT_CONTACTS_PATH = Path(__file__).resolve().parent.parent / "var" / "contacts.json"
+# A US number in E.164 form with a real area code and exchange: the intake schema's form and the allow-list's.
+US_E164 = re.compile(r"^\+1[2-9]\d{2}[2-9]\d{6}$")
+SUNDAY = 6
+_DAY_NAMES = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": SUNDAY}
+_WINDOW = re.compile(r"^\s*(\d{2}):(\d{2})\s*-\s*(\d{2}):(\d{2})\s+([A-Za-z,\- ]+?)\s*$")
+
+
+@dataclass(frozen=True)
+class CallWindow:
+    """When the dialler may call, in the applicant's own zone: from `start` up to but not including `end`, on
+    `days` (Monday is 0). Sunday is never among them; `from_env` refuses a window that names it."""
+
+    start: time
+    end: time
+    days: frozenset[int]
+
+    @property
+    def middle(self) -> time:
+        """The window's midpoint, where a third attempt lands (14:30 for the default window, spec 9.4)."""
+        minutes = (self.start.hour * 60 + self.start.minute + self.end.hour * 60 + self.end.minute) // 2
+        return time(minutes // 60, minutes % 60)
+
+
+def parse_call_window(raw: str) -> CallWindow:
+    """`HH:MM-HH:MM` and a day range (`Mon-Sat`) or list (`Mon,Wed,Fri`). An empty or reversed window, or one that
+    names Sunday or wraps through it, stops the process: a window that reads wrong would call at the wrong hour."""
+    m = _WINDOW.match(raw or "")
+    if not m:
+        raise ValueError(f"CALL_WINDOW must read like {DEFAULT_CALL_WINDOW!r}, not {raw!r}")
+    h1, m1, h2, m2 = (int(m.group(i)) for i in range(1, 5))
+    if h1 > 23 or h2 > 23 or m1 > 59 or m2 > 59:
+        raise ValueError(f"CALL_WINDOW has a time that is not on a clock: {raw!r}")
+    start, end = time(h1, m1), time(h2, m2)
+    if start >= end:
+        raise ValueError(f"CALL_WINDOW must end after it starts: {raw!r}")
+    days: set[int] = set()
+    for part in (p.strip().lower() for p in m.group(5).split(",")):
+        first, _, last = (x.strip()[:3] for x in part.partition("-"))
+        if first not in _DAY_NAMES or (last and last not in _DAY_NAMES):
+            raise ValueError(f"CALL_WINDOW names a day it cannot read: {raw!r}")
+        a, b = _DAY_NAMES[first], _DAY_NAMES[last or first]
+        span = range(a, b + 1) if a <= b else [*range(a, 7), *range(b + 1)]
+        days.update(span)
+    if SUNDAY in days:
+        raise ValueError("CALL_WINDOW may never include Sunday (spec 9.2)")
+    return CallWindow(start, end, frozenset(days))
+
+
+def parse_allowed_numbers(raw: str) -> frozenset[str]:
+    """The comma-separated allow-list. An entry that is empty or not a US E.164 number stops the process; the
+    message names the entry by its place, never by its digits, because the list is a secret (DR-025 section 11)."""
+    if not raw.strip():
+        return frozenset()
+    numbers: set[str] = set()
+    for i, entry in enumerate(raw.split(","), start=1):
+        entry = entry.strip()
+        if not entry:
+            raise ValueError(f"OUTBOUND_ALLOWED_NUMBERS entry {i} is empty")
+        if not US_E164.match(entry):
+            raise ValueError(f"OUTBOUND_ALLOWED_NUMBERS entry {i} is not a US number in E.164 form")
+        numbers.add(entry)
+    return frozenset(numbers)
 
 
 @dataclass(frozen=True)
@@ -58,6 +133,19 @@ class Settings:
     twilio_account_sid: str | None
     twilio_line_number: str | None
     twilio_probe_number: str | None
+    # The outbound call (DR-025 section 11). Defaults keep the dialling off and every cap at its contract value.
+    outbound_enabled: bool = False
+    max_outbound_per_day: int = DEFAULT_MAX_OUTBOUND_PER_DAY
+    max_concurrent_outbound: int = 1
+    call_window: CallWindow = field(default_factory=lambda: parse_call_window(DEFAULT_CALL_WINDOW))
+    max_dial_attempts: int = DEFAULT_MAX_DIAL_ATTEMPTS
+    contacts_path: str = str(DEFAULT_CONTACTS_PATH)
+    contacts_retention_days: int = DEFAULT_CONTACTS_RETENTION_DAYS
+    answers_retention_days: int = DEFAULT_ANSWERS_RETENTION_DAYS
+    max_outbound_call_seconds: int = DEFAULT_MAX_OUTBOUND_CALL_SECONDS
+    # Two secrets, kept out of the dataclass's repr so a logged Settings never shows them.
+    intake_signing_key: str | None = field(default=None, repr=False)
+    outbound_allowed_numbers: frozenset[str] = field(default_factory=frozenset, repr=False)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -113,6 +201,7 @@ class Settings:
             # the process at start instead.
             max_call_seconds=_positive_int(e, "MAX_CALL_SECONDS", DEFAULT_MAX_CALL_SECONDS),
             max_calls_per_day=_positive_int(e, "MAX_CALLS_PER_DAY", DEFAULT_MAX_CALLS_PER_DAY),
+            **_outbound(e),
         )
 
     def system_prompt(self) -> str:
@@ -137,6 +226,55 @@ def _positive_int(e: Mapping[str, str], name: str, default: int) -> int:
     if value < 1:
         raise ValueError(f"{name} must be at least 1, not {value}")
     return value
+
+
+def _outbound(e: Mapping[str, str]) -> dict[str, object]:
+    """The outbound settings, each refused at start when it reads as zero or nonsense, so a mistyped cap never
+    switches a control off without a word. With dialling on, every value the dial needs must be there."""
+    enabled_raw = (e.get("OUTBOUND_ENABLED") or "0").strip()
+    if enabled_raw not in ("0", "1"):
+        raise ValueError(f"OUTBOUND_ENABLED must be 0 or 1, not {enabled_raw!r}")
+    concurrent = _positive_int(e, "MAX_CONCURRENT_OUTBOUND", 1)
+    if concurrent != 1:
+        # One 0.25 vCPU task and one claim under the ledger's file lock: a second call at once is not built.
+        raise ValueError(f"MAX_CONCURRENT_OUTBOUND must be 1 this week, not {concurrent}")
+    attempts = _positive_int(e, "MAX_DIAL_ATTEMPTS", DEFAULT_MAX_DIAL_ATTEMPTS)
+    if attempts > 3:
+        raise ValueError(f"MAX_DIAL_ATTEMPTS must be from 1 to 3, not {attempts}")
+    values: dict[str, object] = {
+        "outbound_enabled": enabled_raw == "1",
+        "max_outbound_per_day": _positive_int(e, "MAX_OUTBOUND_PER_DAY", DEFAULT_MAX_OUTBOUND_PER_DAY),
+        "max_concurrent_outbound": concurrent,
+        "call_window": parse_call_window(e.get("CALL_WINDOW") or DEFAULT_CALL_WINDOW),
+        "max_dial_attempts": attempts,
+        "contacts_path": e.get("CONTACTS_PATH") or str(DEFAULT_CONTACTS_PATH),
+        "contacts_retention_days": _positive_int(
+            e, "CONTACTS_RETENTION_DAYS", DEFAULT_CONTACTS_RETENTION_DAYS
+        ),
+        "answers_retention_days": _positive_int(e, "ANSWERS_RETENTION_DAYS", DEFAULT_ANSWERS_RETENTION_DAYS),
+        "max_outbound_call_seconds": _positive_int(
+            e, "MAX_OUTBOUND_CALL_SECONDS", DEFAULT_MAX_OUTBOUND_CALL_SECONDS
+        ),
+        "intake_signing_key": e.get("INTAKE_SIGNING_KEY") or None,
+        "outbound_allowed_numbers": parse_allowed_numbers(e.get("OUTBOUND_ALLOWED_NUMBERS") or ""),
+    }
+    if values["outbound_enabled"]:
+        # The dial's From, its signed callbacks and the voicemail's number all come from these; a dialler that
+        # started without one would dial and then fail every callback, or dial from nowhere.
+        needed = {
+            "INTAKE_SIGNING_KEY": values["intake_signing_key"],
+            "OUTBOUND_ALLOWED_NUMBERS": values["outbound_allowed_numbers"],
+            "TWILIO_LINE_NUMBER": e.get("TWILIO_LINE_NUMBER"),
+            "TWILIO_ACCOUNT_SID": e.get("TWILIO_ACCOUNT_SID"),
+            "TWILIO_AUTH_TOKEN": e.get("TWILIO_AUTH_TOKEN"),
+            "PUBLIC_BASE_URL": e.get("PUBLIC_BASE_URL"),
+        }
+        missing = [name for name, value in needed.items() if not value]
+        if missing:
+            raise ValueError(f"OUTBOUND_ENABLED=1 needs {', '.join(missing)}")
+        if not US_E164.match(str(e.get("TWILIO_LINE_NUMBER"))):
+            raise ValueError("TWILIO_LINE_NUMBER must be a US number in E.164 form with OUTBOUND_ENABLED=1")
+    return values
 
 
 def _state_path(raw: str | None) -> str | None:

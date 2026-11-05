@@ -5,13 +5,21 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from candidate_line.brain import EchoBrain
 from candidate_line.hooks import NoHooks
+from candidate_line.outbound import PIN_ASK
 from candidate_line.settings import Settings
 from candidate_line.telephony.app import Deps, create_app, twiml_stream
 from candidate_line.telephony.audio import MULAW_FRAME_BYTES, mulaw_to_pcm16, pcm16_to_mulaw, split_sentences
-from candidate_line.telephony.media import RECOVERY_LINE, MediaSession, is_filler, mask_spoken_digits
+from candidate_line.telephony.media import (
+    RECOVERY_LINE,
+    MediaSession,
+    is_filler,
+    is_hello,
+    mask_spoken_digits,
+)
 from candidate_line.telephony.speech import FakeSpeaker, Heard, ScriptedTranscriber
 from candidate_line.traces.store import TraceStore
 
@@ -1025,3 +1033,386 @@ def test_a_caller_who_talks_over_the_reply_at_the_cap_still_hears_the_goodbye_wh
     assert speaker.said[-3:] == TIME_LIMIT_SAID
     assert session.turns == 1 and 5 <= counted["n"] < 50
     assert len(length_cap_spans(store)) == 1
+
+
+# The outbound media session (spec 9.6 and 9.7, DR-025 sections 12 and 14; fixes 1, 2 and 5).
+
+# The fake speaker hears one sentence at a time, so the PIN ask is counted by its sentences.
+PIN_ASK_SAID = split_sentences(PIN_ASK)
+SEED = {"code": "ACME-1234", "first_name": "Lerato", "dial_id": "D-0123456789ab", "attempt": 1}
+
+
+class CountingBrain(EchoBrain):
+    """Echoes, and counts every model call, so a test can say none was made."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def reply(self, system, messages, max_tokens=200, tools=()):
+        self.calls.append(next((m.text for m in reversed(messages) if m.role == "user"), ""))
+        return super().reply(system, messages, max_tokens, tools)
+
+
+async def all_said(session, sent) -> None:
+    """Hands back every mark until the PIN ask, two sentences, has played whole."""
+    await settle(lambda: sum(m["event"] == "mark" for m in sent) >= len(PIN_ASK_SAID))
+    for m in [m for m in sent if m["event"] == "mark"]:
+        session._on_mark(m["mark"]["name"])
+    await settle(lambda: not session.speaking)
+
+
+def outbound_session(transcriber, speaker, brain, sent, store=None, on_end=None, tools=()):
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    return MediaSession(
+        send,
+        transcriber,
+        speaker,
+        brain,
+        NoHooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=PIN_ASK,
+        grace_ms=(50, 60),
+        store=store,
+        silence_after_s=30.0,
+        max_call_seconds=480,
+        tools=tools,
+        outbound=SEED,
+        on_end=on_end,
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Hello?",
+        "hi",
+        "Hey.",
+        "Yes.",
+        "Yeah, speaking.",
+        "This is she.",
+        "this is he",
+        "Lerato?",
+        "Hello, this is Lerato.",
+        "um, hello",
+    ],
+)
+def test_hello_words_and_the_first_name_are_hello(text: str) -> None:
+    assert is_hello(text, "Lerato")
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["four three nine eight", "Hello, my PIN is 4398", "stop", "wrong number", "um", "", "Who is this?"],
+)
+def test_anything_else_is_not_hello(text: str) -> None:
+    assert not is_hello(text, "Lerato")
+
+
+def test_an_outbound_session_opens_with_the_pin_ask_and_seeds_the_call_from_its_record() -> None:
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    session = outbound_session(transcriber, speaker, CountingBrain(), sent)
+
+    async def script():
+        await settle(lambda: any(m["event"] == "mark" for m in sent))
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert speaker.said[: len(PIN_ASK_SAID)] == PIN_ASK_SAID
+    assert session.ctx.data["outbound"] == SEED
+
+
+def test_hello_words_before_the_pin_never_barge_in_or_reach_the_model() -> None:
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    brain = CountingBrain()
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "outbound")
+    session = outbound_session(transcriber, speaker, brain, sent, store=store)
+
+    async def script():
+        await settle(lambda: any(m["event"] == "mark" for m in sent))
+        assert session.speaking
+        transcriber.hear("Hello?", is_partial=True)  # over the PIN ask
+        await asyncio.sleep(0.05)
+        assert "clear" not in [m["event"] for m in sent] and session.barge_ins == 0
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        for n in range(1, 4):
+            transcriber.hear("Hello?", is_partial=False)
+            await asyncio.sleep(0.2)
+        await settle(lambda: speaker.said.count(PIN_ASK_SAID[0]) == 3)
+        await asyncio.sleep(0.2)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert brain.calls == []  # not one hello reached the model
+    assert session.turns == 0 and session.ctx.history == []
+    assert speaker.said == PIN_ASK_SAID * 3  # the greeting, then twice by code, and no more
+    assert session.ctx.data["hello_asks"] == 2
+    hellos = [s for s in store.spans("CA1") if (s.kind, s.name) == ("hook", "hello")]
+    assert [h.meta["hello_asks"] for h in hellos] == [1, 2, 2]
+
+
+def test_words_that_are_not_hello_barge_in_and_reach_the_model() -> None:
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    brain = CountingBrain()
+    session = outbound_session(transcriber, speaker, brain, sent)
+
+    async def script():
+        await settle(lambda: any(m["event"] == "mark" for m in sent))
+        transcriber.hear("four three", is_partial=True)
+        await settle(lambda: "clear" in [m["event"] for m in sent])
+        transcriber.hear("four three nine eight", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert session.barge_ins == 1 and brain.calls == ["four three nine eight"]
+
+
+def test_after_the_pin_matches_hello_is_a_word_like_any_other() -> None:
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    brain = CountingBrain()
+    session = outbound_session(transcriber, speaker, brain, sent)
+    session.ctx.data["candidate"] = "ACME-1234"  # confirm_applicant matched
+
+    async def script():
+        await all_said(session, sent)
+        transcriber.hear("Yes.", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert brain.calls == ["Yes."]
+
+
+def test_an_inbound_session_hears_hello_as_a_turn() -> None:
+    transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
+
+    async def script(session, sent):
+        await quiet(session, sent, transcriber)
+        transcriber.hear("Hello?", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    run_session(transcriber, speaker, script)
+    assert speaker.said == [GREETING, "Hello?"]
+
+
+def test_the_outbound_tools_reach_the_turn(monkeypatch) -> None:
+    from candidate_line.brain import Reply, ToolSpec
+    from candidate_line.telephony import media as media_module
+    from candidate_line.turn import TurnResult
+
+    seen: list[object] = []
+
+    def turn(brain, hooks, ctx, text, max_tokens=None, tools=None):
+        seen.append(tools)
+        return TurnResult(text, "", Reply("", 0, 0, 0, "echo", "none"))
+
+    monkeypatch.setattr(media_module, "run_turn", turn)
+    spec = ToolSpec("confirm_applicant", "x", {"type": "object"})
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    session = outbound_session(transcriber, speaker, CountingBrain(), sent, tools=(spec,))
+
+    async def script():
+        await all_said(session, sent)
+        transcriber.hear("four three nine eight", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert seen == [(spec,)]
+
+
+def test_on_call_end_and_the_dials_outcome_run_off_the_event_loop() -> None:
+    loop_thread: list[int] = []
+    ran: list[tuple[str, int]] = []
+
+    class Hooks(NoHooks):
+        def on_call_end(self, ctx, outcome):
+            ran.append(("on_call_end", threading.get_ident()))
+
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    def on_end(ctx) -> None:
+        ran.append(("outcome", threading.get_ident()))
+        assert ctx.data["outbound"]["dial_id"] == SEED["dial_id"]
+
+    session = MediaSession(
+        send,
+        transcriber,
+        speaker,
+        CountingBrain(),
+        Hooks(),
+        "sys",
+        "CA1",
+        SID,
+        greeting=None,
+        outbound=SEED,
+        on_end=on_end,
+    )
+
+    async def script():
+        loop_thread.append(threading.get_ident())
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert [name for name, _ in ran] == ["on_call_end", "outcome"]
+    assert all(ident != loop_thread[0] for _, ident in ran)
+
+
+def test_an_outcome_write_that_fails_never_breaks_the_hang_up(caplog) -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA1", "outbound")
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+
+    def broken(ctx) -> None:
+        raise OSError("state file locked")
+
+    session = outbound_session(transcriber, speaker, CountingBrain(), sent, store=store, on_end=broken)
+
+    async def script():
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert store.call("CA1").ended_at is not None
+    assert "the dial's outcome write failed for CA1" in caplog.text
+
+
+def test_an_outbound_call_ends_at_its_own_cap_with_the_time_limit_line() -> None:
+    from candidate_line.persona import length_line
+
+    assert length_line(480) == "We're at the time limit, so I'll let you go. Call back any time. Goodbye."
+
+
+def test_the_phone_gives_an_outbound_stream_the_pin_ask_its_tools_its_cap_and_its_record(
+    monkeypatch, tmp_path
+) -> None:
+    import re
+
+    from candidate_line.brain import ToolSpec
+    from candidate_line.outbound.contacts import Contacts
+    from candidate_line.telephony import app as app_module
+    from candidate_line.telephony.app import twilio_signature
+    from tests.outbound_fakes import FakeLedger, fictional
+
+    built: list[dict] = []
+
+    class Recorder:
+        def __init__(self, *args, **kwargs) -> None:
+            built.append(kwargs)
+
+        async def run(self, incoming) -> None:
+            return None
+
+    monkeypatch.setattr(app_module, "MediaSession", Recorder)
+    ledger = FakeLedger()
+    applicant = ledger.add_application(
+        first_name="Ada",
+        role="care-aide",
+        zone="America/Chicago",
+        pin="4721",
+        consent={"accepted": True},
+        number_hmac="h",
+        number_masked="***-***-0142",
+        nonce="n" * 22,
+    )
+    dial = ledger.schedule_dial(applicant.code, 1, ledger.now())
+    ledger.update_dial(dial["dial_id"], status="placed")
+    spec = ToolSpec("confirm_applicant", "x", {"type": "object"})
+    deps = Deps(
+        transcriber=lambda: None,
+        speaker=lambda: None,
+        brain=EchoBrain,
+        hooks=NoHooks,
+        ledger=lambda: ledger,
+        contacts=Contacts(tmp_path / "c.json"),
+        outbound_tools=(spec,),
+    )  # type: ignore[arg-type]
+    settings = Settings.from_env(
+        {
+            "TWILIO_AUTH_TOKEN": "12345",
+            "PUBLIC_BASE_URL": "https://h.example",
+            "TRACE_STORE_PATH": ":memory:",
+            "OUTBOUND_ALLOWED_NUMBERS": fictional(142),
+        }
+    )
+    client = TestClient(create_app(settings, deps))
+    form = {"CallSid": "CA42", "Direction": "outbound-api", "To": fictional(142)}
+    path = f"/voice?dial={dial['dial_id']}"
+    twiml = client.post(
+        path,
+        data=form,
+        headers={"X-Twilio-Signature": twilio_signature("12345", "https://h.example" + path, form)},
+    ).text
+    [token] = re.findall(r'<Parameter name="token" value="([^"]+)" />', twiml)
+
+    def open_stream(call_sid: str, params: dict) -> None:
+        with client.websocket_connect("/media") as ws:
+            ws.send_json(
+                {
+                    "event": "start",
+                    "streamSid": "MZ1",
+                    "start": {"callSid": call_sid, "customParameters": params},
+                }
+            )
+            if call_sid == "CA42":
+                deadline = time.monotonic() + 2
+                while not built and time.monotonic() < deadline:
+                    time.sleep(0.01)
+
+    # The client's own parameters never seed the call: only the dial record does.
+    open_stream("CA42", {"token": token, "channel": "outbound", "code": "ACME-9999", "first_name": "Mallory"})
+    [kwargs] = built
+    assert kwargs["greeting"] == PIN_ASK
+    assert kwargs["max_call_seconds"] == 480
+    assert kwargs["tools"] == (spec,)
+    assert kwargs["outbound"] == {
+        "code": applicant.code,
+        "first_name": "Ada",
+        "dial_id": dial["dial_id"],
+        "attempt": 1,
+        "number_hmac": "h",  # the HMAC, never the number, so a wrong person's stop holds for the number
+    }
+    assert callable(kwargs["on_end"])
+
+
+def test_a_stream_that_says_outbound_with_no_dial_record_is_refused(monkeypatch) -> None:
+    from candidate_line.telephony import app as app_module
+    from tests.outbound_fakes import FakeLedger
+
+    built: list[dict] = []
+
+    class Recorder:
+        def __init__(self, *args, **kwargs) -> None:
+            built.append(kwargs)
+
+        async def run(self, incoming) -> None:
+            return None
+
+    monkeypatch.setattr(app_module, "MediaSession", Recorder)
+    ledger = FakeLedger()
+    deps = Deps(
+        transcriber=lambda: None, speaker=lambda: None, brain=EchoBrain, hooks=NoHooks, ledger=lambda: ledger
+    )  # type: ignore[arg-type]
+    client = TestClient(
+        create_app(Settings.from_env({"TRACE_STORE_PATH": ":memory:", "ALLOW_UNSIGNED_WEBHOOKS": "1"}), deps)
+    )
+    with client.websocket_connect("/media") as ws:
+        ws.send_json(
+            {
+                "event": "start",
+                "streamSid": "MZ1",
+                "start": {"callSid": "CA1", "customParameters": {"channel": "outbound"}},
+            }
+        )
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 1008 and built == []

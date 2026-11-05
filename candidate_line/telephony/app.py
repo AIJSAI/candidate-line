@@ -1,34 +1,43 @@
-"""Twilio's edge: the voice webhook now, the media-stream WebSocket from item 3 on.
+"""Twilio's edge: the voice webhook, the media-stream WebSocket, and the outbound call's intake and callbacks.
 
 Why a factory: the tests build an app around their own Settings; uvicorn imports `app`, built from the
 environment. Why the signature check: the webhook is a public URL behind a tunnel, so every request proves it
 came from Twilio or it is refused (Twilio's security page, read 2026-11-01). It fails closed: with no auth token
-in the environment the webhook answers 503 unless ALLOW_UNSIGNED_WEBHOOKS=1, which is for local curl only.
+in the environment the webhook answers 503 unless ALLOW_UNSIGNED_WEBHOOKS=1, which is for local curl only. The
+outbound call's `/voice/status` and `/voice/amd` are checked the same way, and an outbound `/voice` is answered only
+for a dial record in flight, found by its CallSid or by the dial id in the signed Url (DR-025 section 12).
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import hmac
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from xml.sax.saxutils import escape
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 
-from candidate_line.brain import Brain, make_brain
+from candidate_line.brain import Brain, ToolSpec, make_brain
 from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.hooks import Hooks, default_hooks
+from candidate_line.outbound import OUTBOUND_TOOL_SPECS, PIN_ASK, outbound_opening
+from candidate_line.outbound.contacts import Contacts
+from candidate_line.outbound.dialler import PREFLIGHT_WORD, Dialler
+from candidate_line.outbound.intake import Intake
 from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
+from candidate_line.telephony.twilio_rest import TwilioRest
 from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 
@@ -44,6 +53,12 @@ CLOSED_LINE = "This is the ACME candidate line. The line is closed for the momen
 CLOSED_OUTCOME = "closed: daily cap"
 # Twilio opens the stream a second or two after it reads the TwiML; a token older than this is refused.
 STREAM_TOKEN_TTL_S = 60
+HANGUP_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+OUTBOUND_DIRECTION = "outbound-api"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 def twilio_signature(auth_token: str, url: str, form: Mapping[str, str]) -> str:
@@ -88,6 +103,24 @@ def stream_token_ok(auth_token: str, call_sid: str, token: str, now: float | Non
     return hmac.compare_digest(_stream_mac(auth_token, call_sid, int(expires_text)), mac)
 
 
+def _wss(public_base_url: str) -> str:
+    return public_base_url.rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
+
+
+def twiml_outbound(opening: str, public_base_url: str, token: str | None = None) -> str:
+    """An answered outbound call: the opening by Twilio's own `<Say>`, which nothing can barge in on and which
+    covers the seconds the stream takes to start (fix 2), then the stream. The `channel` parameter tells /media to
+    expect a dial record; the record, never the parameter, is what the session is seeded from."""
+    params = '<Parameter name="channel" value="outbound" />'
+    if token:
+        params = f'<Parameter name="token" value="{escape(token)}" />{params}'
+    stream = f'<Stream url="{escape(_wss(public_base_url))}/media">{params}</Stream>'
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<Response><Say voice="Polly.Matthew-Neural">{escape(opening)}</Say><Connect>{stream}</Connect></Response>'
+    )
+
+
 def twiml_stream(public_base_url: str, token: str | None = None) -> str:
     """`<Connect><Stream>`: the bidirectional stream (DR-005). The greeting comes through the stream so barge-in applies.
     The token rides as a custom parameter, because Twilio takes no query string on a stream URL."""
@@ -123,6 +156,14 @@ class Deps:
     # twenty seconds of silence before the greeting for their first connections (the operator's call of
     # 2026-11-04, 20:14 CT, DR-023). The tests pass fakes and leave this off.
     warm_up: bool = False
+    # The outbound call (DR-025). The one store of raw numbers, the REST client the dialler and the callbacks use,
+    # the clock intake and the dialler read, and whether the dialler's loop runs in the lifespan. The tests that are
+    # not about them leave them off; the contacts store then defaults to the settings' path, which nothing writes.
+    contacts: Contacts | None = None
+    twilio: TwilioRest | None = None
+    clock: Callable[[], datetime] = _utc_now
+    dialler: bool = False
+    outbound_tools: Sequence[ToolSpec] = OUTBOUND_TOOL_SPECS
 
 
 def default_deps(settings: Settings) -> Deps:
@@ -142,6 +183,14 @@ def default_deps(settings: Settings) -> Deps:
         ),
         ledger=Ledger.default,
         warm_up=settings.brain_provider != "echo",
+        contacts=Contacts(settings.contacts_path, settings.contacts_retention_days),
+        twilio=(
+            TwilioRest(settings.twilio_account_sid, settings.twilio_auth_token)
+            if settings.twilio_account_sid and settings.twilio_auth_token
+            else None
+        ),
+        # The loop runs with dialling off too, because its retention sweep must (fix 16).
+        dialler=True,
     )
 
 
@@ -175,18 +224,39 @@ async def _warm_up(deps: Deps) -> None:
 
 def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     deps = deps or default_deps(settings)
+    # Intake and the dialler share the calls' ledger; a test that gives none gets the default, as a call's tools do.
+    outbound_ledger: Callable[[], Any] = deps.ledger or Ledger.default
+    contacts = deps.contacts or Contacts(settings.contacts_path, settings.contacts_retention_days)
+    dialler = Dialler(
+        settings,
+        outbound_ledger,
+        contacts,
+        deps.twilio,
+        deps.clock,
+        preflight=lambda: deps.speaker().say(PREFLIGHT_WORD),
+    )
+    intake = Intake(settings, outbound_ledger, contacts, clock=deps.clock)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if deps.warm_up:
             await _warm_up(deps)
+        dialling = asyncio.create_task(dialler.run()) if deps.dialler else None
         yield
+        if dialling is not None:
+            dialling.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await dialling
         # A hand-off still queued when the process stops would die with the daemon worker (DR-013). Text mode
         # and the eval runner drain before they exit; the phone, which `make restart` stops mid-day, does too.
         if deps.escalations is not None:
             await asyncio.to_thread(deps.escalations.drain, 5.0)
 
     app = FastAPI(title="Candidate Line", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app.include_router(intake.router())
+    # The dialler and intake on the app, so an operator's shell or a test can run one tick or read one setting.
+    app.state.dialler = dialler
+    app.state.intake = intake
     # The daily cap counts on one ledger for the life of the process. A file-backed Ledger.default is shared
     # anyway; an in-memory one is new on every call, and counting on a fresh one would never pass the cap.
     counter: list[Ledger] = []
@@ -211,6 +281,38 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
         used_tokens[given] = float(given.partition(".")[0])
         return True
 
+    async def outbound_for(meta: Mapping[str, Any], call_sid: str) -> dict[str, Any] | None | bool:
+        """The outbound call's seed for the session, from its dial record and never from the stream's own
+        parameters (DR-025 section 12). The `channel` parameter /voice put on an outbound stream only says to look:
+        None means an inbound stream, which reads no ledger here; False means a stream that says it is outbound
+        with no dial record in flight, which is refused."""
+        params = meta.get("customParameters")
+        if not (isinstance(params, Mapping) and params.get("channel") == "outbound"):
+            return None
+
+        def lookup() -> dict[str, Any] | None:
+            dial = dialler.find_dial(call_sid, "")
+            if dial is None:
+                return None
+            applicant = outbound_ledger().applicant(str(dial["code"]))
+            if applicant is None:
+                return None
+            # The number's HMAC rides too, never the number, so a wrong person's stop holds for the number itself.
+            return {
+                "code": str(dial["code"]),
+                "first_name": applicant.first_name,
+                "dial_id": str(dial["dial_id"]),
+                "attempt": int(dial.get("attempt") or 1),
+                "number_hmac": applicant.number_hmac,
+            }
+
+        try:
+            found = await asyncio.to_thread(lookup)
+        except Exception:
+            log.exception("the dial lookup failed for an outbound stream")
+            return False
+        return False if found is None else found
+
     def count_this_call() -> int | None:
         """The day's count with this call in it, or None when it could not be counted. The call then goes
         through: the cap bounds the bill, and a fault in the state file must not close the line to a candidate."""
@@ -234,8 +336,8 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok", "brain": settings.brain_provider}
 
-    @app.post("/voice")
-    async def voice(request: Request) -> Response:
+    async def signed_form(request: Request) -> dict[str, str]:
+        """The POST fields once Twilio's signature over the public URL and them checks out, or a refusal."""
         form = {key: str(value) for key, value in (await request.form()).items()}
         if settings.twilio_auth_token:
             expected = twilio_signature(settings.twilio_auth_token, public_url(request, settings), form)
@@ -244,6 +346,50 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
                 raise HTTPException(status_code=403, detail="bad Twilio signature")
         elif not settings.allow_unsigned_webhooks:
             raise HTTPException(status_code=503, detail="TWILIO_AUTH_TOKEN is not set")
+        return form
+
+    async def outbound_voice(request: Request, form: dict[str, str]) -> Response:
+        """An outbound call Twilio has connected: answered only for its dial record in flight, never counted
+        against the inbound cap, and recorded with the applicant's masked number, never the line's (fix 7)."""
+        call_sid = form.get("CallSid", "")
+        dial = await asyncio.to_thread(dialler.find_dial, call_sid, request.query_params.get("dial", ""))
+        if dial is None:
+            log.warning("an outbound call with no dial record in flight was hung up")
+            return Response(content=HANGUP_TWIML, media_type="text/xml")
+        if deps.store is not None and call_sid:
+            deps.store.start_call(
+                call_sid, "outbound", caller=form.get("To"), provider=settings.brain_provider
+            )
+        refused, first_name = await asyncio.to_thread(dialler.admit, dial, form.get("To", ""))
+        if refused is not None:
+            if deps.store is not None and call_sid:
+                deps.store.end_call(call_sid, f"hung up: {refused}")
+            return Response(content=HANGUP_TWIML, media_type="text/xml")
+        if not settings.public_base_url:
+            raise HTTPException(
+                status_code=503, detail="PUBLIC_BASE_URL is not set; the stream needs a public wss host"
+            )
+        token = stream_token(settings.twilio_auth_token, call_sid) if settings.twilio_auth_token else None
+        opening = outbound_opening(first_name)
+        return Response(
+            content=twiml_outbound(opening, settings.public_base_url, token), media_type="text/xml"
+        )
+
+    @app.post("/voice/status")
+    async def voice_status(request: Request) -> Response:
+        await asyncio.to_thread(dialler.on_status, await signed_form(request))
+        return Response(status_code=204)
+
+    @app.post("/voice/amd")
+    async def voice_amd(request: Request) -> Response:
+        await asyncio.to_thread(dialler.on_amd, await signed_form(request))
+        return Response(status_code=204)
+
+    @app.post("/voice")
+    async def voice(request: Request) -> Response:
+        form = await signed_form(request)
+        if form.get("Direction") == OUTBOUND_DIRECTION or "dial" in request.query_params:
+            return await outbound_voice(request, form)
         if settings.voice_mode == "say":
             return Response(content=twiml_say(HELLO_LINE), media_type="text/xml")
         if not settings.public_base_url:
@@ -293,6 +439,11 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             return
         stream_sid = str(start["streamSid"])
         call_id = str(meta.get("callSid") or stream_sid)
+        outbound = await outbound_for(meta, call_id)
+        if outbound is False:
+            log.warning("media stream refused: an outbound stream with no dial record in flight")
+            await ws.close(code=1008)
+            return
 
         async def incoming() -> AsyncIterator[dict[str, Any]]:
             while True:
@@ -311,6 +462,16 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             except Exception:
                 # The call goes on: the first tool tries the ledger again and turns a failure into a sentence.
                 log.exception("ledger failed to open for %s", call_id)
+        # An outbound call's stream opens with the PIN ask, carries the outbound tools and the longer cap, and
+        # writes the dial's outcome off the event loop when it ends (fixes 1, 2 and 5).
+        outbound_kwargs: dict[str, Any] = {}
+        if outbound:
+            dial_id = str(outbound["dial_id"])
+            outbound_kwargs = {
+                "tools": deps.outbound_tools,
+                "outbound": outbound,
+                "on_end": lambda ctx: dialler.session_ended(dial_id, ctx.data),
+            }
         session = MediaSession(
             send=ws.send_json,
             transcriber=deps.transcriber(),
@@ -320,11 +481,12 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             system=deps.system,
             call_id=call_id,
             stream_sid=stream_sid,
-            greeting=deps.greeting,
+            greeting=PIN_ASK if outbound else deps.greeting,
             store=deps.store,
             escalations=deps.escalations,
             ledger=ledger,
-            max_call_seconds=settings.max_call_seconds,
+            max_call_seconds=settings.max_outbound_call_seconds if outbound else settings.max_call_seconds,
+            **outbound_kwargs,
         )
         try:
             await session.run(incoming())

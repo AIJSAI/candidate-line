@@ -53,3 +53,171 @@ def test_the_cockpit_base_url_defaults_to_the_loopback_cockpit_and_can_be_named(
     assert Settings.from_env({"COCKPIT_BASE_URL": ""}).cockpit_base_url == "http://127.0.0.1:8001"
     named = Settings.from_env({"COCKPIT_BASE_URL": "https://cockpit.example"})
     assert named.cockpit_base_url == "https://cockpit.example"
+
+
+# The outbound settings (DR-025 section 11; fixes 1, 13, 16 and 17). Numbers are fictional 555-01xx ones, made at
+# run time, so no file holds a phone number (AGENTS.md rule 7).
+def fictional(n: int) -> str:
+    return f"+1312555{n:04d}"
+
+
+OUTBOUND_ON = {
+    "OUTBOUND_ENABLED": "1",
+    "INTAKE_SIGNING_KEY": "test-signing-key",
+    "TWILIO_ACCOUNT_SID": "ACtest",
+    "TWILIO_AUTH_TOKEN": "test-token",
+    "PUBLIC_BASE_URL": "https://line.example",
+}
+
+
+def outbound_on(**extra: str) -> dict[str, str]:
+    return (
+        OUTBOUND_ON
+        | {"TWILIO_LINE_NUMBER": fictional(100), "OUTBOUND_ALLOWED_NUMBERS": fictional(142)}
+        | extra
+    )
+
+
+def test_the_outbound_defaults_are_the_contracts() -> None:
+    s = Settings.from_env({})
+    assert s.outbound_enabled is False
+    assert s.max_outbound_per_day == 20
+    assert s.max_dial_attempts == 3
+    assert s.contacts_retention_days == 30
+    assert s.answers_retention_days == 1460
+    assert s.max_outbound_call_seconds == 480
+    assert s.max_call_seconds == 300  # inbound keeps its own cap (fix 1)
+    assert s.max_concurrent_outbound == 1
+    assert s.contacts_path.endswith("var/contacts.json")
+    assert Settings.from_env({"CONTACTS_PATH": ""}).contacts_path == s.contacts_path
+    assert s.intake_signing_key is None and s.outbound_allowed_numbers == frozenset()
+
+
+def test_the_default_window_is_nine_to_eight_monday_to_saturday() -> None:
+    from datetime import time
+
+    w = Settings.from_env({}).call_window
+    assert (w.start, w.end, w.days) == (time(9, 0), time(20, 0), frozenset(range(6)))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "MAX_OUTBOUND_PER_DAY",
+        "MAX_DIAL_ATTEMPTS",
+        "CONTACTS_RETENTION_DAYS",
+        "ANSWERS_RETENTION_DAYS",
+        "MAX_OUTBOUND_CALL_SECONDS",
+        "MAX_CONCURRENT_OUTBOUND",
+    ],
+)
+@pytest.mark.parametrize("bad", ["0", "-1", "twenty", "2.5"])
+def test_each_new_cap_is_refused_at_start_when_zero_or_nonsense(name: str, bad: str) -> None:
+    with pytest.raises(ValueError, match=name):
+        Settings.from_env({name: bad})
+
+
+def test_more_than_three_attempts_and_more_than_one_call_at_once_are_refused() -> None:
+    with pytest.raises(ValueError, match="MAX_DIAL_ATTEMPTS"):
+        Settings.from_env({"MAX_DIAL_ATTEMPTS": "4"})
+    for value in ("2", "3"):
+        with pytest.raises(ValueError, match="MAX_CONCURRENT_OUTBOUND"):
+            Settings.from_env({"MAX_CONCURRENT_OUTBOUND": value})
+    assert Settings.from_env({"MAX_DIAL_ATTEMPTS": "1"}).max_dial_attempts == 1
+
+
+def test_outbound_enabled_reads_only_zero_or_one() -> None:
+    assert Settings.from_env({"OUTBOUND_ENABLED": "0"}).outbound_enabled is False
+    assert Settings.from_env(outbound_on()).outbound_enabled is True
+    for bad in ("yes", "true", "2"):
+        with pytest.raises(ValueError, match="OUTBOUND_ENABLED"):
+            Settings.from_env({"OUTBOUND_ENABLED": bad})
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "INTAKE_SIGNING_KEY",
+        "OUTBOUND_ALLOWED_NUMBERS",
+        "TWILIO_LINE_NUMBER",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "PUBLIC_BASE_URL",
+    ],
+)
+def test_outbound_on_with_a_value_missing_stops_the_process(missing: str) -> None:
+    with pytest.raises(ValueError, match=missing):
+        Settings.from_env(outbound_on(**{missing: ""}))
+
+
+def test_outbound_on_needs_the_line_number_in_e164_form() -> None:
+    with pytest.raises(ValueError, match="TWILIO_LINE_NUMBER"):
+        Settings.from_env(outbound_on(TWILIO_LINE_NUMBER="5550001"))
+
+
+def test_the_allow_list_is_a_frozenset_of_us_e164_numbers() -> None:
+    s = Settings.from_env(outbound_on(OUTBOUND_ALLOWED_NUMBERS=f" {fictional(142)} ,{fictional(143)}"))
+    assert s.outbound_allowed_numbers == frozenset({fictional(142), fictional(143)})
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        lambda: f"{fictional(142)},",
+        lambda: f"{fictional(142)},,{fictional(143)}",
+        lambda: fictional(142)[2:],  # the national digits alone
+        lambda: fictional(142)[:-1],  # a digit short
+        lambda: "+11" + fictional(142)[3:],  # an area code cannot start with 1
+        lambda: fictional(142)[:5] + "1" + fictional(142)[6:],  # nor an exchange
+        lambda: "+44" + fictional(142)[2:],
+    ],
+)
+def test_an_allow_list_with_an_empty_or_non_e164_entry_is_refused_without_its_digits(raw) -> None:
+    value = raw()
+    with pytest.raises(ValueError, match="OUTBOUND_ALLOWED_NUMBERS") as refused:
+        Settings.from_env(outbound_on(OUTBOUND_ALLOWED_NUMBERS=value))
+    digits = "".join(ch for ch in value if ch.isdigit())
+    assert digits[-4:] not in str(refused.value)  # the list is a secret; the message names the entry by place
+
+
+def test_the_secrets_are_never_in_the_settings_repr() -> None:
+    s = Settings.from_env(outbound_on())
+    assert "test-signing-key" not in repr(s)
+    assert fictional(142) not in repr(s) and "0142" not in repr(s)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "09:00-20:00",
+        "20:00-09:00 Mon-Sat",
+        "09:00-09:00 Mon-Sat",
+        "09:00-20:00 Mon-Sun",
+        "09:00-20:00 Sun",
+        "09:00-20:00 Sat-Mon",
+        "09:00-20:00 Mon,Sun",
+        "09:00-25:00 Mon-Sat",
+        "09:00-20:00 Funday",
+        "9-20 Mon-Sat",
+    ],
+)
+def test_a_call_window_that_is_empty_reversed_or_names_sunday_is_refused(raw: str) -> None:
+    from candidate_line.settings import parse_call_window
+
+    with pytest.raises(ValueError, match="CALL_WINDOW"):
+        parse_call_window(raw)
+    if raw:
+        with pytest.raises(ValueError, match="CALL_WINDOW"):
+            Settings.from_env({"CALL_WINDOW": raw})
+
+
+def test_a_call_window_reads_ranges_and_lists() -> None:
+    from datetime import time
+
+    from candidate_line.settings import parse_call_window
+
+    w = parse_call_window("10:30-18:00 Mon,Wed-Fri")
+    assert (w.start, w.end, w.days) == (time(10, 30), time(18, 0), frozenset({0, 2, 3, 4}))
+    assert w.middle == time(14, 15)
+    assert parse_call_window("09:00-20:00 Sat").days == frozenset({5})

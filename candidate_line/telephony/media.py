@@ -6,20 +6,27 @@ it; emptying that buffer is the only way to stop Gus mid-sentence (the WebSocket
 counts as barge-in: a partial transcript with words other than fillers while Gus is speaking. On a call this file
 writes the heard and spoken spans (card 03), because only the voice path knows the transcriber's confidence and
 lag and the synthesis time.
+
+On an outbound call (spec 9.6 and 9.7, DR-025 sections 12 and 14) the session opens with the PIN ask, because the
+opening was already said by Twilio's `<Say>`, and until the PIN matches a transcript made only of hello words is
+not a turn: it never barges in, never reaches the model, and gets the PIN ask once more by code, twice at most.
+The call's length cap is the outbound one, and the dial's outcome is written off the event loop at the end.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
-from candidate_line.brain import Brain
+from candidate_line.brain import Brain, ToolSpec
 from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import Hooks
+from candidate_line.outbound import PIN_ASK
 from candidate_line.persona import RECOVERY_LINE, length_line
 from candidate_line.settings import DEFAULT_MAX_CALL_SECONDS
 from candidate_line.telephony.audio import (
@@ -76,6 +83,35 @@ _DIGIT_RUN = re.compile(r"\d(?:[ ,.\-]{0,2}\d){2,}")
 _DIGIT_WORD_RUN = re.compile(rf"\b{_DIGIT_WORD}(?:[ ,.\-]{{1,2}}{_DIGIT_WORD}){{2,}}\b", re.IGNORECASE)
 
 
+# What a person says on picking up, before they know a PIN is wanted (spec 9.7, DR-025 section 14). "This is
+# {first name}" counts too, since the opening has just said that name.
+HELLO_WORDS = frozenset({"hello", "hi", "hey", "yes", "yeah", "speaking"})
+HELLO_PHRASES = ("this is she", "this is he")
+# The PIN ask said again by code for hello words, at most this many times on a call.
+MAX_HELLO_ASKS = 2
+
+
+def _words(text: str) -> list[str]:
+    return [
+        w for w in ("".join(ch for ch in token if ch.isalnum()).casefold() for token in text.split()) if w
+    ]
+
+
+def is_hello(text: str, first_name: str = "") -> bool:
+    """True when every word is a hello word, a filler or the applicant's first name, and at least one is not a
+    filler. "Hello, this is Lerato" is one; "hello, my PIN is 4398" is not."""
+    words = _words(text)
+    if not words or all(w in FILLERS for w in words):
+        return False
+    names = _words(first_name.replace("-", " "))
+    phrases = [*HELLO_PHRASES, *(f"this is {name}" for name in names)]
+    joined = f" {' '.join(words)} "
+    for phrase in sorted(phrases, key=len, reverse=True):
+        joined = joined.replace(f" {phrase} ", " ")
+    allowed = HELLO_WORDS | FILLERS | set(names)
+    return all(w in allowed for w in joined.split())
+
+
 def is_filler(text: str) -> bool:
     """True when every word, without its punctuation and case, is a filler, or there is no word at all."""
     if _NOT_FILLER.match(text):
@@ -122,6 +158,9 @@ class MediaSession:
         silence_after_s: float = SILENCE_AFTER_S,
         ledger: Ledger | None = None,
         max_call_seconds: float = DEFAULT_MAX_CALL_SECONDS,
+        tools: Sequence[ToolSpec] | None = None,
+        outbound: Mapping[str, Any] | None = None,
+        on_end: Callable[[TurnContext], object] | None = None,
     ) -> None:
         self._send = send
         self._transcriber = transcriber
@@ -138,6 +177,15 @@ class MediaSession:
             escalations=escalations,
             ledger=ledger,
         )
+        # None is the inbound line's tools (turn.TOOL_SPECS); an outbound call passes OUTBOUND_TOOL_SPECS.
+        self._tools = tools
+        # An outbound call's seed, from its dial record (app.py): the code, first name, dial id, attempt and the
+        # number's HMAC, never the number.
+        self._outbound = dict(outbound) if outbound else None
+        if self._outbound is not None:
+            self.ctx.data["outbound"] = dict(self._outbound)
+        # The dial's outcome write, run in a worker thread once the call has ended (fix 5).
+        self._on_end = on_end
         self._silence_after = silence_after_s
         # The per-call length cap (DR-021). The clock is the call's own, from ctx.started_at, and it is read only
         # between turns, so the cap never cuts Gus or the caller off mid-sentence.
@@ -190,15 +238,27 @@ class MediaSession:
                     break
         finally:
             self._stopped = True
+            # First, before anything can yield: the caller has gone, so a turn still waiting out its grace is
+            # never made, and no model call is spent on it while the end is written.
+            self._cancel_grace()
             outcome = f"{self.turns} turns, {self.barge_ins} barge-ins, {self.superseded} superseded"
+            # The call's end in a worker thread (fix 5): the write-up and the dial's outcome take file locks and
+            # post, and the other calls' audio shares this event loop. Shielded, so a session cancelled from
+            # outside (a server stopping) still has its end written, in order, by the worker.
+            cancelled: asyncio.CancelledError | None = None
+            ending = asyncio.ensure_future(asyncio.to_thread(self._write_end, outcome))
             try:
-                self._hooks.on_call_end(self.ctx, outcome)
-            except Exception:
-                # A hook must never break a hang-up: the store still records the end and the stream still closes.
-                log.exception("on_call_end failed for %s", self.ctx.call_id)
-            if self.ctx.store is not None:
-                self.ctx.store.end_call(self.ctx.call_id, outcome)
-            self._cancel_grace()  # the caller has gone; a turn still waiting out its grace is not spoken
+                await asyncio.shield(ending)
+            except asyncio.CancelledError as error:
+                cancelled = error
+            watcher.cancel()
+            if cancelled is not None:
+                # Nothing more is awaited on a cancelled session; the cancellation goes on once its tasks are told.
+                self._transcriber_stop_soon()
+                for task in (listener, greeter):
+                    if task is not None:
+                        task.cancel()
+                raise cancelled
             # Close our side of the Transcribe stream first and let the listener drain; cancelling it mid-read
             # trips the CRT transport (an InvalidStateError on a cancelled body future, seen 2026-11-01).
             # Same rule as the probe: the CRT transport can hang a close or a cancel after Twilio has gone, so wait
@@ -206,10 +266,31 @@ class MediaSession:
             await _settle(
                 asyncio.ensure_future(self._transcriber.stop()), 5.0, f"transcriber stop {self.ctx.call_id}"
             )
-            watcher.cancel()
             for task, what in ((listener, "listener"), (greeter, "greeter")):
                 if task is not None:
                     await _settle(task, 3.0, f"{what} {self.ctx.call_id}")
+
+    def _write_end(self, outcome: str) -> None:
+        """The call's end, in order: the call-end hook, then the dial's outcome, then the store's end. Each step
+        is guarded, so one failing never keeps the next from running or breaks the hang-up."""
+        try:
+            self._hooks.on_call_end(self.ctx, outcome)
+        except Exception:
+            log.exception("on_call_end failed for %s", self.ctx.call_id)
+        if self._on_end is not None:
+            try:
+                self._on_end(self.ctx)
+            except Exception:
+                log.exception("the dial's outcome write failed for %s", self.ctx.call_id)
+        if self.ctx.store is not None:
+            self.ctx.store.end_call(self.ctx.call_id, outcome)
+
+    def _transcriber_stop_soon(self) -> None:
+        """Asks the transcriber to stop without waiting for it, for a session that may await nothing more."""
+        try:
+            asyncio.ensure_future(self._transcriber.stop())
+        except Exception:
+            log.exception("transcriber stop failed for %s", self.ctx.call_id)
 
     async def _watch_silence(self) -> None:
         """Runs the on_silence hook when the caller has said nothing for a while and Gus is not busy."""
@@ -263,7 +344,12 @@ class MediaSession:
         try:
             async for heard in self._transcriber.events():
                 if heard.is_partial:
-                    log.debug("partial %s %r", self.ctx.call_id, heard.text[-60:])
+                    log.debug("partial %s %r", self.ctx.call_id, mask_spoken_digits(heard.text[-60:]))
+                    if self._hello_before_pin(heard.text):
+                        # A person saying hello over the PIN ask has not heard it yet; cutting it off would make
+                        # them wait for it twice (fix 2).
+                        self._last_activity = time.monotonic()
+                        continue
                     # A filler leaves the silence clock alone too: line noise transcribed as "Uh." must not hold
                     # a dead call open past the hold limit.
                     if not is_filler(heard.text):
@@ -280,9 +366,10 @@ class MediaSession:
                 filler = is_filler(heard.text)
                 self._trace_final(heard, filler)
                 if filler:
-                    log.info("filler dropped %s %r", self.ctx.call_id, heard.text)
+                    log.info("filler dropped %s %r", self.ctx.call_id, mask_spoken_digits(heard.text))
                     continue
-                log.info("final %s %r", self.ctx.call_id, heard.text)
+                # Masked as the spans are: a log line is no place for a PIN or a phone number said aloud.
+                log.info("final %s %r", self.ctx.call_id, mask_spoken_digits(heard.text))
                 self._last_activity = time.monotonic()
                 if not self._pending:
                     # The turn's clock starts at the first final, grace included.
@@ -384,12 +471,17 @@ class MediaSession:
             if self._carry:
                 text = f"{self._carry} {text}"
                 self._carry = ""
+            if self._hello_before_pin(text):
+                await self._answer_hello()
+                return
             if self._turn_started is None:
                 self._turn_started = time.perf_counter()
             self._thinking, self._superseded = True, False
             history_before = len(self.ctx.history)  # a turn may append more than two messages once tools run
             try:
-                result = await asyncio.to_thread(run_turn, self._brain, self._hooks, self.ctx, text)
+                # The tools ride as a keyword only on an outbound call, so an inbound turn is the call it always was.
+                turn = run_turn if self._tools is None else functools.partial(run_turn, tools=self._tools)
+                result = await asyncio.to_thread(turn, self._brain, self._hooks, self.ctx, text)
             finally:
                 self._thinking = False
             if self._superseded:
@@ -400,7 +492,11 @@ class MediaSession:
                 self._run_undo()
                 self._carry = text
                 self.superseded += 1
-                log.info("turn superseded %s heard=%r (the caller kept talking)", self.ctx.call_id, text)
+                log.info(
+                    "turn superseded %s heard=%r (the caller kept talking)",
+                    self.ctx.call_id,
+                    mask_spoken_digits(text),
+                )
                 return
             self.turns += 1
             reply = getattr(result, "reply", None)
@@ -408,8 +504,8 @@ class MediaSession:
                 "turn %d %s heard=%r reply=%r brain_ms=%s",
                 self.turns,
                 self.ctx.call_id,
-                text,
-                result.spoken,
+                mask_spoken_digits(text),
+                mask_spoken_digits(result.spoken),
                 getattr(reply, "latency_ms", None),
             )
             if result.spoken:
@@ -420,6 +516,32 @@ class MediaSession:
                 # The reply is out in full before the length line is queued behind it, so Twilio plays both whole.
                 # A reply the caller cut into is left to the silence watcher, which waits for them to finish.
                 await self._end_at_length_cap()
+
+    def _hello_before_pin(self, text: str) -> bool:
+        """An outbound call whose PIN has not matched, hearing only hello words. `confirm_applicant` sets the
+        call's `candidate` on the match, and from then on hello is a word like any other."""
+        if self._outbound is None or self.ctx.data.get("candidate"):
+            return False
+        return is_hello(text, str(self._outbound.get("first_name") or ""))
+
+    async def _answer_hello(self) -> None:
+        """Hello words before the PIN are not a turn (spec 9.7): no model call, nothing in the history. The first
+        two get the PIN ask again by code; after that they are let go and the silence lines take over."""
+        asked = int(self.ctx.data.get("hello_asks") or 0)
+        again = asked < MAX_HELLO_ASKS
+        self._trace(
+            "hook",
+            "hello",
+            text="hello words before the PIN; " + ("the PIN ask said again by code" if again else "let go"),
+            meta={"hello_asks": asked + int(again)},
+        )
+        self._turn_started = None
+        if again:
+            self.ctx.data["hello_asks"] = asked + 1
+            log.info("hello before the PIN %s; the PIN ask again", self.ctx.call_id)
+            await self.speak(PIN_ASK)
+        else:
+            log.info("hello before the PIN %s let go after %d asks", self.ctx.call_id, asked)
 
     async def speak(self, text: str) -> None:
         async with self._speak_lock:
