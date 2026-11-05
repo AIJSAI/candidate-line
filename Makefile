@@ -1,7 +1,7 @@
 # Candidate Line. The targets the build plan names; each one is real now (see PREBUILT.md for when it landed).
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate trace text last
+.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate scorecard trace text last image deploy
 
 help:
 	@echo "make up          a build day in one command: tunnel, line on the Identity Center profile, number re-pointed, health"
@@ -19,8 +19,11 @@ help:
 	@echo "make eval        run the eval cases"
 	@echo "make baseline    run the eval cases and write evals/baseline.json from the run (refused on a boundary failure)"
 	@echo "make gate        the tests, the evals and the cost line; required before done"
+	@echo "make scorecard   what the line did, each number with its method and n (TRACE_STORE_PATH, STATE_PATH)"
 	@echo "make trace last  the latest call's spans, in the terminal"
 	@echo "make text        the line in text mode (BRAIN_PROVIDER / BEDROCK_MODEL_ID from the environment)"
+	@echo "make image       build the container image for linux/arm64 from the committed head (docs/deploy/PLAN.md)"
+	@echo "make deploy STEP=ecr|push|stack|url|status|probe-url   one step of scripts/deploy.sh against the AWS stack (DR-023)"
 
 up:
 	scripts/up.sh
@@ -67,6 +70,10 @@ baseline:
 gate: test
 	@. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.evals.runner && echo "gate: green (tests and evals; the cost line is in the eval report once cases exist)" || { echo "gate: RED. Boundary failures above. From card 02 until card 04 lands they must be exactly the ids named in DR-017 (AGENTS.md rule 8); any other red is a stop."; exit 1; }
 
+# No secrets and no model call: the page reads the trace store, the ledger file, rates.py and the baseline CSV.
+scorecard:
+	uv run python -m candidate_line.scorecard
+
 trace:
 	uv run python -m candidate_line.traces.cli $(filter-out $@,$(MAKECMDGOALS))
 
@@ -75,3 +82,10 @@ text:
 
 last:
 	@:
+
+# The container: the image is built from the committed head, never the working tree, so the tag names what runs.
+image:
+	@sha=$$(git rev-parse --short HEAD); git archive --format=tar HEAD | docker buildx build --platform linux/arm64 --load -t "candidate-line:$$sha" - && echo "candidate-line:$$sha"
+
+deploy:
+	scripts/deploy.sh "$(STEP)"

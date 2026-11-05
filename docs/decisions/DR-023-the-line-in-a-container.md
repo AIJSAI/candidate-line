@@ -1,0 +1,57 @@
+# DR-023: The line in a container on AWS
+
+Status: DECIDED 2026-11-04
+Built: live (deployed 2026-11-04 evening, after the session)
+Commit: this commit
+
+## What it is
+
+The same FastAPI app the Mac ran, as one Fargate task on Graviton behind an Application Load Balancer and a CloudFront distribution with WAF, with the trace store and the ledger on EFS, the secrets in Secrets Manager, the hand-offs on an SNS topic that emails the operator, and a budget action that fails the line closed past a spend threshold. One CloudFormation template (`infra/aws/candidate-line-stack.yaml`) creates all of it; `scripts/deploy.sh` runs the steps in order. The plan it follows is `docs/deploy/PLAN.md`.
+
+## The decision
+
+- **Fargate, not App Runner, not Lambda.** The media stream is one long WebSocket per call with audio every 20 ms. App Runner carries no WebSocket support that could be confirmed (searched 2026-11-04); Lambda and API Gateway's WebSocket API do not fit a bidirectional audio stream.
+- **CloudFront in front of the load balancer, no custom domain.** Twilio's media stream needs `wss://`; CloudFront gives a stable HTTPS and WSS address with a default certificate and forwards the WebSocket upgrade headers (its WebSocket page, read 2026-11-04). The load balancer accepts port 80 from CloudFront's managed prefix list only, so the origin cannot be reached around the distribution.
+- **A public subnet with a public IP, no NAT.** The task reaches ECR, Transcribe, Polly, the Anthropic API and Twilio directly; a NAT gateway would add about 32 USD a month for nothing.
+- **Graviton.** About 20 percent cheaper per hour; the lockfile carries the arm64 wheels, and the image built and imported on 2026-11-04 at 19:37 CT on the Mac.
+- **One identity per job.** The execution role pulls the image, writes logs and reads the four secrets; the task role may start a Transcribe stream, synthesize with Polly, invoke the two Haiku profiles, publish to the one topic, mount the one access point, and open an SSM channel. Nothing else, and no key anywhere.
+- **The store outlives the task.** EFS, encrypted, one access point owned by the container's user, mounted at `var/`; the file system and the secrets are retained if the stack is deleted.
+- **The cockpit stays private.** It is reachable only through an SSM port-forward into the task (`aws ecs execute-command`), tied to the operator's own sign-in.
+- **Money as a control.** The existing 50 USD budget alarm stays; a second budget at 45 USD of actual monthly spend attaches a deny policy to the task role, so the line fails closed to Twilio's closed-line message. The per-call and daily caps (DR-021) sit in the code.
+- **WAF now.** A rate rule (300 requests in five minutes per address) and the AWS common rule set, about 6 USD a month plus 0.60 per million requests (pricing page read 2026-11-04). Twilio's signature check already refuses any POST that is not Twilio's; WAF protects the public address from a flood.
+
+## The alternative rejected, and why
+
+- **Terraform.** One stack in one account with nothing to share; CloudFormation is native, keeps no state file, needs no new tool, and reads as infrastructure as code. A translation is two hours if a role names Terraform.
+- **A custom domain with an ACM certificate.** Needs a DNS change in a zone the line does not own; the CloudFront address serves the same purpose.
+- **The store in RDS or DynamoDB.** DR-012's trigger (a second machine) has not fired; EFS keeps the one SQLite file and the ledger with no code change.
+
+## What would change the decision
+
+A second task (SQLite on EFS is a single-writer design: then RDS); a custom domain the operator owns (then ACM on CloudFront and a named origin); a Bedrock quota opening (then `BrainProvider=bedrock` on the stack and the Anthropic secret retired); a cost reading over the plan's estimate after the first full month.
+
+## Evidence
+
+(filled at the end of the deployment: the stack's creation time, the CloudFront address's shape, the probe call's transcript and turn gap, the time the number was re-pointed, the operator's call, the time the Mac line came down, the first cost reading.)
+
+## Say it like this
+
+> (written after the teach-back)
+
+## Teach-back
+
+(not yet)
+
+## Evidence, as it happened (2026-11-04, Central time)
+
+- 19:37: the image built for linux/arm64 on the Mac (730 MB) and imported the app, awscrt, anthropic and boto3.
+- 19:40: the four secrets created in Secrets Manager from the keychain, nothing printed.
+- 19:42: the image pushed to the registry under the commit's short sha (173 MB compressed).
+- 19:43: the first stack creation rolled back inside a minute: the CloudFront prefix-list id was empty because the builder profile cannot list managed prefix lists and the lookup returned nothing; the stack was deleted at 19:45 with nothing else created. The lesson is in the deploy script: the lookup runs under the admin profile and the id is checked before the deploy.
+- 19:45:35 to 19:51:45: the stack created (CREATE_COMPLETE), six minutes, CloudFront the longest.
+- 19:52:13: the service running 1 of 1, the target healthy, `/health` 200 through the distribution on the first try.
+- 19:52 to 19:53: a probe call through `wss://<distribution>/media` passed: verified Hannah by code and PIN, answered from F2.1 and F2.3 naming the sections, refused "do you think I am a strong candidate", said goodbye; turn gap median 3,050 ms and worst 3,319 ms over four replies, against 2,263 ms median on the Mac line an hour earlier (the edge and the load balancer add about 700 ms a turn).
+- 19:53 to 19:59:03: the stack updated with its own public address as `PUBLIC_BASE_URL` (the Twilio signature check and the stream's `wss://` URL need it); the new task healthy at 19:59:04.
+- 19:59:33: the Twilio number re-pointed at the distribution (`make webhook URL=https://<distribution>`); the closed-line fallback stayed on the number; the Mac line stayed up as the safety net until the operator's call passed.
+- About 20:00: the hand-off email subscription confirmed by the operator (the first confirmation link belonged to the rolled-back stack's topic and failed; the second stack's email worked).
+- 20:13:57 to 20:15:21: the operator's call to the container (masked ***-***-0657). The webhook and the stream opened at 20:13:57.8, and nothing played for about twenty seconds: the first final transcript ("Hello.") came at 20:14:17.5, so the greeting waited on the speech clients' first connections in a task replaced fourteen minutes earlier (a cold start the Mac never showed, its clients staying warm between calls). From there the turns ran normally: 2.1, 1.5, 1.8, 3.0 (a tool turn), 2.5 (a tool turn) and 1.9 s from the caller's last word to the first audio. "it's 323-3 and the PIN is 9683" was not read as a code (the hyphenated spelling was outside the normaliser) and cost one turn; "Acme 3233" verified at 20:14:59; a callback request posted a tier-2 hand-off at 20:15:11 to the log poster, because the running image predates the SNS poster; goodbye at 20:15:21. Two fixes follow in the next image: a warm-up of the speech clients at startup before the task reports healthy, and the hyphenated digit spelling in the normaliser.

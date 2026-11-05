@@ -1,6 +1,6 @@
 # The line in a container on AWS: the plan, for James's read
 
-Written 2026-11-04 evening, proposed and not yet carried out. Nothing in the account is created until James has read this and said go. Every price carries the page it came from and the date it was read; every security line says what it protects against. The order is the one ruled by the search session: the rebuilt line is live on the Mac (done, 17:50 CT), then this plan, then the container, then a probe call against the container's address, then the number is re-pointed, and the Mac line comes down only after that.
+Written 2026-11-04 evening and carried out the same evening after James read it and said go; `docs/decisions/DR-023-the-line-in-a-container.md` records what was built, with times. The template is `infra/aws/candidate-line-stack.yaml` and the steps are `scripts/deploy.sh`. Every price carries the page it came from and the date it was read; every security line says what it protects against. The order is the one ruled by the search session: the rebuilt line is live on the Mac (done, 17:50 CT), then this plan, then the container, then a probe call against the container's address, then the number is re-pointed, and the Mac line comes down only after that.
 
 ## 1. The shape
 

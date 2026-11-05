@@ -1,0 +1,430 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  The Candidate Line in one container: a Fargate task on Graviton in a public subnet, behind an Application Load
+  Balancer that accepts traffic only from CloudFront, behind a CloudFront distribution with WAF; the store on EFS;
+  secrets from Secrets Manager; hand-offs to an SNS topic that emails the operator; a budget action that fails the
+  line closed past a spend threshold. docs/deploy/PLAN.md is the record of why each piece is here.
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: The image in ECR, with its tag (candidate-line:<git sha>).
+  OperatorEmail:
+    Type: String
+    Description: Where SNS sends the hand-offs and the budget alarm. The subscription is confirmed by one click.
+  PublicBaseUrl:
+    Type: String
+    Default: ""
+    Description: The CloudFront address once known (https://<id>.cloudfront.net); empty on the first deploy, then updated.
+  MaxCallSeconds:
+    Type: Number
+    Default: 300
+  MaxCallsPerDay:
+    Type: Number
+    Default: 30
+  BudgetStopUsd:
+    Type: Number
+    Default: 45
+    Description: Actual monthly spend at which the budget action denies the task role, closing the line.
+  BrainProvider:
+    Type: String
+    Default: anthropic
+    AllowedValues: [anthropic, bedrock]
+  CpuArchitecture:
+    Type: String
+    Default: ARM64
+    AllowedValues: [ARM64, X86_64]
+  CloudFrontPrefixListId:
+    Type: String
+    Description: >-
+      The id of the managed prefix list com.amazonaws.global.cloudfront.origin-facing in this Region, read at deploy
+      time with aws ec2 describe-managed-prefix-lists; the load balancer accepts port 80 from those addresses only.
+
+Resources:
+
+  # ---------- Network: two public subnets, no NAT (the task has a public IP and talks out directly) ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: candidate-line }]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref InternetGateway }
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: candidate-line-a }]
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: candidate-line-b }]
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties: { RouteTableId: !Ref RouteTable, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref InternetGateway }
+  SubnetARoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref SubnetA, RouteTableId: !Ref RouteTable }
+  SubnetBRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref SubnetB, RouteTableId: !Ref RouteTable }
+
+  # ---------- Security groups: CloudFront -> ALB:80 -> task:8000; EFS from the task only ----------
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Candidate Line load balancer; port 80 from the CloudFront edge addresses only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourcePrefixListId: !Ref CloudFrontPrefixListId
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Candidate Line task; port 8000 from the load balancer only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Candidate Line file system; NFS from the task only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref TaskSecurityGroup
+
+  # ---------- The store and the ledger outlive a restart ----------
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: elastic
+      FileSystemTags: [{ Key: Name, Value: candidate-line-var }]
+  MountTargetA:
+    Type: AWS::EFS::MountTarget
+    Properties: { FileSystemId: !Ref FileSystem, SubnetId: !Ref SubnetA, SecurityGroups: [!Ref EfsSecurityGroup] }
+  MountTargetB:
+    Type: AWS::EFS::MountTarget
+    Properties: { FileSystemId: !Ref FileSystem, SubnetId: !Ref SubnetB, SecurityGroups: [!Ref EfsSecurityGroup] }
+  VarAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref FileSystem
+      PosixUser: { Uid: "10001", Gid: "10001" }
+      RootDirectory:
+        Path: /var
+        CreationInfo: { OwnerUid: "10001", OwnerGid: "10001", Permissions: "0750" }
+
+  # ---------- Logs, hand-offs ----------
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: { LogGroupName: /candidate-line/line, RetentionInDays: 30 }
+  HandOffTopic:
+    Type: AWS::SNS::Topic
+    Properties: { TopicName: candidate-line-hand-offs, DisplayName: Candidate Line hand-offs }
+  HandOffSubscription:
+    Type: AWS::SNS::Subscription
+    Properties: { TopicArn: !Ref HandOffTopic, Protocol: email, Endpoint: !Ref OperatorEmail }
+
+  # ---------- Identity: pull and log (execution), speak and listen (task); nothing else ----------
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
+      Policies:
+        - PolicyName: read-the-line-secrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/*
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: candidate-line-task
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: ears-voice-brain-handoffs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: transcribe:StartStreamTranscription
+                Resource: "*"
+              - Effect: Allow
+                Action: polly:SynthesizeSpeech
+                Resource: "*"
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource:
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-5-5
+                  - arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0
+                  - arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-5-5
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref HandOffTopic
+              - Effect: Allow
+                Action: [elasticfilesystem:ClientMount, elasticfilesystem:ClientWrite]
+                Resource: !GetAtt FileSystem.Arn
+                Condition:
+                  StringEquals: { "elasticfilesystem:AccessPointArn": !GetAtt VarAccessPoint.Arn }
+              - Effect: Allow
+                Action: [ssmmessages:CreateControlChannel, ssmmessages:CreateDataChannel, ssmmessages:OpenControlChannel, ssmmessages:OpenDataChannel]
+                Resource: "*"
+
+  # ---------- The task and the service ----------
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties: { ClusterName: candidate-line, ClusterSettings: [{ Name: containerInsights, Value: disabled }] }
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: candidate-line
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      RuntimePlatform: { CpuArchitecture: !Ref CpuArchitecture, OperatingSystemFamily: LINUX }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      Volumes:
+        - Name: var
+          EFSVolumeConfiguration:
+            FilesystemId: !Ref FileSystem
+            TransitEncryption: ENABLED
+            AuthorizationConfig: { AccessPointId: !Ref VarAccessPoint, IAM: ENABLED }
+      ContainerDefinitions:
+        - Name: line
+          Image: !Ref ImageUri
+          Essential: true
+          PortMappings: [{ ContainerPort: 8000, Protocol: tcp }]
+          MountPoints: [{ SourceVolume: var, ContainerPath: /app/var }]
+          Environment:
+            - { Name: BRAIN_PROVIDER, Value: !Ref BrainProvider }
+            - { Name: PUBLIC_BASE_URL, Value: !Ref PublicBaseUrl }
+            - { Name: AWS_REGION, Value: !Ref AWS::Region }
+            - { Name: AWS_DEFAULT_REGION, Value: !Ref AWS::Region }
+            - { Name: TRACE_STORE_PATH, Value: /app/var/traces.sqlite }
+            - { Name: STATE_PATH, Value: /app/var/state.json }
+            - { Name: SNS_TOPIC_ARN, Value: !Ref HandOffTopic }
+            - { Name: MAX_CALL_SECONDS, Value: !Ref MaxCallSeconds }
+            - { Name: MAX_CALLS_PER_DAY, Value: !Ref MaxCallsPerDay }
+            - { Name: LOG_LEVEL, Value: INFO }
+          Secrets:
+            - { Name: ANTHROPIC_API_KEY, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/ANTHROPIC_API_KEY" }
+            - { Name: TWILIO_AUTH_TOKEN, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_AUTH_TOKEN" }
+            - { Name: TWILIO_ACCOUNT_SID, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_ACCOUNT_SID" }
+            - { Name: TWILIO_NUMBER_SID, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_NUMBER_SID" }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: { awslogs-group: !Ref LogGroup, awslogs-region: !Ref AWS::Region, awslogs-stream-prefix: line }
+          HealthCheck:
+            Command: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)\""]
+            Interval: 30
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 30
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: [HttpListener, MountTargetA, MountTargetB]
+    Properties:
+      ServiceName: candidate-line
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      EnableExecuteCommand: true
+      HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration: { MinimumHealthyPercent: 0, MaximumPercent: 100 }
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: [!Ref SubnetA, !Ref SubnetB]
+          SecurityGroups: [!Ref TaskSecurityGroup]
+      LoadBalancers:
+        - ContainerName: line
+          ContainerPort: 8000
+          TargetGroupArn: !Ref TargetGroup
+
+  # ---------- The load balancer ----------
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: candidate-line
+      Scheme: internet-facing
+      Type: application
+      Subnets: [!Ref SubnetA, !Ref SubnetB]
+      SecurityGroups: [!Ref AlbSecurityGroup]
+      LoadBalancerAttributes: [{ Key: idle_timeout.timeout_seconds, Value: "3600" }]
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: candidate-line
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 8000
+      TargetType: ip
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes: [{ Key: deregistration_delay.timeout_seconds, Value: "30" }]
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref TargetGroup }]
+
+  # ---------- CloudFront with WAF: the stable HTTPS and WSS address ----------
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: candidate-line
+      Scope: CLOUDFRONT
+      DefaultAction: { Allow: {} }
+      VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: candidate-line }
+      Rules:
+        - Name: rate-per-address
+          Priority: 0
+          Action: { Block: {} }
+          Statement: { RateBasedStatement: { Limit: 300, AggregateKeyType: IP } }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: rate-per-address }
+        - Name: common-rules
+          Priority: 1
+          OverrideAction: { None: {} }
+          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesCommonRuleSet } }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: common-rules }
+  WebSocketOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: candidate-line-websocket
+        Comment: Forward everything, including the Sec-WebSocket headers the upgrade needs
+        HeadersConfig: { HeaderBehavior: allViewer }
+        CookiesConfig: { CookieBehavior: none }
+        QueryStringsConfig: { QueryStringBehavior: all }
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Candidate Line
+        HttpVersion: http1.1
+        PriceClass: PriceClass_100
+        WebACLId: !GetAtt WebAcl.Arn
+        Origins:
+          - Id: line
+            DomainName: !GetAtt LoadBalancer.DNSName
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: line
+          ViewerProtocolPolicy: https-only
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad   # the managed CachingDisabled policy
+          OriginRequestPolicyId: !Ref WebSocketOriginRequestPolicy
+          Compress: false
+
+  # ---------- Money as a control: the line fails closed past the threshold ----------
+  BudgetActionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: budgets.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: attach-the-deny
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [iam:AttachRolePolicy, iam:DetachRolePolicy]
+                Resource: !GetAtt TaskRole.Arn
+  DenyAllPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: candidate-line-closed
+      Description: Attached to the task role by the budget action; the line then fails closed to the Twilio fallback
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Deny, Action: ["transcribe:*", "polly:*", "bedrock:*", "sns:Publish"], Resource: "*" }]
+  SpendBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: candidate-line-stop
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref BudgetStopUsd, Unit: USD }
+        # The whole account, not a tag: cost allocation tags take a day to activate, and the account's other spend
+        # is about two dollars a month (DR-002), so an account-wide stop at the threshold is the honest control.
+  StopAction:
+    Type: AWS::Budgets::BudgetsAction
+    Properties:
+      BudgetName: !Ref SpendBudget
+      ActionType: APPLY_IAM_POLICY
+      ActionThreshold: { Type: PERCENTAGE, Value: 100 }
+      NotificationType: ACTUAL
+      ExecutionRoleArn: !GetAtt BudgetActionRole.Arn
+      ApprovalModel: AUTOMATIC
+      Definition:
+        IamActionDefinition:
+          PolicyArn: !Ref DenyAllPolicy
+          Roles: [!Ref TaskRole]
+      Subscribers: [{ Type: EMAIL, Address: !Ref OperatorEmail }]
+
+  # The ECR repository is created before the stack (deploy.sh ecr), so the first image exists when the service starts.
+
+Mappings: {}
+
+Outputs:
+  CloudFrontDomain:
+    Value: !GetAtt Distribution.DomainName
+    Description: The public address; PUBLIC_BASE_URL and Twilio's voice URL are https:// plus this
+  LoadBalancerDns:
+    Value: !GetAtt LoadBalancer.DNSName
+  ClusterName:
+    Value: !Ref Cluster
+  ServiceName:
+    Value: !GetAtt Service.Name
+  HandOffTopicArn:
+    Value: !Ref HandOffTopic

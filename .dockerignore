@@ -1,0 +1,15 @@
+.git
+.venv
+var
+bakeoff/recordings
+docs
+tests
+evals
+prompts
+infra
+.claude
+.github
+*.md
+.pytest_cache
+.ruff_cache
+__pycache__
