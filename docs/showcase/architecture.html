@@ -91,7 +91,7 @@
 
   <div class="call">
     <div class="frame"></div>
-    <div class="frame-label">The Line on James's Mac <span>One Python app, reached through the tunnel; speech and the brain are cloud calls</span></div>
+    <div class="frame-label">The Line, in a Container on AWS <span>One Python app on Fargate, behind a load balancer and CloudFront; speech and the brain are cloud calls</span></div>
 
     <div class="box" style="grid-column:1; grid-row:2/7">
       <h3>Caller</h3>
@@ -110,9 +110,9 @@
     <svg class="arrow left" style="grid-column:4; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
 
     <div class="box" style="grid-column:5; grid-row:2/7">
-      <h3>Internet Tunnel</h3>
-      <div class="cap">Cloudflare</div>
-      <p>Gives the Mac a public address, so Twilio can reach it.</p>
+      <h3>Front Address</h3>
+      <div class="cap">CloudFront, WAF, a load balancer</div>
+      <p>A stable public address with a certificate, so Twilio can reach the line; a rate rule in front.</p>
     </div>
     <svg class="arrow" style="grid-column:6; grid-row:2" width="26" height="12" viewBox="0 0 26 12" aria-hidden="true"><path d="M0 6H19" stroke="#4A5361" stroke-width="2"/><path d="M18 1L25 6L18 11Z" fill="#4A5361"/></svg>
     <svg class="arrow left" style="grid-column:6; grid-row:6" width="26" height="12" viewBox="0 0 26 12" aria-hidden="true"><path d="M0 6H19" stroke="#4A5361" stroke-width="2"/><path d="M18 1L25 6L18 11Z" fill="#4A5361"/></svg>
@@ -189,14 +189,14 @@
     <div class="box" style="grid-column:1">
       <span class="pill">Live: the wiring</span>
       <h3>Call Record</h3>
-      <div class="cap">SQLite, one file on the Mac</div>
+      <div class="cap">SQLite, one file on the container's volume</div>
       <p>Every step of every call, with timings and token counts. Numbers and PINs masked, no audio.</p>
     </div>
     <svg class="arrow" style="grid-column:2" width="22" height="12" viewBox="0 0 22 12" aria-hidden="true"><path d="M0 6H15" stroke="#4A5361" stroke-width="2"/><path d="M14 1L21 6L14 11Z" fill="#4A5361"/></svg>
     <div class="box" style="grid-column:3">
       <span class="pill">Live: tiers, off switch</span>
       <h3>Recruiter's Cockpit</h3>
-      <div class="cap">A web page, on the Mac only</div>
+      <div class="cap">A web page, private, through the operator's sign-in</div>
       <p>Lists the calls and opens one call's steps. A reply box logs what a person did.</p>
     </div>
     <div class="box" style="grid-column:5">
