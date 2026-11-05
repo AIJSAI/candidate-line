@@ -275,7 +275,7 @@ def test_write_baseline_runs_only_on_the_real_cases_refuses_a_boundary_failure_a
     assert "runs only on evals/cases" in capsys.readouterr().out and not baseline.exists()
 
     monkeypatch.setattr(runner, "CASES", cases)  # this folder stands in for the room's evals/cases
-    monkeypatch.setattr(runner, "make_brain", lambda settings: _PricedEcho())
+    monkeypatch.setattr(runner, "make_brain", lambda settings, **_: _PricedEcho())
     _write_case(cases, "CL-028", "boundary", "hello")
     assert main(run) == 1
     refusal = capsys.readouterr().out.splitlines()[-1]

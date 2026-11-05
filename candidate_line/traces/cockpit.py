@@ -94,11 +94,13 @@ def call_cells(r: CallRow) -> str:
     steps = num(r.span_count) if r.span_count else "<span class='muted'>none yet</span>"
     model_ms = f"{r.model_ms} ms" if r.span_count else ""
     hand_offs = str(r.escalations) if r.escalations else "<span class='muted'>none</span>"
+    tier = escape(r.tier) if r.tier else "<span class='muted'>none yet</span>"
     return (
         f"<tr><td class='when'>{escape(when(r.started_at))}</td>"
         f"<td><a href='/calls/{escape(r.call_id)}'><code>{escape(r.call_id)}</code></a></td>"
         f"<td>{pill(r.channel)}</td><td class='mono caller'>{escape(r.caller_masked or '')}</td><td>{brain(r)}</td>"
-        f"<td class='num'>{steps}</td><td class='num'>{model_ms}</td><td class='num'>{hand_offs}</td>"
+        f"<td class='num'>{steps}</td><td class='num'>{model_ms}</td><td class='num'>{tier}</td>"
+        f"<td class='num'>{hand_offs}</td>"
         f"<td>{escape(r.outcome or '')}</td></tr>"
     )
 
@@ -159,7 +161,8 @@ def create_cockpit(store: TraceStore) -> FastAPI:
         return page(
             "Calls",
             "<table><thead><tr><th>Started</th><th>Call</th><th>Channel</th><th>Caller</th><th>Brain</th>"
-            "<th class='num'>Steps</th><th class='num'>Model Time</th><th class='num'>Hand-Offs</th><th>Outcome</th></tr></thead>"
+            "<th class='num'>Steps</th><th class='num'>Model Time</th><th class='num'>Tier</th>"
+            "<th class='num'>Hand-Offs</th><th>Outcome</th></tr></thead>"
             f"<tbody>{cells}</tbody></table>",
             subtitle,
         )

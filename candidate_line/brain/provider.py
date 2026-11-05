@@ -111,12 +111,24 @@ class BedrockConverseBrain:
 
     name = "bedrock"
 
-    def __init__(self, model_id: str, region: str, client: Any | None = None) -> None:
+    def __init__(self, model_id: str, region: str, client: Any | None = None, max_attempts: int = 2) -> None:
         self.model = model_id
         if client is None:
             import boto3  # imported here so the echo brain and the tests pay nothing for it
+            from botocore.config import Config
 
-            client = boto3.client("bedrock-runtime", region_name=region)
+            # This account's Haiku 4.5 quota is 10 requests a minute (DR-003), and an eval run or two calls at once
+            # cross it; a throttled turn then raised out of the loop and crashed the run (2026-11-04). The adaptive
+            # mode retries throttles with backoff. A caller is waiting on the phone, so two attempts in all (one
+            # retry) and a bounded read, then the recovery line; the eval runner waits out the quota instead.
+            # `max_attempts` counts the first try, which is botocore's total_max_attempts, not its max_attempts.
+            client = boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                config=Config(
+                    retries={"total_max_attempts": max_attempts, "mode": "adaptive"}, read_timeout=10
+                ),
+            )
         self._client = client
 
     def reply(
@@ -292,10 +304,11 @@ def _anthropic_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
     return out
 
 
-def make_brain(settings: Settings) -> Brain:
-    """One place where BRAIN_PROVIDER becomes an object; the switch rule in DR-003 is this function."""
+def make_brain(settings: Settings, max_attempts: int = 2) -> Brain:
+    """One place where BRAIN_PROVIDER becomes an object; the switch rule in DR-003 is this function.
+    `max_attempts` is the Bedrock client's, first try included: 2 for a live call, more for a run nobody waits on."""
     if settings.brain_provider == "bedrock":
-        return BedrockConverseBrain(settings.bedrock_model_id, settings.aws_region)
+        return BedrockConverseBrain(settings.bedrock_model_id, settings.aws_region, max_attempts=max_attempts)
     if settings.brain_provider == "anthropic":
         return AnthropicMessagesBrain(settings.anthropic_model_id)
     return EchoBrain()

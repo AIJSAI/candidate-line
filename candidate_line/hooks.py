@@ -1,4 +1,5 @@
-"""Four hooks the turn loop calls, and one the call's end calls, empty today, to be filled in the live session.
+"""Four hooks the turn loop calls, and one the call's end calls: the normaliser and the switches, the guard, the
+holding lines and the tier-3 write-up.
 
 Why hooks and not subclasses: the guard, the observer, the kill switch and the override log are written in the
 room, each as one small object that plugs into a loop nobody rewrites. Each hook may return None (no change) or
@@ -8,11 +9,76 @@ previous one's result, so the guard can run after the kill switch and both can b
 
 from __future__ import annotations
 
+import logging
+import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+from candidate_line import tiers
+from candidate_line.guard import Guard
+from candidate_line.persona import FALLBACK_LINE, HOLD_LIMIT_LINE, HOLDING_LINE, KILL_LINE, STOP_LINE
+from candidate_line.tools.codes import normalise_transcript
 
 if TYPE_CHECKING:
     from candidate_line.turn import TurnContext
+
+log = logging.getLogger("candidate_line.hooks")
+
+ROOT = Path(__file__).resolve().parent.parent
+# The kill switch is a file, so anyone at the Mac can close the line with `touch var/kill` and reopen it with `rm`,
+# with no restart; it is read on every turn and every quiet stretch, and never cached (card 06).
+KILL_SWITCH = ROOT / "var" / "kill"
+# Built once from the committed lexicon. A broken lexicon raises here, at start, never on a live call (card 05).
+GUARD = Guard()
+# Spec section 7: the holding line after the first quiet stretch, the closing line once the quiet after it adds
+# up to thirty seconds. The caller's next words start the count again.
+HOLD_LIMIT_S = 30.0
+# A caller's "stop" ends the call with no model call (spec section 7, F8.3). "Okay stop" and "stop the call" count;
+# "stop the booking" does not, and goes to the model.
+_STOP_WORDS = frozenset(
+    {
+        "stop",
+        "please",
+        "okay",
+        "ok",
+        "now",
+        "just",
+        "right",
+        "yes",
+        "thanks",
+        "thank",
+        "you",
+        "bye",
+        "goodbye",
+        "the",
+        "call",
+        "it",
+        "that's",
+        "all",
+    }
+)
+_SPELLED_DIGIT = re.compile(r"\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b", re.IGNORECASE)
+_WORD_TO_DIGIT = {
+    "zero": "0",
+    "oh": "0",
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+}
+
+
+def _says_a_heard_pin(sentence: str, pins: Sequence[str]) -> bool:
+    """A PIN given on this call, said back as numerals or words, spaced or not. The lexicon's pin- rules need the
+    word PIN beside the digits, and "you did say nine six eight three" has none (the review walk, 2026-11-04)."""
+    numerals = _SPELLED_DIGIT.sub(lambda m: _WORD_TO_DIGIT[m.group(1).lower()], sentence)
+    return any(re.search(r"(?<!\d)" + r"[\s,.-]*".join(pin) + r"(?!\d)", numerals) for pin in pins)
 
 
 class Hooks(Protocol):
@@ -53,29 +119,102 @@ class NoHooks:
 
 
 class LineHooks:
-    """The line's own hooks: empty bodies to be filled in the live session (card 04 `on_tool`, card 05
-    `before_speak`, card 06 the tiers' observer on `on_tool`, the kill switch on `on_turn`, the holding line
-    on `on_silence` and the summary on `on_call_end`). Every runtime path gets one through `default_hooks()`,
-    so a body written here runs on the phone, in text mode and in the eval runner alike; `on_call_end` alone
-    runs only on the phone and in text mode, where a call really ends. `NoHooks` above stays truly empty, for
-    the tests."""
+    """The line's own hooks. Every runtime path gets one through `default_hooks()`, so a body here runs on the
+    phone, in text mode and in the eval runner alike; `on_call_end` alone runs only on the phone and in text mode,
+    where a call really ends. Each body is wrapped: a hook that fails is logged and the turn goes on, because a
+    caller on the line must never hear nothing. `NoHooks` above stays truly empty, for the tests."""
 
     def on_turn(self, ctx: TurnContext, user_text: str) -> str | None:
-        return None
+        try:
+            if KILL_SWITCH.exists():
+                ctx.data["hang_up"] = True
+                ctx.data["say"] = KILL_LINE
+                _span(ctx, "kill", "switch", text="the kill switch file is set; the line closed this call")
+                return None
+            if _is_stop(user_text):
+                ctx.data["hang_up"] = True
+                ctx.data["say"] = STOP_LINE
+                return None
+            ctx.data.pop("silences", None)  # the caller spoke, so the hold count starts again
+            normalised = normalise_transcript(user_text)
+            return None if normalised == user_text else normalised
+        except Exception:  # the brain still hears the caller's own words
+            log.exception("on_turn failed for %s", ctx.call_id)
+            return None
 
     def before_speak(self, ctx: TurnContext, text: str) -> str | None:
-        return None
+        try:
+            pins = tuple(ctx.data.get("pins_heard") or ())
+            extra = (lambda s: "pin-heard" if _says_a_heard_pin(s, pins) else None) if pins else None
+            verdicts = GUARD.check(text, extra)
+            ctx.data["guard"] = [v.label for v in verdicts]
+            spoken, hits = GUARD.apply(text, FALLBACK_LINE, extra)
+        except Exception:  # fails closed: unchecked words are never spoken
+            log.exception("before_speak failed for %s", ctx.call_id)
+            ctx.data["guard"] = ["error"]
+            ctx.data.setdefault("tier3", []).append("the guard failed, so the fallback line was said")
+            return FALLBACK_LINE
+        if not hits:
+            return None
+        ctx.data.setdefault("tier3", []).extend(tiers.write_ups(guard_hits=hits))
+        return spoken
 
     def on_silence(self, ctx: TurnContext, seconds: float) -> str | None:
-        return None
+        try:
+            if KILL_SWITCH.exists():
+                # A caller who stays quiet on a closed line still hears the closing line, at the first quiet stretch.
+                ctx.data["hang_up"] = True
+                _span(ctx, "kill", "switch", text="the kill switch file is set; the line closed this call")
+                return KILL_LINE
+            stretches: list[float] = ctx.data.setdefault("silences", [])
+            stretches.append(float(seconds))
+            if len(stretches) == 1:
+                return HOLDING_LINE
+            if sum(stretches[1:]) >= HOLD_LIMIT_S:
+                ctx.data["hang_up"] = True
+                return HOLD_LIMIT_LINE
+            return None
+        except Exception:
+            log.exception("on_silence failed for %s", ctx.call_id)
+            return None
 
     def on_tool(self, ctx: TurnContext, name: str, args: Mapping[str, Any], result: Any) -> None:
+        # The loop records every tool's span, state and hand-off itself (turn.py), so nothing is needed here.
         return None
 
     def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
-        # Card 06's tier-3 summary job runs here: the call is over, so the summary nobody waits on starts now,
-        # handed to a worker so the hang-up is never held up by it.
-        return None
+        # Tier 3 is written up once, after the call: every reason the turns gathered, in one post. The summary
+        # job (Sonnet 5.5) is the next work item; until then the post carries the reasons and the trace link.
+        try:
+            reasons = list(dict.fromkeys(ctx.data.get("tier3") or ()))
+            if not reasons or ctx.escalations is None:
+                return
+            hand_off = tiers.escalation(ctx, "3", "; ".join(reasons), "read the trace")
+            submitted = tiers.submit(ctx, hand_off)
+            _span(
+                ctx,
+                "escalation",
+                "3",
+                text=hand_off.reason,
+                meta={"suggested_action": hand_off.suggested_action, "submitted": submitted},
+            )
+        except Exception:  # a hook never breaks a hang-up
+            log.exception("on_call_end failed for %s", ctx.call_id)
+
+
+def _is_stop(text: str) -> bool:
+    words = re.findall(r"[a-z']+", text.lower())
+    return bool(words) and "stop" in words and set(words) <= _STOP_WORDS
+
+
+def _span(ctx: TurnContext, kind: str, name: str, **fields: Any) -> None:
+    """A span from a hook, when the call has a store. A failed write is logged; the call goes on."""
+    if ctx.store is None:
+        return
+    try:
+        ctx.store.span(ctx.call_id, kind, name, **fields)
+    except Exception:
+        log.exception("%s span failed for %s", kind, ctx.call_id)
 
 
 def default_hooks() -> Hooks:

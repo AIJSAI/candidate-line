@@ -26,6 +26,16 @@ def test_make_brain_follows_the_provider_setting() -> None:
     assert make_brain(Settings.from_env({"BRAIN_PROVIDER": "echo"})).name == "echo"
 
 
+def test_the_phone_s_bedrock_client_retries_once_and_the_eval_runner_s_waits_longer() -> None:
+    # Building a boto3 client reads no credentials and makes no call, so this stays off the network.
+    settings = Settings.from_env({"BRAIN_PROVIDER": "bedrock", "AWS_REGION": "us-east-1"})
+    phone, evals = make_brain(settings), make_brain(settings, max_attempts=7)
+    assert isinstance(phone, BedrockConverseBrain) and isinstance(evals, BedrockConverseBrain)
+    assert phone._client.meta.config.retries["total_max_attempts"] == 2  # the first try and one retry
+    assert evals._client.meta.config.retries["total_max_attempts"] == 7
+    assert phone._client.meta.config.read_timeout == 10
+
+
 class FakeBedrock:
     def __init__(self) -> None:
         self.calls: list[dict] = []

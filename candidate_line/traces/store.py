@@ -109,6 +109,7 @@ class CallRow:
     span_count: int
     model_ms: int
     escalations: int
+    tier: str | None = None  # the name of the call's last tier span (card 06), None before its first turn
 
 
 @dataclass(frozen=True)
@@ -145,7 +146,8 @@ class EscalationRow:
 # The list view and the single-row lookup read the same columns, so a CallRow means the same thing from both.
 _CALL_SELECT = """SELECT c.*, (SELECT COUNT(*) FROM spans s WHERE s.call_id = c.call_id) AS span_count,
    (SELECT COALESCE(SUM(ms), 0) FROM spans s WHERE s.call_id = c.call_id AND s.kind = 'model') AS model_ms,
-   (SELECT COUNT(*) FROM escalations e WHERE e.call_id = c.call_id) AS escalations
+   (SELECT COUNT(*) FROM escalations e WHERE e.call_id = c.call_id) AS escalations,
+   (SELECT s.name FROM spans s WHERE s.call_id = c.call_id AND s.kind = 'tier' ORDER BY s.seq DESC LIMIT 1) AS tier
    FROM calls c"""
 
 

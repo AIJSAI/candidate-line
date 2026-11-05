@@ -28,6 +28,7 @@ from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
+from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 
 log = logging.getLogger("candidate_line.app")
@@ -77,6 +78,9 @@ class Deps:
     # (the number is masked by the store) and ends when the stream stops.
     store: TraceStore | None = None
     escalations: EscalationQueue | None = None  # built over the store; Slack when SLACK_WEBHOOK_URL is set
+    # The tools' ledger for each call. Ledger.default is one shared ledger over var/state.json per process, so two
+    # calls never book one slot; None leaves it to the first tool of the call (the tests).
+    ledger: Callable[[], Ledger] | None = None
 
 
 def default_deps(settings: Settings) -> Deps:
@@ -88,6 +92,7 @@ def default_deps(settings: Settings) -> Deps:
         system=settings.system_prompt(),
         store=(store := TraceStore(settings.trace_store_path or DEFAULT_PATH)),
         escalations=default_queue(store, settings.slack_webhook_url),
+        ledger=Ledger.default,
     )
 
 
@@ -168,6 +173,13 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
                 if message.get("event") == "stop":
                     return
 
+        ledger: Ledger | None = None
+        if deps.ledger is not None:
+            try:
+                ledger = deps.ledger()
+            except Exception:
+                # The call goes on: the first tool tries the ledger again and turns a failure into a sentence.
+                log.exception("ledger failed to open for %s", call_id)
         session = MediaSession(
             send=ws.send_json,
             transcriber=deps.transcriber(),
@@ -180,6 +192,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             greeting=deps.greeting,
             store=deps.store,
             escalations=deps.escalations,
+            ledger=ledger,
         )
         try:
             await session.run(incoming())

@@ -17,6 +17,7 @@ from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
+from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import DEFAULT_PATH, TraceStore
 from candidate_line.turn import TurnContext, run_silence, run_turn
 
@@ -31,6 +32,7 @@ def repl(
     system: str = PLACEHOLDER_SYSTEM,
     store: TraceStore | None = None,
     escalations: EscalationQueue | None = None,
+    ledger: Ledger | None = None,
 ) -> TurnContext:
     """Feeds `lines` through the turn loop and writes each answer with its provider, model and latency."""
     ctx = TurnContext(
@@ -39,6 +41,7 @@ def repl(
         system=system,
         store=store,
         escalations=escalations,
+        ledger=ledger,
     )
     if store is not None:
         store.start_call(ctx.call_id, "text", provider=brain.name, model=brain.model)
@@ -93,6 +96,9 @@ def main() -> int:
             system=settings.system_prompt(),
             store=store,
             escalations=queue,
+            # STATE_PATH names the ledger: var/state.json by default, so a booking made here holds on the phone
+            # too; ":memory:" for a walk that must leave the live ledger clean.
+            ledger=Ledger.default(),
         )
         queue.drain()
     except Exception as error:  # noqa: BLE001  (a closed quota or a missing key is one line, not a traceback)

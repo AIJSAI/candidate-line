@@ -30,6 +30,7 @@ from candidate_line.evals.schema import Case, load_cases
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
+from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import EVAL_DEFAULT_PATH, TraceStore
 from candidate_line.turn import TurnContext, TurnResult, run_silence, run_turn
 
@@ -101,6 +102,7 @@ def run_case(
     system: str = PLACEHOLDER_SYSTEM,
     store: TraceStore | None = None,
     escalations: EscalationQueue | None = None,
+    ledger: Ledger | None = None,
 ) -> CaseResult:
     ctx = TurnContext(
         call_id=f"eval-{case.id}-{uuid.uuid4().hex[:6]}",
@@ -108,6 +110,9 @@ def run_case(
         system=system,
         store=store,
         escalations=escalations,
+        # A fresh in-memory ledger per case unless one is given: a case never sees another's booking, and an
+        # eval run never writes the live var/state.json.
+        ledger=Ledger() if ledger is None else ledger,
     )
     if store is not None:
         store.start_call(ctx.call_id, case.channel, provider=brain.name, model=brain.model)
@@ -333,7 +338,9 @@ def main(argv: list[str] | None = None) -> int:
         print("no text cases to run")
         return 0
     settings = Settings.from_env()
-    brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings)
+    # Nobody waits on an eval turn, so the Bedrock client waits out a throttle instead of failing the case: six
+    # retries, as the client had before the phone got its own two attempts (2026-11-04).
+    brain: Brain = EchoBrain() if args.brain == "echo" else make_brain(settings, max_attempts=7)
     # The runner's own store, beside the room's and never in it: make trace last shows the room's last call.
     store_path = settings.eval_trace_store_path or EVAL_DEFAULT_PATH
     store = TraceStore(store_path)

@@ -118,3 +118,14 @@ def test_one_call_is_looked_up_by_id_and_an_unknown_id_is_none() -> None:
     assert row.span_count == 1 and row.model_ms == 400  # the same columns as the list view
     assert row == next(r for r in store.calls() if r.call_id == "CA3")
     assert store.call("nope") is None
+
+
+def test_the_list_view_shows_the_tier_of_each_call_s_last_tier_span() -> None:
+    store = TraceStore(":memory:")
+    store.start_call("CA5", "voice")
+    store.span("CA5", "tier", "1", text="handled alone: booked a slot")
+    store.span("CA5", "tier", "2", text="a callback request went to the coordinator")
+    store.start_call("CA6", "text")
+    assert store.call("CA5").tier == "2" and store.call("CA6").tier is None
+    home = TestClient(create_cockpit(store)).get("/").text
+    assert "<th class='num'>Tier</th>" in home and "<td class='num'>2</td>" in home and "none yet" in home
