@@ -29,7 +29,7 @@ from candidate_line.persona import (
 from candidate_line.text import FILLERS, straighten
 from candidate_line.tools import MAX_VERIFY_ATTEMPTS, screening
 from candidate_line.tools.actions import _ledger
-from candidate_line.tools.codes import normalise_transcript
+from candidate_line.tools.codes import normalise_transcript, pin_digits
 
 if TYPE_CHECKING:
     from candidate_line.turn import TurnContext
@@ -166,6 +166,16 @@ class LineHooks:
             ctx.data.pop("silences", None)  # the caller spoke, so the hold count starts again
             if self._hello(ctx, user_text):
                 return None
+            if awaits_pin(ctx):
+                # The PIN ask was said by code and is in no history, so the model has no cue that this call is the
+                # line's own: four digits while the PIN is wanted are read as the PIN, in the words confirm_applicant
+                # is briefed on, and never as a code (DR-025 section 14).
+                pin = pin_digits(user_text)
+                if pin is not None:
+                    _span(
+                        ctx, "hook", "pin-said", text="four digits while the PIN is wanted; read as the PIN"
+                    )
+                    return f"PIN {pin}"
             normalised = normalise_transcript(user_text)
             return None if normalised == user_text else normalised
         except Exception:  # the brain still hears the caller's own words

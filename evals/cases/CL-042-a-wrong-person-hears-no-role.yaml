@@ -14,4 +14,4 @@ turns:
       - spoken_matches: 'This line won''t call this number again\. Goodbye\.'
       - spoken_not_matches: '(?i)care aide|home care|warehouse|front desk|riverside|eastgate|recruiter [ab]\b|forklift|licen[cs]e|ACME-\d{4}'
       - state: {opted_out: true, dials_due: 0}
-      - tier: "1"
+      - tier: "3"

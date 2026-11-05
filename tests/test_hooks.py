@@ -470,3 +470,11 @@ def test_the_length_cap_write_up_names_a_screen_left_unfinished() -> None:
     ctx.escalations.drain()
     [row] = store.escalations("CA-hooks")
     assert row.tier == "3" and "the length cap ended the call before the last question" in row.reason
+
+
+@pytest.mark.parametrize("heard", ["4398.", "Hi, yes, it's 4398.", "Sorry, 4 3 9 8", "um, 4398"])
+def test_four_digits_while_the_pin_is_wanted_reach_the_model_as_the_pin(heard: str) -> None:
+    # The PIN ask is said by code and sits in no history, so the digits are named for the model (DR-025 section 14).
+    ctx = _outbound()
+    assert LineHooks().on_turn(ctx, heard) == "PIN 4398"
+    assert LineHooks().on_turn(_outbound(confirmed=True), "4398.") is None
