@@ -17,6 +17,9 @@
     --orange-fill: #FFF6E8;
     --pill-fill: #FFE9CC;
     --arrow: #4A5361;
+    --blue: #1F5FA8;
+    --blue-ink: #174A84;
+    --blue-fill: #EEF4FB;
   }
   html, body { margin: 0; background: #FFFFFF; color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
@@ -65,11 +68,20 @@
     color: var(--orange-ink); background: var(--pill-fill); border: 1px solid var(--orange);
     border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
 
+  .out-label { margin: 16px 0 5px; font-size: 13px; font-weight: 600; color: var(--blue-ink); }
+  .out-label span { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 8px; }
+  .out { display: grid; grid-template-columns: 1fr 16px 1fr 16px 1fr 16px 1fr 16px 1fr 16px 1fr; align-items: stretch; }
+  .out .box { background: var(--blue-fill); border: 1.5px dashed var(--blue); padding: 8px 11px 9px; gap: 2px; }
+  .out .box h3 { font-size: 14.5px; }
+  .out .box p { margin-top: 1px; font-size: 12.5px; line-height: 1.3; }
+  .inner.out { background: var(--blue-fill); border: 1.2px dashed var(--blue); color: var(--blue-ink); font-weight: 600; }
+
   .legend { margin-top: 10px; display: flex; align-items: center; gap: 26px; font-size: 12.5px; }
   .legend span { display: inline-flex; align-items: center; gap: 8px; }
   .sw { display: inline-block; width: 26px; height: 16px; border-radius: 4px; box-sizing: border-box; }
   .sw.pre { background: var(--grey); border: 1.4px solid var(--line); }
   .sw.live { background: var(--orange-fill); border: 1.4px dashed var(--orange); }
+  .sw.out { background: var(--blue-fill); border: 1.4px dashed var(--blue); }
   .legend .pill { position: static; }
 
   .footer { margin-top: 8px; padding-top: 7px; border-top: 1px solid #E1E4E9;
@@ -80,14 +92,14 @@
   @media print {
     html, body { background: #FFFFFF; }
     .page { zoom: 0.76; padding: 0; }
-    .box, .frame, .callout, .pill, .sw, .inner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .box, .frame, .callout, .pill, .sw, .inner, .out .box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
 <body>
 <div class="page">
   <h1>How a Call to Gus Works</h1>
-  <p class="sub">The call comes in along the top row and Gus's answer goes back along the bottom. The phone, text mode and the tests share one turn loop.</p>
+  <p class="sub">The call comes in along the top row and Gus's answer goes back along the bottom. The phone, text mode and the tests share one turn loop. The outbound call (blue) joins the same path.</p>
 
   <div class="call">
     <div class="frame"></div>
@@ -184,6 +196,45 @@
     <svg class="arrow left" style="grid-column:12; grid-row:6" width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6H13" stroke="#4A5361" stroke-width="2"/><path d="M12 1L19 6L12 11Z" fill="#4A5361"/></svg>
   </div>
 
+  <div class="out-label">The Outbound Call, Built 5 November<span>Off by default. The same front door, stream, brain and guard; applicants listed in the cockpit; three new secrets in Secrets Manager. A person makes every hiring decision.</span></div>
+  <div class="out">
+    <div class="box" style="grid-column:1">
+      <h3>Signed Intake</h3>
+      <div class="cap">POST /applications</div>
+      <p>Signed by the careers form, with consent. A stale or replayed one is refused.</p>
+    </div>
+    <svg class="arrow" style="grid-column:2" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M0 6H9" stroke="#4A5361" stroke-width="2"/><path d="M8 1L15 6L8 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:3">
+      <h3>Contacts Store</h3>
+      <div class="cap">One file, mode 600</div>
+      <p>The only raw numbers, read only by the dialler. Deleted after 30 days or on a stop.</p>
+    </div>
+    <svg class="arrow" style="grid-column:4" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M0 6H9" stroke="#4A5361" stroke-width="2"/><path d="M8 1L15 6L8 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:5">
+      <h3>Dialler</h3>
+      <div class="cap">A loop in the line</div>
+      <p>Allow-listed numbers only; 09:00 to 20:00 Mon to Sat, their zone; 3 tries, 20 a day.</p>
+    </div>
+    <svg class="arrow" style="grid-column:6" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M0 6H9" stroke="#4A5361" stroke-width="2"/><path d="M8 1L15 6L8 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:7">
+      <h3>Twilio Dials Out</h3>
+      <div class="cap">Opening in Twilio's own voice</div>
+      <p>Says ACME, automated and transcribed first; nothing can cut it off.</p>
+    </div>
+    <svg class="arrow" style="grid-column:8" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M0 6H9" stroke="#4A5361" stroke-width="2"/><path d="M8 1L15 6L8 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:9">
+      <h3>The Gate, in Code</h3>
+      <div class="cap">Before book_slot</div>
+      <p>Each answer against its posted requirement, never said as a judgment.</p>
+    </div>
+    <svg class="arrow" style="grid-column:10" width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M0 6H9" stroke="#4A5361" stroke-width="2"/><path d="M8 1L15 6L8 11Z" fill="#4A5361"/></svg>
+    <div class="box" style="grid-column:11">
+      <h3>Book or Hand Off</h3>
+      <div class="cap">Screening hand-off by email</div>
+      <p>All met: open times to book. One not: the recruiter is emailed, never the answers.</p>
+    </div>
+  </div>
+
   <div class="beside-label">Beside the Call</div>
   <div class="beside">
     <div class="box" style="grid-column:1">
@@ -221,12 +272,13 @@
   <div class="legend">
     <span><i class="sw pre"></i>Built before the session, listed with dates in PREBUILT.md</span>
     <span><i class="sw live"></i>Built the evening of 4 November, after the session</span>
+    <span><i class="sw out"></i>Built 5 November (DR-025)</span>
     <span><span class="pill">Live</span>The live part of a pre-built piece</span>
   </div>
 
   <div class="footer">
-    <div>Built the evening of 4 November, in the cards' order: the rules page, the tests, the call-record wiring, the tools and persona, the safety filter, the tiers, the hand-off rule and the off switch; then the scorecard and CI (DR-022) and the container on AWS (DR-023).</div>
-    <div class="date">From the code, 2026-11-04</div>
+    <div>Built the evening of 4 November, in the cards' order: the rules page, the tests, the call-record wiring, the tools and persona, the safety filter, the tiers, the hand-off rule and the off switch; then the scorecard and CI (DR-022) and the container on AWS (DR-023). Built 5 November: the outbound screening call (DR-025).</div>
+    <div class="date">From the code, 2026-11-05</div>
   </div>
 </div>
 </body>
