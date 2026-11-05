@@ -42,6 +42,13 @@ OFFER_CALLBACK = "Offer a callback from the coordinator. No other code or PIN is
 # rambling, not the caller.
 MAX_TEXT = 200
 COORDINATOR_CALLS_BACK = "within one business day"
+# Said by code after a move request (spec section 4): the model, briefed to two sentences, dropped the promise in four
+# of six eval runs once the brief grew with card 08 (CL-034), and a caller who is not told when the coordinator calls
+# is the defect the case guards.
+MOVE_REQUEST_LINE = (
+    "I've passed your request to the coordinator, who will call you back {calls_back}. Nothing has moved yet, so "
+    "your interview stays {slot}."
+)
 
 
 @dataclass(frozen=True)
@@ -480,6 +487,7 @@ def move_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     return ToolOutcome(
         content=_json(body),
         state=state,
+        say=MOVE_REQUEST_LINE.format(calls_back=COORDINATOR_CALLS_BACK, slot=current.label),
         escalate=HandOff(
             reason=(
                 f"move request from {cand.code} ({cand.name}): booked {current.label}, "

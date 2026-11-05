@@ -37,6 +37,8 @@ A cite to the wrong section, measured; the FAQ outgrowing an index; the brain's 
 - Text walk, 2026-11-04 (scratch store, in-memory ledger): "I'm calling about application 3233 PI 9683" was verified at once, then a booking by day and time, F2.3 named aloud, a move handed off, and "stop".
 - 2026-11-05, from the voice regression (DR-024, the commit that fixes its three defects): the normaliser reads the word PIN heard as "10" or "ten" before four digits, in words with no code and no PIN word, so CL-024's "Sorry, 102222." reaches the model as "Sorry, PIN 2222." (`candidate_line/tools/codes.py`, `tests/test_tools.py`); and the spoken cap counts sentences with a splitter that keeps "a.m.", "p.m.", "e.g.", "i.e.", "vs." and a single capital initial inside a sentence, so CL-033's "after 3 p.m. about your notice period" no longer costs the one-business-day promise (`candidate_line/telephony/audio.py`, `tests/test_turn.py`, `tests/test_media.py`).
 
+- 2026-11-05, card 08's eval step: with the brief grown by section 9, the model dropped "within one business day" from the move request's reply in four of six full runs (CL-034), even with the promise in the tool's result. The reply is now fixed words from the tool's `say` (spec section 4), the branch DR-025 section 3 added for the outbound lines; CL-034 passes by code.
+
 ## Say it like this
 
 > (written after the teach-back)

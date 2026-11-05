@@ -29,7 +29,7 @@ A transcript made only of filler words (um, uh, hmm, mm, er, ah, erm, mhm, huh) 
 
 ## 4. Must ask first
 
-- `move_slot(preferred?)`: a booked slot moves only through the coordinator. The tool records the request and the caller's preferred time, posts the hand-off, and books nothing; Gus says the coordinator returns calls within one business day (F1.3, F8.2).
+- `move_slot(preferred?)`: a booked slot moves only through the coordinator. The tool records the request and the caller's preferred time, posts the hand-off, and books nothing; Gus says the coordinator returns calls within one business day (F1.3, F8.2). The reply is fixed words, said by code: "I've passed your request to the coordinator, who will call you back within one business day. Nothing has moved yet, so your interview stays {slot}." [default; since 2026-11-05, because the model dropped the promise in four of six eval runs once the brief grew with section 9 (CL-034)]
 - The not-met hand-off: when a posted requirement is not met, the line books nothing and closes nothing. It says the not-met line (section 9.9) and hands the application to the role's recruiter with the promised time (tier 2, section 7). A person decides what happens next, as a person makes every hiring decision.
 - A met screen with no open slot goes to the recruiter the same way, with the no-slot line (section 9.9), so nobody who met every requirement is left without a time.
 

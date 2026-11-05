@@ -315,6 +315,9 @@ def test_a_move_is_handed_to_the_coordinator_and_books_nothing() -> None:
     assert outcome.escalate.suggested_action == "call the candidate back about the move"
     assert outcome.state == {"booked_slot": "S1109-1400", "moves_used": 0, "callback_requested": False}
     assert [s.id for s in ledger.open_slots()] == before
+    # The reply is fixed words (spec section 4): the promise and the slot that stays, never the model's own wording.
+    assert outcome.say is not None and "within one business day" in outcome.say
+    assert outcome.say.endswith(f"your interview stays {ledger.booked_slot(PRIYA[0]).label}.")
     assert ledger.moves()[0]["code"] == PRIYA[0] and ledger.moves()[0]["current"] == "S1109-1400"
 
 
