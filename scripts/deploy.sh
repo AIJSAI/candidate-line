@@ -8,7 +8,8 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEMPLATE=$ROOT/infra/aws/candidate-line-stack.yaml
 STACK=candidate-line
-OPERATOR_EMAIL="${OPERATOR_EMAIL:?set OPERATOR_EMAIL in the environment, never in a file}"
+# The operator's address is a stack parameter and is read from the environment only by the stack step, never from a file.
+OPERATOR_EMAIL="${OPERATOR_EMAIL:-}"
 mask() { sed -E 's/[0-9]{12}/<account>/g'; }
 registry() { aws sts get-caller-identity --profile "$ADMIN" --query Account --output text | sed 's/$/.dkr.ecr.'"$REGION"'.amazonaws.com/'; }
 sha() { git -C "$REPO" rev-parse --short HEAD; }
@@ -24,6 +25,7 @@ case "${1:?step}" in
     docker push "$tag" 2>&1 | mask | tail -2
     echo "pushed candidate-line:$(sha)" ;;
   stack)
+    [ -n "$OPERATOR_EMAIL" ] || { echo "set OPERATOR_EMAIL in the environment for the stack step"; exit 2; }
     pl="$(aws ec2 describe-managed-prefix-lists --profile "$ADMIN" --region "$REGION" --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing --query 'PrefixLists[0].PrefixListId' --output text)"
     echo "cloudfront prefix list: $pl"
     aws cloudformation deploy --profile "$ADMIN" --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
@@ -39,5 +41,17 @@ case "${1:?step}" in
   probe-url)
     host="$(aws cloudformation describe-stacks --profile "$ADMIN" --region "$REGION" --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomain'].OutputValue" --output text)"
     echo "health through CloudFront: $(curl -s -m 15 -o /dev/null -w '%{http_code}' "https://$host/health") at https://$host/health" ;;
+  cockpit-forward)
+    # The recruiter's cockpit, reached through the task's SSM channel on a local port; Ctrl-C ends it.
+    task="$(aws ecs list-tasks --profile "$ADMIN" --region "$REGION" --cluster candidate-line --service-name candidate-line --query 'taskArns[0]' --output text | sed 's#.*/##')"
+    rid="$(aws ecs describe-tasks --profile "$ADMIN" --region "$REGION" --cluster candidate-line --tasks "$task" --query 'tasks[0].containers[?name==`line`].runtimeId' --output text)"
+    echo "cockpit at http://127.0.0.1:8011/ while this runs"
+    aws ssm start-session --profile "$ADMIN" --region "$REGION" --target "ecs:candidate-line_${task}_${rid}" --document-name AWS-StartPortForwardingSession --parameters '{"portNumber":["8001"],"localPortNumber":["8011"]}' ;;
+  line-off|line-on)
+    # The kill switch (DR-021): with the file present every call hears the closing line and ends; removing it
+    # reopens the line on the next call. The file lives on the task's volume, so it outlives a restart.
+    task="$(aws ecs list-tasks --profile "$ADMIN" --region "$REGION" --cluster candidate-line --service-name candidate-line --query 'taskArns[0]' --output text | sed 's#.*/##')"
+    if [ "$1" = "line-off" ]; then cmd="touch /app/var/kill && echo 'line off: every call now hears the closing line'"; else cmd="rm -f /app/var/kill && echo 'line on'"; fi
+    aws ecs execute-command --profile "$ADMIN" --region "$REGION" --cluster candidate-line --task "$task" --container line --interactive --command "sh -c \"$cmd\"" 2>&1 | grep -v -E 'Session Manager plugin|Starting session|Exiting session|Cannot perform start session' ;;
   *) echo "unknown step"; exit 2 ;;
 esac

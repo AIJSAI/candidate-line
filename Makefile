@@ -89,3 +89,14 @@ image:
 
 deploy:
 	scripts/deploy.sh "$(STEP)"
+
+# The operator's controls on the container (DR-023): the cockpit through an SSM port-forward on 127.0.0.1:8011
+# (never a public port), and the kill switch, a file the hooks read on every turn and every quiet stretch.
+cockpit-forward:
+	scripts/deploy.sh cockpit-forward
+
+line-off:
+	scripts/deploy.sh line-off
+
+line-on:
+	scripts/deploy.sh line-on
