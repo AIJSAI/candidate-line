@@ -1,7 +1,7 @@
 # Candidate Line. The targets the build plan names; each one is real now (see PREBUILT.md for when it landed).
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial probe-answer bakeoff test secret eval baseline gate scorecard trace text last image deploy cockpit-forward line-off line-on dial-off dial-on apply forget
+.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial probe-answer bakeoff voice-regression test secret eval baseline gate scorecard trace text last image deploy cockpit-forward line-off line-on dial-off dial-on apply forget
 
 help:
 	@echo "make up          a build day in one command: tunnel, line on the Identity Center profile, number re-pointed, health"
@@ -15,6 +15,7 @@ help:
 	@echo "make probe-dial CASE=bakeoff/cases/x.yaml PUBLIC=https://probe-host ARM=A|B   the probe places a real call, records it, measures both ways"
 	@echo "make probe-answer PUBLIC=https://probe-host WATCHED=1 [LINE=https://line-host]   the probe applies for its own number and answers the line's call, met then not met; James watching (DR-025)"
 	@echo "make bakeoff PUBLIC=https://probe-host ARM=A|B   every case in bakeoff/cases through a real call"
+	@echo "make voice-regression URL=wss://host/media [CASES=...]   every eval case through the deployed line, one at a time, scored from its trace store (DR-024)"
 	@echo "make test        pytest"
 	@echo "make secret NAME=VAR   store the clipboard as VAR in the login keychain, then clear it"
 	@echo "make eval        run the eval cases"
@@ -64,6 +65,11 @@ probe-answer:
 
 bakeoff:
 	@for c in bakeoff/cases/*.yaml; do echo "== $$c"; $(MAKE) --no-print-directory probe-dial CASE=$$c PUBLIC="$(PUBLIC)" ARM="$(ARM)" || true; done
+
+# The probe's Transcribe and Polly run on the line's profile; the ledger reset and the store read inside the task use
+# the admin profile, which the runner names itself, as scripts/deploy.sh does for line-off. REPORT moves the report.
+voice-regression:
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.regression --url "$(URL)" $(if $(REPORT),--report "$(REPORT)") $(CASES)
 
 test:
 	uv run pytest -q

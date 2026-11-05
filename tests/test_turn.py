@@ -418,6 +418,84 @@ def test_a_move_posts_a_tier_two_hand_off_at_once_with_the_masked_caller() -> No
     assert not any(k == "transcribe" or k == "speech" for k, _ in kinds)  # media.py writes those on a call
 
 
+# What the model wrote on CL-033 by voice (the voice regression of 2026-11-05, DR-024), read from its model span.
+CL_033_REPLY = (
+    "I've asked the coordinator to call you back tomorrow after 3 p.m. about your notice period. "
+    "They'll call within one business day."
+)
+
+
+def test_the_spoken_cap_keeps_the_promise_after_a_p_m_inside_a_sentence() -> None:
+    # "p.m." read as a sentence end made three sentences of two, and the cap cut the one spec 7.2 requires.
+    assert turn_module._spoken_cap(CL_033_REPLY) == CL_033_REPLY
+    result = run_turn(ScriptedBrain(said(CL_033_REPLY)), NoHooks(), tool_ctx(), "Call me after 3 PM?")
+    assert result.spoken == CL_033_REPLY
+    # The cap still cuts a third sentence.
+    assert turn_module._spoken_cap("Open at 9 a.m. on Friday. Then 2 p.m. Central. And more.") == (
+        "Open at 9 a.m. on Friday. Then 2 p.m. Central."
+    )
+
+
+class Posted:
+    """The escalation queue's submit, kept in a list: what the operator would be sent."""
+
+    def __init__(self) -> None:
+        self.items: list = []
+
+    def submit(self, e) -> bool:
+        self.items.append(e)
+        return True
+
+
+def test_one_request_asked_again_by_a_superseded_turn_s_carried_words_posts_one_hand_off() -> None:
+    # CL-033 by voice (DR-024): the first final asked for the callback and the line posted it; the caller went on,
+    # and the carried words asked again with a reason, which the reason-text check let through as a second email.
+    store = TraceStore(":memory:")
+    store.start_call("CA-turn", "voice")
+    c = tool_ctx(store, channel="voice")
+    c.escalations = Posted()  # type: ignore[assignment]
+    run_turn(ScriptedBrain(asks(("verify_caller", HANNAH)), said("You're verified.")), NoHooks(), c, "x")
+    half = "Could the coordinator call me back tomorrow after 3 PM?"
+    before = len(c.history)
+    first = ScriptedBrain(asks(("request_callback", {"best_time": "tomorrow after 3 PM"})), said("Done."))
+    run_turn(first, NoHooks(), c, half)
+    # Superseded, as media.py takes it back: never heard, its effects undone, its words carried into the next turn.
+    del c.history[before:]
+    for reverse in reversed(c.data.pop("undo")):
+        reverse()
+    again = {"best_time": "tomorrow after 3 PM", "reason": "notice period"}
+    second = ScriptedBrain(asks(("request_callback", again)), said("They'll call within one business day."))
+    result = run_turn(second, NoHooks(), c, f"{half} It's about my notice period.")
+    assert result.tier == "2"
+    [posted] = c.escalations.items
+    assert posted.reason.startswith("callback request from ACME-3233")
+    spans = [s for s in store.spans("CA-turn") if s.kind == "escalation"]
+    assert [bool(s.meta.get("duplicate")) for s in spans] == [False, True]
+    # The repeat's fuller words stay in the trace that the posted hand-off links to.
+    assert "notice period" in (spans[1].text or "")
+
+
+def test_two_different_requests_on_one_call_post_two_hand_offs_and_another_call_posts_its_own() -> None:
+    def call() -> TurnContext:
+        c = tool_ctx()
+        c.escalations = Posted()  # type: ignore[assignment]
+        move = ScriptedBrain(
+            asks(("verify_caller", PRIYA)),
+            asks(("move_slot", {"preferred": "Friday morning"})),
+            said("I've passed that to the coordinator."),
+        )
+        run_turn(move, NoHooks(), c, "ACME-6792 PIN 4731, can I move to Friday morning?")
+        callback = ScriptedBrain(
+            asks(("request_callback", {"reason": "a visa question"})), said("I've asked the coordinator.")
+        )
+        run_turn(callback, NoHooks(), c, "And could someone call me about a visa?")
+        return c
+
+    for c in (call(), call()):
+        reasons = [e.reason for e in c.escalations.items]
+        assert [r.split(" from ")[0] for r in reasons] == ["move request", "callback request"]
+
+
 def test_a_second_miss_is_tier_three_and_a_superseded_turn_takes_its_miss_back() -> None:
     wrong = {"code": "ACME-3233", "pin": "1111"}
     c = tool_ctx()
