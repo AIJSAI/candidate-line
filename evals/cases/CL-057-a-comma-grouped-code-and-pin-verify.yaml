@@ -5,7 +5,7 @@ kind: regression
 channel: text
 note: 'the 2026-11-05 voice regression (DR-024) heard the code and PIN as one thousands-grouped number, "32,339,683"; eight digits with no code word read as the code and the PIN'
 turns:
-  - user: "I'm calling to book. It's 32,339,683."
+  - user: "Hi, it's 32,339,683."
     checks:
       - heard_matches: 'ACME-3233'
       - heard_matches: 'PIN 9683'
