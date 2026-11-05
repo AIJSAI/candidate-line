@@ -1,6 +1,6 @@
 # PREBUILT
 
-Everything committed before the tag `prebuilt-2026-11-03` is listed here with its commit date. No hidden finished branch exists. Nothing on this list decides anything about a caller: the spec, the eval cases, the guard, the tiers, the persona and the tools were built on the evening of 4 November 2026, after the session, and are listed at the end of this file with their records.
+Everything committed before the tag `prebuilt-2026-11-03` is listed here with its commit date. No hidden finished branch exists. Nothing on this list decides anything about a caller: the spec, the eval cases, the guard, the tiers, the persona and the tools were built on the evening of 4 November 2026, after the session, and the outbound screening call on 5 November; both are listed at the end of this file with their records.
 
 Each row carries the commit date and short sha, its decision record, and the date of the teach-back (KICKOFF.md, Rule 1).
 
@@ -75,3 +75,17 @@ The hour went to another topic and built nothing. A test call at 16:26 CT with a
 - The scorecard, with CI for the linters and the tests (DR-022)
 - Not in any card: the line in a container on AWS, the operator's controls and the hand-off note by email (DR-023)
 - The change the room asks for: none was asked
+
+## Built 5 November 2026
+
+Card 08 was written on 5 November, after James ruled the outbound call's shape with the gate in code, and built the same day by three lanes to DR-025's contracts. Each item names its record and its commits.
+
+- The voice regression: every eval case through the deployed line's audio path, one case at a time, scored from the line's own trace store (DR-024; 0accfd6, the rerun after the fixes in 35053e1)
+- Spec section 9 and the new lines in sections 3, 4, 5, 7 and 8, card 08 and DR-025 (200bb34), with the allow-list, the intake nonce, the secret references and the retention defaults added before the lanes started (7645a85)
+- The synthetic roles with their posted questions, the six applications with their consent text, the synthetic screening baseline, FAQ section F9 and the saved pages DR-025 relies on (9d30cb8)
+- Lane A: the screening tools, the gate (`candidate_line/tools/rules.py`), the loop's say branch, the stop phrases and the hello rule, the guard's screening rules with their red-proof, tiers by outcome and the screening hand-off email (DR-025; merged in 5737fb2)
+- Lane B: the signed intake, the contacts store, the calling window, the dialler, the outbound `/voice` with its status and detection callbacks, the outbound media session, the outbound settings and the probe's answer mode (DR-025; merged in 8a92601)
+- Lane C: the ledger's applications, answers, dials and opt-outs, the cockpit's applicants pages, the scorecard's four outbound rows, the eval support, the stack's three secret references, and `make apply`, `make forget`, `make dial-off` and `make dial-on` (DR-025; merged in ab2c4c0)
+- The three lanes on each other's code with one hello rule (7921694), and the fixes of the merged build's first review (5f079b5)
+- Never 1 reworded and Never 7 added on James's ruling of 09:21 CT, `AGENTS.md` rule 4 amended and card 08's row added, and the sixteen outbound eval cases, CL-041 to CL-056, entered in `evals/cases` (card 08's eval step, 5a82634)
+- The eval step's seven baseline runs (fde0575) and the live proof, two dialled calls to the probe's number through the deployed container on 5 November, one met and booked, one not met and handed off (a748fce), both recorded in DR-025's evidence; the operator's own call was withdrawn on his word before any dial; the voice regression of the 38 inbound cases ran on the outbound image the same afternoon, 36 pass and the one fail passing twice on rerun (DR-024's evidence)
