@@ -1,6 +1,6 @@
 {
   "regression_pass_rate": 1.0,
-  "cost_per_call_usd": 0.00023333,
-  "commit": "515a076",
-  "date": "2026-11-05T00:35:30+00:00"
+  "cost_per_call_usd": 0.000333,
+  "commit": "f8fa685",
+  "date": "2026-11-05T19:14:20+00:00"
 }
