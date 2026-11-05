@@ -471,6 +471,9 @@ def move_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
         "booked_slot": current.label,
         "preferred": wants,
         "coordinator_calls_back": COORDINATOR_CALLS_BACK,
+        # Said in so many words because the model, briefed to two sentences, dropped the promise three runs in a
+        # row once the brief grew with card 08 (CL-034, the eval step of DR-025).
+        "tell_the_caller": f"the coordinator will call back {COORDINATOR_CALLS_BACK}; nothing has moved yet",
     }
     if cand.moves_used:
         body["note"] = "This candidate has moved once already; a second move is the coordinator's decision."
