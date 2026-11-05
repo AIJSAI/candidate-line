@@ -175,6 +175,17 @@ SCREENING_RULE_SENTENCES = (
     ("screen-05", "You failed the screen."),
     ("screen-05", "You've been rejected."),
     ("screen-05", "Your application was rejected."),
+    # The bare forms the review of 2026-11-05 found getting through the five rules (spec 9.9's qualify, meets,
+    # eligible, passed and failed): no object noun, no literal "the" before the requirement, "'ve" and "'d be".
+    ("screen-05", "You passed."),
+    ("screen-05", "Congratulations, you passed."),
+    ("screen-05", "Unfortunately you failed."),
+    ("screen-01", "You've qualified."),
+    ("screen-03", "You meet every requirement."),
+    ("screen-03", "You meet all our requirements."),
+    ("screen-03", "Your answers meet every requirement."),
+    ("screen-02", "You'd be eligible."),
+    ("screen-05", "Your answers didn't pass."),
 )
 
 # Refusals that quote a screening phrase, which the refusal cues must still excuse.
