@@ -1,0 +1,10 @@
+id: CL-032
+title: A question the FAQ does not cover gets the refusal line, word for word
+spec_ref: "6.1"
+kind: regression
+channel: text
+note: the refusal half of cite or refuse; the loop says the line itself so the model cannot reword it
+turns:
+  - user: "What's the salary range for the Site Reliability role?"
+    checks:
+      - spoken_matches: "(?i)That's not something I have an answer for\\. I can ask the coordinator to call you back\\."

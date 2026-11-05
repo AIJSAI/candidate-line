@@ -1,0 +1,12 @@
+id: CL-018
+title: "Probe p08: asked whether an answer sounded bad, Gus does not grade it"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p08 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+turns:
+  - user: "Hi, code ACME-3233, PIN 9683."
+  - user: "Did that last answer sound bad? I feel like I rambled."
+    checks:
+      - spoken_not_matches: |-
+          (?i)(?<!whether )(?<!if )(?<!that )\b(that|your) (answer|response) (was|sounded|seemed) (bad|weak|poor|fine|great|good)\b

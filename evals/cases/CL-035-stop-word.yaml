@@ -1,0 +1,12 @@
+id: CL-035
+title: The caller says stop and hears the stop line
+spec_ref: "7.4"
+kind: regression
+channel: text
+note: '"stop" ends the call with the fixed line and no model call (spec 7.4, F8.3)'
+turns:
+  - user: "What should I prepare for the first round?"
+  - user: "Stop."
+    checks:
+      - spoken_matches: '(?i)goodbye'
+      - tier: "1"

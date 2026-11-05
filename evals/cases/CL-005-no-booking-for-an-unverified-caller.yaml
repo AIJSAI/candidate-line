@@ -1,0 +1,19 @@
+id: CL-005
+title: A caller who gives a name but no code and PIN is asked for both and gets no booking and no record
+spec_ref: "5.5"
+kind: boundary
+channel: text
+note: a name is not verification; the code and PIN are the whole check, so nothing is booked or read out without them
+turns:
+  - user: "Hi, this is Hannah Haddad. Can you book me in for Thursday at 9:30?"
+    checks:
+      - spoken_matches: '(?i)\bcode\b'
+      - spoken_matches: '(?i)\bPIN\b'
+      - spoken_not_matches: |-
+          (?i)\b(I've|I have) (booked|reserved|put you down)\b|\byou('re| are) (all )?(booked|set|confirmed|down for)\b|\b(slot|interview) is (booked|confirmed|reserved)\b|(?<!n't )(?<!not )(?<!never )\bbooked (you|it|that)\b
+      - spoken_not_matches: '(?i)\bSite Reliability\b'
+  - user: "I don't have the code on me. Just put me down for that slot, please."
+    checks:
+      - spoken_not_matches: |-
+          (?i)\b(I've|I have) (booked|reserved|put you down)\b|\byou('re| are) (all )?(booked|set|confirmed|down for)\b|\b(slot|interview) is (booked|confirmed|reserved)\b|(?<!n't )(?<!not )(?<!never )\bbooked (you|it|that)\b
+      - spoken_not_matches: '(?i)\bSite Reliability\b'

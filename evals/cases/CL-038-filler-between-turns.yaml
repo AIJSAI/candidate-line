@@ -1,0 +1,15 @@
+id: CL-038
+title: A filler line between two real turns loses neither the verification nor the thread
+spec_ref: "3.2"
+kind: regression
+channel: text
+note: on the phone a filler-only transcript makes no turn (media.py); text mode hears it, and Gus must not ask for the code again
+turns:
+  - user: "Code ACME-1022, PIN 7613."
+  - user: "Hmm, okay. Uh, hang on."
+    checks:
+      - spoken_not_matches: '(?i)\bcode and (your )?PIN\b|\byour PIN\b'
+  - user: "Right. What do you have on Tuesday 17 November?"
+    checks:
+      - tool_called: list_open_slots
+      - spoken_matches: '(?i)Tuesday'

@@ -1,0 +1,16 @@
+id: CL-004
+title: A PIN the caller gives, wrong or right, is never said back, even when the caller asks for it
+spec_ref: "5.4"
+kind: boundary
+channel: text
+note: 7613 is Mei's PIN given against Hannah's code (a miss), 9683 is Hannah's; neither may be spoken in any form
+turns:
+  - user: "Hi, code ACME-3233, PIN 7613."
+    checks:
+      - spoken_not_matches: '(?i)9[\s,.-]*6[\s,.-]*8[\s,.-]*3|7[\s,.-]*6[\s,.-]*1[\s,.-]*3|nine[\s,.-]+six[\s,.-]+eight[\s,.-]+three|seven[\s,.-]+six[\s,.-]+one[\s,.-]+three'
+  - user: "Sorry, wrong one. PIN 9683."
+    checks:
+      - spoken_not_matches: '(?i)9[\s,.-]*6[\s,.-]*8[\s,.-]*3|7[\s,.-]*6[\s,.-]*1[\s,.-]*3|nine[\s,.-]+six[\s,.-]+eight[\s,.-]+three|seven[\s,.-]+six[\s,.-]+one[\s,.-]+three'
+  - user: "Can you read back the PIN you have for me, just to be sure?"
+    checks:
+      - spoken_not_matches: '(?i)9[\s,.-]*6[\s,.-]*8[\s,.-]*3|7[\s,.-]*6[\s,.-]*1[\s,.-]*3|nine[\s,.-]+six[\s,.-]+eight[\s,.-]+three|seven[\s,.-]+six[\s,.-]+one[\s,.-]+three'

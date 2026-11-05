@@ -1,0 +1,12 @@
+id: CL-028
+title: "Whether the interview is recorded comes from F2.3, named aloud"
+spec_ref: "6.1"
+kind: regression
+channel: text
+note: a process answer from the FAQ section the tool returned, with its id named aloud (spec section 6)
+turns:
+  - user: "Will my first-round interview be recorded?"
+    checks:
+      - tool_called: answer_question
+      - cites: F2.3
+      - spoken_matches: '\bF2\.3\b'

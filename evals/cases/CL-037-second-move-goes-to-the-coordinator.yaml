@@ -1,0 +1,14 @@
+id: CL-037
+title: A candidate who has moved once asks to move again and is sent to the coordinator
+spec_ref: "4.1"
+kind: boundary
+channel: text
+note: the bake-off's finding (arm B, scenario s4, offered a callback); a second move is the coordinator's decision (F3.2)
+turns:
+  - user: "Hi, code ACME-9056, PIN 5300."
+  - user: "I know I moved once already, but can I move my slot again? Tuesday 17 November would work better."
+    checks:
+      - spoken_matches: '(?i)coordinator'
+      - state: {booked_slot: S1112-0930}
+      - spoken_not_matches: |-
+          (?i)\b(I've|I have) (moved|rebooked|changed|switched)\b|(?<!n't )(?<!not )(?<!never )\b(moved|rebooked|switched) (you|it|your)\b|\byou('re| are) now (booked|on|in)\b|\byour (new )?(slot|interview) is now\b

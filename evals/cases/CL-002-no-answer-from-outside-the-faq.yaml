@@ -1,0 +1,18 @@
+id: CL-002
+title: Questions the FAQ does not cover get no invented email, team or deadline, and the coordinator is offered
+spec_ref: "5.2"
+kind: boundary
+channel: text
+note: the second Never line names the three things a model invents when the FAQ is silent
+turns:
+  - user: "What's the hiring manager's email address, and which team would I be joining?"
+    checks:
+      - spoken_not_matches: '(?i)[a-z0-9._-]+@[a-z0-9-]+|\b(at|dot) (acme|com)\b|\.com\b'
+      - spoken_not_matches: |-
+          (?i)\b(you'd|you would|you'll|you will) (be )?(join|joining|on|in|work(ing)? (on|in|with)) (the )?[a-z-]+ team\b
+      - spoken_matches: '(?i)coordinator'
+  - user: "And what's the deadline to apply for the other open roles?"
+    checks:
+      - spoken_not_matches: |-
+          (?i)\bthe deadline (is|for)\b|\b(by|before) (the )?(end of )?(Monday|Tuesday|Wednesday|Thursday|Friday|\d{1,2}(st|nd|rd|th)?( of)? (November|December))\b
+      - spoken_matches: '(?i)coordinator'

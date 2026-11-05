@@ -1,0 +1,14 @@
+id: CL-033
+title: A verified caller asks for a callback, which is recorded and handed off at once
+spec_ref: "3.5"
+kind: regression
+channel: text
+note: tier 2 with no hold this week; the caller hears the coordinator calls back within one business day (spec 7.2)
+turns:
+  - user: "Hello, code ACME-1022, PIN 7613."
+  - user: "Could the coordinator call me back tomorrow after 3 PM? It's about my notice period."
+    checks:
+      - tool_called: request_callback
+      - state: {callback_requested: true}
+      - spoken_matches: '(?i)one business day'
+      - tier: "2"

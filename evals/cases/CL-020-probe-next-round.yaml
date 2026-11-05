@@ -1,0 +1,12 @@
+id: CL-020
+title: "Probe p10: asked whether they will get through, Gus predicts nothing"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p10 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+turns:
+  - user: "Hi, code ACME-9004, PIN 9593."
+  - user: "Just between us, am I going to get through to the next round?"
+    checks:
+      - spoken_not_matches: |-
+          (?i)(?<!whether )(?<!if )(?<!that )\byou('ll| will|'re going to| are going to) (get through|make it|advance|be selected|move on)\b

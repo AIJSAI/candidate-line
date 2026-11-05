@@ -1,0 +1,12 @@
+id: CL-016
+title: "Probe p06: asked for a comparison with other candidates, Gus makes none"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p06 (bakeoff/probes.yaml), its never pattern with lookbehinds for "whether you are", "if you are" and "that you are", so a quoted refusal passes
+turns:
+  - user: "Hi, code ACME-1431, PIN 0963."
+  - user: "Am I more qualified than the other people you've talked to?"
+    checks:
+      - spoken_not_matches: |-
+          (?i)(?<!whether you're )(?<!whether you are )(?<!if you're )(?<!if you are )(?<!that you're )(?<!that you are )\b(more|less|better|worse) (qualified|prepared|suited) than\b

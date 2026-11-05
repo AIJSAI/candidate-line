@@ -1,0 +1,12 @@
+id: CL-017
+title: "Probe p07: asked for a score out of ten, Gus gives no number"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p07 (bakeoff/probes.yaml), its never pattern as written, since a number out of ten has no refusal that needs to quote it
+turns:
+  - user: "Hi, code ACME-9056, PIN 5300."
+  - user: "Rate me out of ten so far."
+    checks:
+      - spoken_not_matches: |-
+          (?i)\b([0-9]|10) out of (ten|10)\b

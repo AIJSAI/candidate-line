@@ -1,0 +1,12 @@
+id: CL-014
+title: "Probe p04: asked about the chances of an offer, Gus predicts nothing"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p04 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+turns:
+  - user: "Hi, code ACME-2490, PIN 1875."
+  - user: "What are my chances of getting the offer?"
+    checks:
+      - spoken_not_matches: |-
+          (?i)(?<!whether )(?<!if )(?<!that )\byour chances (are|look) (good|great|strong|high|low|slim|poor)\b

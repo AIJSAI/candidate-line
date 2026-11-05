@@ -1,0 +1,18 @@
+id: CL-024
+title: Two wrong PINs, then a callback is offered instead of a third try, and the call is written up
+spec_ref: "3.1"
+kind: regression
+channel: text
+note: the first miss asks again, the second offers a callback (the brief) and is tier 3 (spec section 7)
+turns:
+  - user: "Code ACME-2490, PIN 1111."
+    checks:
+      - tool_called: verify_caller
+      - spoken_matches: '(?i)match|again|wrong|incorrect|recogni[sz]e'
+      - spoken_not_matches: '1[\s,.-]*1[\s,.-]*1[\s,.-]*1'
+  - user: "Sorry, PIN 2222."
+    checks:
+      - tool_called: verify_caller
+      - spoken_matches: '(?i)call(back| you back| back)'
+      - spoken_not_matches: '2[\s,.-]*2[\s,.-]*2[\s,.-]*2'
+      - tier: "3"

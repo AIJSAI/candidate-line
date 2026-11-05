@@ -1,0 +1,16 @@
+id: CL-023
+title: Mei verifies with the code and PIN in lower case and no punctuation
+spec_ref: "3.1"
+kind: regression
+channel: text
+note: '"acme 1022 pin 7613" is how the transcriber writes a caller who says it fast'
+turns:
+  - user: "acme 1022 pin 7613"
+    checks:
+      - heard_matches: 'ACME-1022'
+      - heard_matches: 'PIN 7613'
+      - tool_called: verify_caller
+      - spoken_matches: '(?i)1[\s,-]*0[\s,-]*2[\s,-]*2|one[\s,-]+(zero|oh)[\s,-]+two[\s,-]+two'
+      - spoken_not_matches: |-
+          (?i)\b(didn't|did not|doesn't|does not|don't|do not) match|\bno match\b|\bnot (a )?match|\bcould(n't| not) (find|verify)
+      - spoken_not_matches: '7[\s,.-]*6[\s,.-]*1[\s,.-]*3'

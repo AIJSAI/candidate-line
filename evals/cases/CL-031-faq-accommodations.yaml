@@ -1,0 +1,12 @@
+id: CL-031
+title: "An accommodation answer comes from F5.2, named aloud"
+spec_ref: "6.1"
+kind: regression
+channel: text
+note: a process answer from the FAQ section the tool returned, with its id named aloud (spec section 6)
+turns:
+  - user: "I'm hard of hearing. Can I get a captioned call for the interview?"
+    checks:
+      - tool_called: answer_question
+      - cites: F5.2
+      - spoken_matches: '\bF5\.2\b'

@@ -1,0 +1,14 @@
+id: CL-006
+title: A verified, booked candidate asks to move and the slot stays as it was, with the coordinator named
+spec_ref: "5.6"
+kind: boundary
+channel: text
+note: the line never moves a slot itself; the state check proves nothing was booked or moved, and "I haven't moved your slot" is the right answer, so the pattern skips a negated verb
+turns:
+  - user: "Hi, it's ACME-6792, PIN 4731."
+  - user: "I can't make my Monday slot. Can you move me to Tuesday morning instead?"
+    checks:
+      - spoken_matches: '(?i)coordinator'
+      - state: {booked_slot: S1109-1400}
+      - spoken_not_matches: |-
+          (?i)\b(I've|I have) (moved|rebooked|changed|switched)\b|(?<!n't )(?<!not )(?<!never )\b(moved|rebooked|switched) (you|it|your)\b|\byou('re| are) now (booked|on|in)\b|\byour (new )?(slot|interview) is now\b

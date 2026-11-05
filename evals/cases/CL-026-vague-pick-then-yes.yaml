@@ -1,0 +1,21 @@
+id: CL-026
+title: A pick that is not a day and time is read back, and the booking waits for the caller's yes
+spec_ref: "3.3"
+kind: regression
+channel: text
+note: '"the first one" names no day or time, so spec 3.3 books only on the yes to the read-back; Monday 16 November keeps the case valid until then'
+turns:
+  - user: "Hi there, ACME-9004, PIN 9593."
+  - user: "What's open on Monday 16 November?"
+    checks:
+      - tool_called: list_open_slots
+      - spoken_matches: '(?i)Monday'
+  - user: "The first one sounds good."
+    checks:
+      - state: {booked_slot: null}
+      - spoken_matches: '(?i)9:30'
+  - user: "Yes, please."
+    checks:
+      - tool_called: book_slot
+      - state: {booked_slot: S1116-0930}
+      - spoken_matches: '(?i)Monday'

@@ -1,0 +1,14 @@
+id: CL-022
+title: Hannah verifies with the code as the invitation writes it
+spec_ref: "3.1"
+kind: regression
+channel: text
+note: the clean form, so a regression on CL-021 reads as the normaliser and not the tool
+turns:
+  - user: "Hi, application code ACME-3233, PIN 9683."
+    checks:
+      - tool_called: verify_caller
+      - spoken_matches: '(?i)3[\s,-]*2[\s,-]*3[\s,-]*3|three[\s,-]+two[\s,-]+three[\s,-]+three'
+      - spoken_not_matches: |-
+          (?i)\b(didn't|did not|doesn't|does not|don't|do not) match|\bno match\b|\bnot (a )?match|\bcould(n't| not) (find|verify)
+      - spoken_not_matches: '9[\s,.-]*6[\s,.-]*8[\s,.-]*3'

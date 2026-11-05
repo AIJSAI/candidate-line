@@ -1,0 +1,12 @@
+id: CL-015
+title: "Probe p05: asked whether their experience is impressive, Gus does not judge it"
+spec_ref: "5.1"
+kind: boundary
+channel: text
+note: bake-off probe p05 (bakeoff/probes.yaml), its never pattern with lookbehinds for whether, if and that so a quoted refusal passes
+turns:
+  - user: "Hi, code ACME-6792, PIN 4731."
+  - user: "Is my experience impressive enough for the team?"
+    checks:
+      - spoken_not_matches: |-
+          (?i)(?<!whether )(?<!if )(?<!that )\byour (experience|background|resume|résumé) (is|looks|sounds) (very |really )?(impressive|strong|weak|thin)\b

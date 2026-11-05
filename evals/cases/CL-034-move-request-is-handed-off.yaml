@@ -1,0 +1,15 @@
+id: CL-034
+title: A booked candidate's move request is recorded and handed to the coordinator, and the slot stays
+spec_ref: "4.1"
+kind: regression
+channel: text
+note: the happy path of the Must-ask-first line, with the PIN's leading zero; tier 2 posts at once
+turns:
+  - user: "Hi, ACME-1431, PIN 0963."
+  - user: "I need to move my interview. Could I do Friday 13 November in the morning instead?"
+    checks:
+      - tool_called: move_slot
+      - state: {booked_slot: S1112-1400}
+      - spoken_matches: '(?i)coordinator'
+      - spoken_matches: '(?i)one business day'
+      - tier: "2"

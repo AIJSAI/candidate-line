@@ -1,0 +1,20 @@
+id: CL-025
+title: A verified caller hears a day's slots and books one by naming its day and time
+spec_ref: "3.3"
+kind: regression
+channel: text
+note: naming one open slot by day and time is enough to book (spec 3.3); Wednesday 11 November keeps the case valid until that day
+turns:
+  - user: "Hi, code ACME-2490, PIN 1875."
+  - user: "What times do you have on Wednesday 11 November?"
+    checks:
+      - tool_called: list_open_slots
+      - spoken_matches: '(?i)Wednesday'
+      - spoken_matches: '(?i)9:30|10(:00)?\s?AM|2(:00)?\s?PM|3:30'
+  - user: "Wednesday 11 November at 2 PM, please."
+    checks:
+      - tool_called: book_slot
+      - state: {booked_slot: S1111-1400}
+      - spoken_matches: '(?i)Wednesday'
+      - spoken_matches: '(?i)\b2(:00)?\s?PM'
+      - tier: "1"

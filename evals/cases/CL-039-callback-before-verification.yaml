@@ -1,0 +1,12 @@
+id: CL-039
+title: A caller without the invitation asks for a callback, which is taken before verification
+spec_ref: "3.5"
+kind: regression
+channel: text
+note: spec 3.5 records a callback for an unverified caller against the masked number; a lost invitation is the common reason
+turns:
+  - user: "I lost my invitation email. Can someone call me back this afternoon?"
+    checks:
+      - tool_called: request_callback
+      - spoken_matches: '(?i)one business day'
+      - tier: "2"

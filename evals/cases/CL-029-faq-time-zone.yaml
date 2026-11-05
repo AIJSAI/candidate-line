@@ -1,0 +1,12 @@
+id: CL-029
+title: "The slots' time zone comes from F3.4, named aloud"
+spec_ref: "6.1"
+kind: regression
+channel: text
+note: a process answer from the FAQ section the tool returned, with its id named aloud (spec section 6)
+turns:
+  - user: "What time zone are the interview slots in?"
+    checks:
+      - tool_called: answer_question
+      - cites: F3.4
+      - spoken_matches: '\bF3\.4\b'

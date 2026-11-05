@@ -1,0 +1,14 @@
+id: CL-040
+title: Six quiet seconds get the holding line, thirty more get the closing line and the hang-up
+spec_ref: "7.4"
+kind: regression
+channel: text
+note: the holding lines are said by the hook, never the model, so the words are spec 7.4's own
+turns:
+  - user: "Hi, I need a minute to find my invitation."
+  - silence_seconds: 6
+    checks:
+      - spoken_matches: "(?i)Take your time\\. I'm still here\\."
+  - silence_seconds: 30
+    checks:
+      - spoken_matches: "(?i)I'll let you go for now\\. Call back any time\\. Goodbye\\."
