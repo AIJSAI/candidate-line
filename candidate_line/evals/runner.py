@@ -8,6 +8,10 @@ speaks with the same persona and the same hooks as the phone and text mode (Sett
 
 Each run leaves its per-case verdicts in var/eval-last.json, beside its trace store, and the next run prints the
 cases whose verdict moved. `make baseline` (--write-baseline) writes evals/baseline.json from a run's own numbers.
+
+An outbound case (DR-025 section 18) is the line's call to one applicant of data/applications.yaml: the call is
+seeded from a dial record as the phone seeds it, the turns run with the outbound tools, and a fixed turn reads the
+opening and the PIN ask, or the voicemail, for that applicant with no model call.
 """
 
 from __future__ import annotations
@@ -18,19 +22,22 @@ import statistics
 import subprocess
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from candidate_line.brain import Brain, EchoBrain, Reply, make_brain
+from candidate_line import persona
+from candidate_line import tools as line_tools
+from candidate_line.brain import Brain, EchoBrain, Reply, ToolSpec, make_brain
 from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.evals.checks import Verdict, evaluate
 from candidate_line.evals.rates import cost_usd
-from candidate_line.evals.schema import Case, load_cases
+from candidate_line.evals.schema import Case, CaseError, Turn, load_cases
 from candidate_line.hooks import Hooks, default_hooks
 from candidate_line.persona import PLACEHOLDER_SYSTEM
 from candidate_line.settings import Settings
-from candidate_line.tools.ledger import Ledger
+from candidate_line.tools.ledger import Applicant, Ledger, LedgerError
 from candidate_line.traces.store import EVAL_DEFAULT_PATH, TraceStore
 from candidate_line.turn import TurnContext, TurnResult, run_silence, run_turn
 
@@ -50,6 +57,9 @@ _RATE_EPS = 1e-9
 # written, every case stays valid on any later day (DR-017).
 EVAL_CLOCK = datetime.fromisoformat("2026-11-04T18:00:00-06:00")
 LAST_RUN_NAME = "eval-last.json"
+# The number an eval's voicemail says. Fictional (555-0100 to 555-0199 are kept for fiction), so a report that
+# prints the voicemail never shows the line's real number from the keychain.
+EVAL_LINE_NUMBER = "+15555550100"
 
 
 @dataclass(frozen=True)
@@ -125,6 +135,15 @@ def run_case(
         # eval run never writes the live var/state.json.
         ledger=Ledger() if ledger is None else ledger,
     )
+    applicant: Applicant | None = None
+    specs: Sequence[ToolSpec] | None = None
+    if case.outbound is not None:
+        specs = outbound_tool_specs()
+        if specs is None:
+            # Nothing runs and no model is paid for: the case waits for the tools it needs (DR-010).
+            why = "pending: the outbound tools have not landed (DR-025 section 1)"
+            return CaseResult(case, _all_pending(case.turns, why), None, ctx.call_id)
+        applicant = seed_outbound(case, ctx)
     if store is not None:
         store.start_call(ctx.call_id, case.channel, provider=brain.name, model=brain.model)
     verdicts: list[Verdict] = []
@@ -133,7 +152,17 @@ def run_case(
     latencies: list[int] = []
     cache_read = cache_write = 0
     for turn in case.turns:
-        if turn.user is None:
+        if turn.fixed is not None:
+            assert applicant is not None  # the schema refuses a fixed turn outside an outbound case
+            line = fixed_line(turn.fixed, applicant)
+            if line is None:
+                why = "pending: the outbound fixed lines have not landed (DR-025 section 13)"
+                verdicts.extend(_all_pending((turn,), why))
+                continue
+            # The opening is Twilio's own <Say> and the PIN ask the stream's greeting, so neither enters the
+            # history, as the phone keeps its greeting out (Bedrock's Converse API wants a user message first).
+            result = TurnResult(heard="", spoken=line, reply=Reply("", 0, 0, 0, brain.name, brain.model))
+        elif turn.user is None:
             silence = run_silence(hooks, ctx, turn.silence_seconds or 0.0)
             # A silence turn runs no model, so its "reply" is empty and free. Its hang-up rides on the result, as a
             # closing turn's does, so the holding line's end of the call is not lost between the hook and the case.
@@ -144,7 +173,7 @@ def run_case(
                 hang_up=silence.hang_up,
             )
         else:
-            result = run_turn(brain, hooks, ctx, turn.user)
+            result = run_turn(brain, hooks, ctx, turn.user, tools=specs)
             latencies.append(result.reply.latency_ms)
             cache_read += result.reply.cached_input_tokens
             cache_write += result.reply.cache_write_input_tokens
@@ -162,6 +191,62 @@ def run_case(
         tuple(latencies),
         (cache_read, cache_write),
     )
+
+
+def outbound_tool_specs() -> Sequence[ToolSpec] | None:
+    """The tools an outbound call runs with (DR-025 section 1), read by name because they arrive with lane A's half
+    of card 08; None until then."""
+    specs = getattr(line_tools, "OUTBOUND_TOOL_SPECS", None)
+    return tuple(specs) if specs is not None else None
+
+
+def seed_outbound(case: Case, ctx: TurnContext) -> Applicant:
+    """Seeds the call as the phone seeds it from the dial record (DR-025 section 12): a dial in progress bound to
+    this call, answered by a person, and `ctx.data["outbound"]` from that record and the application, never from
+    anything the caller said. An application the line never dials makes no case."""
+    assert ctx.ledger is not None
+    applicant = ctx.ledger.applicant(case.outbound)
+    if applicant is None:
+        raise CaseError(
+            f"{case.id}: outbound {case.outbound} is not an application in data/applications.yaml"
+        )
+    try:
+        dial = ctx.ledger.schedule_dial(applicant.code, 1, EVAL_CLOCK)
+    except LedgerError as refusal:
+        raise CaseError(f"{case.id}: the line never dials {applicant.code}: {refusal}") from None
+    ctx.ledger.update_dial(
+        dial["dial_id"],
+        status="in-progress",
+        call_sid=ctx.call_id,
+        placed_at=EVAL_CLOCK,
+        answered_at=EVAL_CLOCK,
+        answered_by="human",
+    )
+    ctx.data["outbound"] = {
+        "code": applicant.code,
+        "first_name": applicant.first_name,
+        "dial_id": dial["dial_id"],
+        "attempt": dial["attempt"],
+    }
+    return applicant
+
+
+def fixed_line(kind: str, applicant: Applicant) -> str | None:
+    """The words a fixed turn says for this applicant: the opening (Twilio's <Say>) and then the PIN ask (the
+    stream's first line), or the first attempt's voicemail. Read by name from the persona, where lane A's half of
+    card 08 writes them (DR-025 section 13); None until then."""
+    if kind == "opening":
+        opening = getattr(persona, "outbound_opening", None)
+        pin_ask = getattr(persona, "PIN_ASK", None)
+        if opening is None or pin_ask is None:
+            return None
+        return f"{opening(applicant.first_name)} {pin_ask}"
+    voicemail = getattr(persona, "voicemail_line", None)
+    return None if voicemail is None else str(voicemail(applicant.first_name, EVAL_LINE_NUMBER))
+
+
+def _all_pending(turns: Sequence[Turn], why: str) -> tuple[Verdict, ...]:
+    return tuple(Verdict(check, False, why, pending=True) for turn in turns for check in turn.checks)
 
 
 def summarize(results: list[CaseResult], baseline: dict | None, moved: str | None = None) -> tuple[str, int]:

@@ -5,8 +5,10 @@ so the gate can be read between the cards that land those components (DR-010).""
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from candidate_line.escalation import Escalation, format_email, format_subject
 from candidate_line.evals.schema import Check
 from candidate_line.text import straighten
 from candidate_line.turn import TurnResult
@@ -61,4 +63,28 @@ def evaluate(check: Check, result: TurnResult) -> Verdict:
         if result.tier is None:
             return Verdict(check, False, "pending: the tier rule has not landed (card 06)", pending=True)
         return Verdict(check, str(arg) == result.tier, f"tier {result.tier}")
+    if name in ("hand_off_matches", "hand_off_not_matches"):
+        # Read by name: TurnResult gains hand_offs with lane A's half of card 08 (DR-025 section 3), and until then
+        # the check is pending, never passed.
+        hand_offs: Sequence[Escalation] | None = getattr(result, "hand_offs", None)
+        if hand_offs is None:
+            return Verdict(
+                check, False, "pending: the turn's hand-offs have not landed (DR-025)", pending=True
+            )
+        return _hand_off_verdict(check, hand_offs)
     return Verdict(check, False, f"unknown check {name!r}")
+
+
+def _hand_off_verdict(check: Check, hand_offs: Sequence[Escalation]) -> Verdict:
+    """The pattern is searched in each hand-off's subject and email body as the recruiter receives them, one
+    hand-off at a time, so a ^ anchors at a subject. hand_off_matches fails when nothing was posted; the not form
+    passes then, since nothing posted can carry the words."""
+    texts = [straighten(f"{format_subject(e)}\n{format_email(e)}") for e in hand_offs]
+    subjects = [format_subject(e) for e in hand_offs]
+    if check.name == "hand_off_matches":
+        if not texts:
+            return Verdict(check, False, "no hand-off was posted on this turn")
+        ok = any(re.search(str(check.arg), text) for text in texts)
+        return Verdict(check, ok, f"hand-offs {subjects}")
+    hit = next((m for text in texts if (m := re.search(str(check.arg), text))), None)
+    return Verdict(check, hit is None, f"matched {hit.group(0)!r} in {subjects}" if hit else "no match")

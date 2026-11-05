@@ -1,5 +1,6 @@
 """The scorecard (card 07) from three synthetic calls on an in-memory store and a ledger file in tmp_path."""
 
+import statistics
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -114,7 +115,7 @@ def test_three_calls_give_every_number_with_its_n(tmp_path: Path) -> None:
     assert bookings is not None
     rows = {r.number: r for r in scorecard.scorecard(calls, bookings, invited_at(bookings), read_baseline())}
 
-    assert (rows["calls taken"].value, rows["calls taken"].n) == ("1 voice, 2 text", "3 calls")
+    assert (rows["calls taken"].value, rows["calls taken"].n) == ("1 voice, 0 outbound, 2 text", "3 calls")
     assert rows["verified callers"].value == "2"
     # v1's superseded booking and t2's capped one are taken back; v1's third turn stands.
     assert rows["bookings made"].value == "1"
@@ -183,7 +184,7 @@ def test_an_empty_store_prints_zeros_and_creates_no_file(tmp_path: Path) -> None
     page = build(str(missing), None)
     assert not missing.exists()
     assert "synthetic data, synthetic baseline" in page and "no such file, so no calls" in page
-    assert "0 voice, 0 text" in page and "0 model spans" in page and "0 turns" in page
+    assert "0 voice, 0 outbound, 0 text" in page and "0 model spans" in page and "0 turns" in page
     assert "in memory (STATE_PATH=:memory:), so no bookings" in page
 
 
@@ -224,5 +225,185 @@ def test_a_call_the_daily_cap_closed_is_counted_as_closed_and_not_as_taken() -> 
     store.start_call("c1", "voice", caller="+15555550143")
     store.end_call("c1", CLOSED_OUTCOME)
     rows = {r.number: r for r in scorecard.scorecard(read_calls(store), {}, {}, read_baseline())}
-    assert (rows["calls taken"].value, rows["calls taken"].n) == ("1 voice, 2 text", "4 calls")
+    assert (rows["calls taken"].value, rows["calls taken"].n) == ("1 voice, 0 outbound, 2 text", "4 calls")
     assert rows["calls closed by the daily cap"].value == "1"
+
+
+# The outbound rows (DR-025 section 17), from a state file the real ledger writes and a store with the cockpit's
+# reads, a call-back span and a hand-off reply.
+
+from datetime import timedelta
+
+from candidate_line.scorecard import read_screen_minutes
+from candidate_line.tools.ledger import derive_key
+
+NOW = datetime(2026, 11, 5, 16, 0, tzinfo=UTC)  # Thursday, 10:00 Central
+AFTER = datetime(2026, 11, 7, 16, 0, tzinfo=UTC)  # when the page is read
+CONSENT = {
+    "version": "consent-2026-11-05",
+    "accepted": True,
+    "at": "2026-11-05T15:58:00+00:00",
+    "source": "careers-form",
+}
+CARE_AIDE_MET = {"q1": "yes", "q2": "both", "q3": "30", "q4": "yes", "q5": "yes"}
+
+
+def _outbound_world(tmp_path: Path) -> tuple[Path, Path]:
+    """Applicant A in the window, reached in 3 minutes, not met and called back in time; B arrived in the evening
+    and was reached at the window's opening, met and booked; C never reached after three attempts; D still due;
+    E off the allow-list; fixtures F (met, no open slot, promise missed), G (not met, reply in time) and H (not
+    met, its promise still to come)."""
+    clock = {"at": NOW}
+    state = tmp_path / "state.json"
+    ledger = Ledger(state_path=state, now=lambda: clock["at"], pin_key=derive_key("a test key", "pin"))
+
+    def apply(n: int, **extra: object) -> str:
+        fields = {
+            "first_name": "Ama",
+            "role": "care-aide",
+            "zone": "America/Chicago",
+            "pin": "7193",
+            "consent": CONSENT,
+            "number_hmac": f"{n:064x}",
+            "number_masked": f"***-***-01{n:02d}",
+            "nonce": f"scorecard-nonce-{n:02d}-abcdefghijk",
+        }
+        return ledger.add_application(**(fields | extra)).code  # type: ignore[arg-type]
+
+    def reach(code: str, attempt: int, due: datetime, answered: datetime, sid: str) -> None:
+        dial = ledger.schedule_dial(code, attempt, due)
+        ledger.update_dial(dial["dial_id"], status="placed", placed_at=due, call_sid=sid)
+        ledger.update_dial(sid, answered_at=answered, answered_by="human", status="done", outcome="screened")
+
+    a = apply(1)
+    reach(a, 1, NOW + timedelta(minutes=2), NOW + timedelta(minutes=3), "CA-a")
+    for q, v in (CARE_AIDE_MET | {"q1": "no", "q5": "unclear"}).items():
+        ledger.record_answer(a, q, v, v, "CA-a")
+    ledger.set_screen(a, "not_met", "CA-a", "2026-11-06T16:00:00+00:00")
+
+    clock["at"] = datetime(2026, 11, 5, 2, 0, tzinfo=UTC)  # 20:00 Central the evening before
+    b = apply(2)
+    clock["at"] = NOW
+    reach(b, 1, datetime(2026, 11, 5, 15, 0, tzinfo=UTC), datetime(2026, 11, 5, 15, 1, tzinfo=UTC), "CA-b")
+    for q, v in CARE_AIDE_MET.items():
+        ledger.record_answer(b, q, v, v, "CA-b")
+    ledger.set_screen(b, "met", "CA-b", None)
+    ledger.book(b, "S1105-1300", "CA-b")
+
+    c = apply(3)
+    for attempt in (1, 2, 3):
+        dial = ledger.schedule_dial(c, attempt, NOW + timedelta(hours=attempt))
+        ledger.update_dial(dial["dial_id"], status="done", outcome="no_answer", placed_at=NOW)
+    d = apply(4)
+    ledger.schedule_dial(d, 1, NOW + timedelta(hours=3))
+    apply(5, not_dialled="not_allowed")
+
+    for q, v in CARE_AIDE_MET.items():
+        ledger.record_answer("ACME-3474", q, v, v, "CA-f")
+    ledger.set_screen("ACME-3474", "met", "CA-f", "2026-11-06T17:00:00+00:00")
+    ledger.record_answer("ACME-3782", "q1", "no", "no", "CA-g")
+    ledger.record_answer("ACME-3782", "q2", "declined", "skip it", "CA-g")
+    ledger.set_screen("ACME-3782", "not_met", "CA-g", "2099-01-01T00:00:00+00:00")
+    ledger.record_answer("ACME-7720", "q1", "no", "no", "CA-h")
+    ledger.record_answer("ACME-7720", "q2", "day", "day only", "CA-h")
+    ledger.set_screen("ACME-7720", "not_met", "CA-h", "2026-11-08T16:00:00+00:00")
+
+    path = tmp_path / "traces.sqlite"
+    store = TraceStore(path)
+    for call in ("CA-a", "CA-g"):
+        store.start_call(call, "outbound", caller="+15555550101")
+    store.span(
+        "CA-a",
+        "escalation",
+        "2",
+        text=f"screening hand-off from {a} (Ama): Home Care Aide",
+        meta={"tool": "record_answer"},
+    )
+    store.span(
+        "CA-a",
+        "escalation",
+        "2",
+        text=f"screening hand-off from {a} (Ama)",
+        meta={"tool": "x", "duplicate": True},
+    )
+    store.span("CA-a", "hook", "read", meta={"read_seconds": 120})
+    store.span("CA-a", "hook", "read", meta={"read_seconds": 60})
+    store.span("CA-a", "hook", "called_back", meta={"called_at": "2026-11-06T15:00:00+00:00"})
+    reason = "screening hand-off from ACME-3782 (Esi): Front Desk Coordinator; recruiter call promised"
+    store.reply(store.add_escalation("CA-g", "2", reason, "read the answers", "sns"), "called", "Sam")
+    return state, path
+
+
+def test_the_four_outbound_rows_carry_their_method_and_n(tmp_path: Path) -> None:
+    state, store_path = _outbound_world(tmp_path)
+    store = TraceStore(store_path)
+    calls = read_calls(store)
+    outbound = scorecard.read_outbound(state, calls, store, now=AFTER)
+    rows = {r.number: r for r in scorecard.scorecard(calls, {}, {}, read_baseline(), outbound)}
+
+    contact = rows["minutes from application to first contact"]
+    # A: 3 minutes inside the window; B: 20:00 Central to 09:01 Central the next morning, 781 minutes.
+    assert (contact.value, contact.n) == ("392.0 min", "2 applications reached")
+    assert (
+        "worst 781.0 min" in contact.method and "inside the window: median 3.0 min over 1" in contact.method
+    )
+    assert "waited for the window: median 781.0 min over 1" in contact.method
+    assert (
+        "never reached after the last attempt: 1" in contact.method
+        and "still being dialled: 1" in contact.method
+    )
+
+    captured = rows["answers captured per applicant"]
+    # A 4 of 5 (one unclear), B and F 5 of 5, G 2 of 4 (one declined), H 2 of 5.
+    assert (captured.value, captured.n) == ("80%", "5 finished screens")
+    assert (
+        "lowest 40%" in captured.method and "declined (skipped) beside it: 1; unclear: 1" in captured.method
+    )
+
+    saved = rows["recruiter minutes saved (estimate)"]
+    median = statistics.median(read_screen_minutes())
+    assert saved.value == f"{2 * median - 3:.1f} min" and saved.n == "5 finished screens"
+    assert "estimate on a synthetic baseline: 2 met screens" in saved.method and "2 reads" in saved.method
+    assert "a not-met hand-off saves nothing" in saved.method
+
+    promise = rows["the promise (a check row)"]
+    assert promise.value == "slots offered 1 of 2; called back in time 2 of 3"
+    assert (
+        promise.n == "5 finished screens, 4 hand-offs" and "1 still open before their time" in promise.method
+    )
+    assert "short of n is a defect" in promise.method
+
+    assert rows["calls taken"].value == "0 voice, 2 outbound, 0 text"
+    assert rows["screening hand-offs"].value == "1" and rows["callback hand-offs"].value == "0"
+    assert all(r.method for r in rows.values())
+
+
+def test_the_page_prints_the_outbound_rows_and_keeps_applicant_bookings_out_of_invite_to_booked(
+    tmp_path: Path,
+) -> None:
+    state, store_path = _outbound_world(tmp_path)
+    page = build(str(store_path), state, now=AFTER)
+    for row in (
+        "minutes from application to first contact",
+        "answers captured per applicant",
+        "recruiter minutes saved (estimate)",
+        "the promise (a check row)",
+    ):
+        assert row in page
+    line = next(row for row in page.splitlines() if row.startswith("invite-to-booked, this line"))
+    assert "0 bookings" in line  # B's interview booking has no invitation to time from
+    assert "data/baseline_screens.csv" in page and "5555550101" not in page and "***-***-0101" not in page
+
+
+def test_an_unreadable_state_file_leaves_the_outbound_rows_empty_and_says_so(tmp_path: Path) -> None:
+    state = tmp_path / "state.json"
+    state.write_text("not json", encoding="utf-8")
+    rows = {
+        r.number: r
+        for r in scorecard.scorecard([], None, {}, read_baseline(), scorecard.read_outbound(state))
+    }
+    for name in ("minutes from application to first contact", "the promise (a check row)"):
+        assert rows[name].value == "none" and "could not be read" in rows[name].method
+    empty = {r.number: r for r in scorecard.scorecard([], {}, {}, read_baseline())}
+    assert empty["the promise (a check row)"].value == "slots offered 0 of 0; called back in time 0 of 0"
+    assert empty["minutes from application to first contact"].n == "0 applications reached"

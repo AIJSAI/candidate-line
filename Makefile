@@ -1,7 +1,7 @@
 # Candidate Line. The targets the build plan names; each one is real now (see PREBUILT.md for when it landed).
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate scorecard trace text last image deploy
+.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate scorecard trace text last image deploy cockpit-forward line-off line-on dial-off dial-on apply forget
 
 help:
 	@echo "make up          a build day in one command: tunnel, line on the Identity Center profile, number re-pointed, health"
@@ -23,7 +23,11 @@ help:
 	@echo "make trace last  the latest call's spans, in the terminal"
 	@echo "make text        the line in text mode (BRAIN_PROVIDER / BEDROCK_MODEL_ID from the environment)"
 	@echo "make image       build the container image for linux/arm64 from the committed head (docs/deploy/PLAN.md)"
-	@echo "make deploy STEP=ecr|push|stack|url|status|probe-url   one step of scripts/deploy.sh against the AWS stack (DR-023)"
+	@echo "make deploy STEP=ecr|push|secrets|stack|url|status|probe-url   one step of scripts/deploy.sh against the AWS stack (DR-023)"
+	@echo "make line-off / line-on    the kill switch on the task: every call hears the closing line, and the dialler stops"
+	@echo "make dial-off / dial-on    the dialler's own stop on the task (var/no-dial); calls in go on (DR-025)"
+	@echo "make apply PIN=dddd [URL=http://127.0.0.1:8000] [PHONE=probe] [ROLE=care-aide] [FIRST=Ama] [ZONE=America/Chicago]   a signed synthetic application for a walk"
+	@echo "make forget CODE=ACME-dddd [WHERE=local]   a deletion request: the application, its answers, its dials and its number"
 
 up:
 	scripts/up.sh
@@ -100,3 +104,19 @@ line-off:
 
 line-on:
 	scripts/deploy.sh line-on
+
+# The outbound call's controls (DR-025 section 19). dial-off stops the dialler alone; line-off stops it too.
+dial-off:
+	scripts/deploy.sh dial-off
+
+dial-on:
+	scripts/deploy.sh dial-on
+
+# A signed synthetic application for a walk. PHONE is a fictional 555-01xx number unless given, which no
+# allow-list holds, so the line stores it as not dialled; PHONE=probe uses the probe's number from the keychain.
+apply:
+	@URL="$(URL)" PIN="$(PIN)" PHONE="$(PHONE)" ROLE="$(ROLE)" FIRST="$(FIRST)" ZONE="$(ZONE)" scripts/deploy.sh apply
+
+# A deletion request (spec 9.13), on the task by default, or in this Mac's var/ with WHERE=local.
+forget:
+	scripts/deploy.sh forget "$(CODE)" "$(WHERE)"

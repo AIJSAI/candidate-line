@@ -323,3 +323,189 @@ def test_write_baseline_runs_only_on_the_real_cases_refuses_a_boundary_failure_a
     assert written["commit"] == head.stdout.strip()
     assert datetime.fromisoformat(written["date"]).utcoffset() == timedelta(0)
     assert (runner.BASELINE.read_bytes() if runner.BASELINE.exists() else None) == committed
+
+
+# The outbound case (DR-025 section 18). Lane A's tools and fixed lines are not in this lane's branch, so the tests
+# put small stand-ins in their place by name; the real ones replace them at the merge and these still hold.
+
+OUTBOUND = {
+    "id": "CL-941",
+    "title": "the opening for the dialled applicant, then the PIN",
+    "kind": "boundary",
+    "outbound": "ACME-3108",
+    "turns": [
+        {"fixed": "opening", "checks": [{"spoken_matches": "calling for Lerato"}]},
+        {"user": "It's 4398.", "checks": [{"spoken_matches": "4398"}]},
+        {"fixed": "voicemail", "checks": [{"spoken_not_matches": "(?i)care aide|ACME-\\d{4}"}]},
+    ],
+}
+_STAND_IN_TOOLS = (
+    ToolSpec("confirm_applicant", "confirms the dialled applicant by PIN", {"type": "object"}),
+)
+
+
+class _ToolSpy(EchoBrain):
+    """The echo brain, keeping what each call was given."""
+
+    def __init__(self) -> None:
+        self.tools: list[tuple[str, ...]] = []
+        self.histories: list[list[str]] = []
+
+    def reply(
+        self, system: str, messages: Sequence[Message], max_tokens: int = 200, tools: Sequence[ToolSpec] = ()
+    ) -> Reply:
+        self.tools.append(tuple(t.name for t in tools))
+        self.histories.append([m.text for m in messages])
+        return super().reply(system, messages, max_tokens, tools)
+
+
+def _outbound_stand_ins(monkeypatch: pytest.MonkeyPatch) -> None:
+    from candidate_line import persona
+    from candidate_line import tools as line_tools
+
+    monkeypatch.setattr(line_tools, "OUTBOUND_TOOL_SPECS", _STAND_IN_TOOLS, raising=False)
+    monkeypatch.setattr(
+        persona, "outbound_opening", lambda first: f"Hello, this is ACME, calling for {first}.", raising=False
+    )
+    monkeypatch.setattr(persona, "PIN_ASK", "Please say your PIN.", raising=False)
+    monkeypatch.setattr(
+        persona,
+        "voicemail_line",
+        lambda first, number: f"A message for {first}. Call {number}.",
+        raising=False,
+    )
+
+
+def test_the_schema_takes_outbound_fixed_and_the_hand_off_checks_and_still_refuses_unknown_keys() -> None:
+    case = parse_case(
+        {
+            **OUTBOUND,
+            "turns": [
+                *OUTBOUND["turns"],
+                {
+                    "user": "no",
+                    "checks": [{"hand_off_matches": "^Screening"}, {"hand_off_not_matches": "licen"}],
+                },
+            ],
+        }
+    )
+    assert case.outbound == "ACME-3108" and [t.fixed for t in case.turns] == [
+        "opening",
+        None,
+        "voicemail",
+        None,
+    ]
+    assert [c.name for c in case.turns[3].checks] == ["hand_off_matches", "hand_off_not_matches"]
+    assert parse_case(GOOD).outbound is None and all(t.fixed is None for t in parse_case(GOOD).turns)
+    refused = [
+        ({**OUTBOUND, "dialled": "ACME-3108"}, "unknown keys"),
+        ({**OUTBOUND, "outbound": "3108"}, "application code"),
+        ({**OUTBOUND, "turns": [{"fixed": "greeting"}]}, "fixed must be one of"),
+        ({**OUTBOUND, "turns": [{"fixed": "opening", "user": "hello"}]}, "exactly one of"),
+        ({**GOOD, "turns": [{"fixed": "opening"}]}, "belongs to an outbound case"),
+        ({**OUTBOUND, "turns": [{"user": "x", "checks": [{"hand_off_says": "x"}]}]}, "unknown check"),
+    ]
+    for raw, message in refused:
+        with pytest.raises(CaseError, match=message):
+            parse_case(raw)
+
+
+def test_the_hand_off_checks_read_every_hand_off_s_subject_and_email() -> None:
+    from types import SimpleNamespace
+
+    from candidate_line.escalation import Escalation
+    from candidate_line.evals.checks import evaluate
+    from candidate_line.evals.schema import Check
+
+    hand_off = Escalation(
+        call_id="eval-CL-941",
+        tier="2",
+        reason="screening hand-off from ACME-3108 (Lerato): Home Care Aide; recruiter call promised by Friday",
+        suggested_action="read the answers on the applicant's record and call them by the promised time",
+        trace_url="http://127.0.0.1:8001/calls/eval-CL-941",
+    )
+    posted = SimpleNamespace(heard="", spoken="", hand_offs=(hand_off,))
+    none = SimpleNamespace(heard="", spoken="", hand_offs=())
+    assert evaluate(
+        Check("hand_off_matches", r"(?i)^Screening hand-off: Lerato \(ACME-3108\)"), posted
+    ).passed
+    assert evaluate(Check("hand_off_matches", "ACME-3108"), posted).passed
+    assert not evaluate(Check("hand_off_matches", "forklift"), posted).passed
+    assert not evaluate(Check("hand_off_not_matches", "Home Care Aide"), posted).passed
+    assert evaluate(Check("hand_off_not_matches", "forklift"), posted).passed
+    missing = evaluate(Check("hand_off_matches", "."), none)
+    assert not missing.passed and not missing.pending and "no hand-off" in missing.detail
+    assert evaluate(Check("hand_off_not_matches", "."), none).passed
+    # Before the turn carries its hand-offs (lane A), the check waits, and is never a pass.
+    waiting = evaluate(Check("hand_off_matches", "."), SimpleNamespace(heard="", spoken=""))
+    assert waiting.pending and not waiting.passed
+
+
+def test_an_outbound_case_is_seeded_from_a_dial_and_runs_with_the_outbound_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from candidate_line.turn import TurnContext
+
+    _outbound_stand_ins(monkeypatch)
+    seen: list[TurnContext] = []
+    real = runner.run_turn
+
+    def spy(brain: Brain, hooks: Hooks, ctx: TurnContext, text: str, **kwargs: Any) -> Any:
+        seen.append(ctx)
+        return real(brain, hooks, ctx, text, **kwargs)
+
+    monkeypatch.setattr(runner, "run_turn", spy)
+    brain = _ToolSpy()
+    ledger = Ledger(now=lambda: runner.EVAL_CLOCK)
+    result = run_case(parse_case(OUTBOUND), brain, NoHooks(), ledger=ledger)
+    assert result.passed, [v.detail for v in result.verdicts if not v.passed]
+    assert seen and len({id(c) for c in seen}) == 1
+    ctx = seen[0]
+    seeded = ctx.data["outbound"]
+    assert (seeded["code"], seeded["first_name"], seeded["attempt"]) == ("ACME-3108", "Lerato", 1)
+    [dial] = ledger.dials("ACME-3108")
+    assert dial["dial_id"] == seeded["dial_id"] and dial["status"] == "in-progress"
+    assert dial["call_sid"] == result.ctx_call_id and dial["answered_by"] == "human"
+    # Every model call had the outbound tools, and the history began with the applicant's own words.
+    assert brain.tools and set(brain.tools) == {("confirm_applicant",)}
+    assert brain.histories[0] == ["It's 4398."]
+
+
+def test_a_fixed_turn_says_the_opening_and_the_pin_ask_or_the_voicemail_with_no_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from candidate_line.tools.ledger import Ledger as L
+
+    _outbound_stand_ins(monkeypatch)
+    lerato = L().applicant("ACME-3108")
+    assert lerato is not None
+    assert (
+        runner.fixed_line("opening", lerato)
+        == "Hello, this is ACME, calling for Lerato. Please say your PIN."
+    )
+    voicemail = runner.fixed_line("voicemail", lerato)
+    assert voicemail == f"A message for Lerato. Call {runner.EVAL_LINE_NUMBER}."
+    assert runner.EVAL_LINE_NUMBER.startswith("+155555501")  # fictional, never the line's own number
+    brain = _ToolSpy()
+    case = parse_case({**OUTBOUND, "turns": OUTBOUND["turns"][:1]})
+    assert run_case(case, brain, NoHooks()).passed and brain.tools == []
+
+
+def test_an_outbound_case_waits_for_its_tools_and_lines_and_refuses_an_applicant_never_dialled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from candidate_line import persona
+    from candidate_line import tools as line_tools
+
+    monkeypatch.setattr(line_tools, "OUTBOUND_TOOL_SPECS", None, raising=False)
+    brain = _ToolSpy()
+    result = run_case(parse_case(OUTBOUND), brain, NoHooks())
+    assert result.pending and brain.tools == [] and "outbound tools" in result.verdicts[0].detail
+    _outbound_stand_ins(monkeypatch)
+    monkeypatch.setattr(persona, "outbound_opening", None)
+    waiting = run_case(parse_case({**OUTBOUND, "turns": OUTBOUND["turns"][:1]}), brain, NoHooks())
+    assert waiting.pending and "fixed lines" in waiting.verdicts[0].detail
+    with pytest.raises(CaseError, match="not an application"):
+        run_case(parse_case({**OUTBOUND, "outbound": "ACME-0001"}), brain, NoHooks())
+    with pytest.raises(CaseError, match="never dials ACME-7941"):
+        run_case(parse_case({**OUTBOUND, "outbound": "ACME-7941"}), brain, NoHooks())  # no consent

@@ -22,6 +22,29 @@ Parameters:
   MaxCallsPerDay:
     Type: Number
     Default: 30
+  # The outbound screening call (DR-025 section 11). Off by default; turning it on also needs the three secrets
+  # below in Secrets Manager, or the process stops at start.
+  OutboundEnabled:
+    Type: String
+    Default: "0"
+    AllowedValues: ["0", "1"]
+    Description: 1 turns the dialler on. Its retention sweep runs either way.
+  MaxOutboundPerDay:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Dials placed per Central-time day; with the 480 s cap this bounds the outbound bill (DR-025, Spend).
+  CallWindow:
+    Type: String
+    Default: "09:00-20:00 Mon-Sat"
+    AllowedPattern: "^[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9] (Mon|Tue|Wed|Thu|Fri|Sat)-(Mon|Tue|Wed|Thu|Fri|Sat)$"
+    ConstraintDescription: HH:MM-HH:MM and a day range from Mon to Sat; the line never calls on a Sunday.
+    Description: The hours a dial may be placed, in the applicant's own time zone.
+  MaxOutboundCallSeconds:
+    Type: Number
+    Default: 480
+    MinValue: 1
+    Description: The length cap of an outbound call; Twilio's TimeLimit is this plus 60 seconds.
   BudgetStopUsd:
     Type: Number
     Default: 45
@@ -167,13 +190,24 @@ Resources:
         Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
       ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy]
       Policies:
+        # One resource for each secret the task definition references, and no others, so a secret added under
+        # candidate-line/ is never readable by the task until it is named here. The -?????? is the six random
+        # characters Secrets Manager adds to every secret's ARN. tests/test_stack.py holds this list to the
+        # task's Secrets.
         - PolicyName: read-the-line-secrets
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/*
+                Resource:
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/ANTHROPIC_API_KEY-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_AUTH_TOKEN-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_ACCOUNT_SID-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_NUMBER_SID-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_LINE_NUMBER-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/INTAKE_SIGNING_KEY-??????
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/OUTBOUND_ALLOWED_NUMBERS-??????
   TaskRole:
     Type: AWS::IAM::Role
     Properties:
@@ -254,11 +288,22 @@ Resources:
             - { Name: MAX_CALL_SECONDS, Value: !Ref MaxCallSeconds }
             - { Name: MAX_CALLS_PER_DAY, Value: !Ref MaxCallsPerDay }
             - { Name: LOG_LEVEL, Value: INFO }
+            - { Name: OUTBOUND_ENABLED, Value: !Ref OutboundEnabled }
+            - { Name: MAX_OUTBOUND_PER_DAY, Value: !Ref MaxOutboundPerDay }
+            - { Name: CALL_WINDOW, Value: !Ref CallWindow }
+            - { Name: MAX_OUTBOUND_CALL_SECONDS, Value: !Ref MaxOutboundCallSeconds }
+            # The one store of raw numbers, on the encrypted volume beside the ledger (DR-025 section 9).
+            - { Name: CONTACTS_PATH, Value: /app/var/contacts.json }
+          # The signing key, the allow-list and the line's number reach the task as secret references only, never
+          # as Environment values (DR-025 fix 15); tests/test_stack.py holds that.
           Secrets:
             - { Name: ANTHROPIC_API_KEY, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/ANTHROPIC_API_KEY" }
             - { Name: TWILIO_AUTH_TOKEN, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_AUTH_TOKEN" }
             - { Name: TWILIO_ACCOUNT_SID, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_ACCOUNT_SID" }
             - { Name: TWILIO_NUMBER_SID, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_NUMBER_SID" }
+            - { Name: TWILIO_LINE_NUMBER, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/TWILIO_LINE_NUMBER" }
+            - { Name: INTAKE_SIGNING_KEY, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/INTAKE_SIGNING_KEY" }
+            - { Name: OUTBOUND_ALLOWED_NUMBERS, ValueFrom: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:candidate-line/OUTBOUND_ALLOWED_NUMBERS" }
           LogConfiguration:
             LogDriver: awslogs
             Options: { awslogs-group: !Ref LogGroup, awslogs-region: !Ref AWS::Region, awslogs-stream-prefix: line }
@@ -275,6 +320,7 @@ Resources:
       ServiceName: candidate-line
       Cluster: !Ref Cluster
       LaunchType: FARGATE
+      # One task, and never two during a deploy, because two tasks would be two diallers (DR-025, Security).
       DesiredCount: 1
       EnableExecuteCommand: true
       HealthCheckGracePeriodSeconds: 60
