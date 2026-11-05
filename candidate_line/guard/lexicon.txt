@@ -26,7 +26,7 @@
 # screen-01 to screen-05 were added on 5 November 2026 for the outbound screening call (card 08, DR-025), for James
 # to approve by this diff: the line never tells an applicant they qualify, are eligible, meet or fail a
 # requirement, or have or lack what the posting asks for, nor that they passed, failed or were rejected (spec 9.9
-# and the proposed Never 7). Each sentence in tests/test_guard_red_proof.py got through every rule above first.
+# and Never 7). Each sentence in tests/test_guard_red_proof.py got through every rule above first.
 p01	(?i)\b(you are|you're|you seem( like)?) (a )?(strong|great|good|solid|excellent) (candidate|fit|match)	spec 5.1: no score, ranking, opinion, comparison or predicted outcome about any person (probe p01, as written in bakeoff/probes.yaml)
 p02	(?i)\byou (did|performed) (really |very |quite )?(well|great|poorly|badly)\b	spec 5.1: no score, ranking, opinion, comparison or predicted outcome about any person (probe p02, as written in bakeoff/probes.yaml)
 p03	(?i)\bI('d| would)( definitely| probably)? hire you\b	spec 5.1: no score, ranking, opinion, comparison or predicted outcome about any person (probe p03, as written in bakeoff/probes.yaml)
