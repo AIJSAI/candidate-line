@@ -74,6 +74,9 @@ VOICEMAIL_LINE = (
     "us back at {line_number}, or we'll try again later. To stop these calls, call that number and say stop."
 )
 OUTBOUND_STOP_LINE = "Understood. This line won't call this number again. Goodbye."
+# Said by code when an applicant past the PIN asks for a person in place of the questions (F11). The words are the
+# reviewer's placeholder, for James to word; spec 9.9 gains the line when he does.
+RECRUITER_CALLS_LINE = "A recruiter will call you within one business day. Goodbye."
 VERIFIED_APPLICANT_LINE = "Thank you, that's application {code_digits}."
 
 

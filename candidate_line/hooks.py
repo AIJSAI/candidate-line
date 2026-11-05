@@ -24,11 +24,12 @@ from candidate_line.persona import (
     KILL_LINE,
     OUTBOUND_STOP_LINE,
     PIN_ASK,
+    RECRUITER_CALLS_LINE,
     STOP_LINE,
 )
 from candidate_line.text import FILLERS, straighten
 from candidate_line.tools import MAX_VERIFY_ATTEMPTS, screening
-from candidate_line.tools.actions import _ledger
+from candidate_line.tools.actions import _ledger, request_callback
 from candidate_line.tools.codes import normalise_transcript, pin_digits
 
 if TYPE_CHECKING:
@@ -84,6 +85,9 @@ _WRONG_PERSON = re.compile(r"\b(?:wrong number|not me|you have the wrong person)
 HELLO_WORDS = frozenset({"hello", "hi", "hey", "yes", "yeah", "speaking"})
 HELLO_PHRASES = ("this is she", "this is he")
 MAX_HELLO_ASKS = 2
+# An applicant past the PIN asking for a person in place of the questions (F11): the whole utterance, with "please"
+# and fillers around it, so "is a person going to read this?" or an answer that holds the word goes to the model.
+_PERSON_ASKS = frozenset({"person", "a person", "real person", "a real person", "recruiter", "a recruiter"})
 _SPELLED_DIGIT = re.compile(r"\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b", re.IGNORECASE)
 _WORD_TO_DIGIT = {
     "zero": "0",
@@ -164,6 +168,8 @@ class LineHooks:
                 ctx.data["say"] = STOP_LINE
                 return None
             ctx.data.pop("silences", None)  # the caller spoke, so the hold count starts again
+            if self._person(ctx, user_text):
+                return None
             if self._hello(ctx, user_text):
                 return None
             if awaits_pin(ctx):
@@ -246,6 +252,29 @@ class LineHooks:
         _span(ctx, "hook", "opt-out", text="the calls were stopped: said stop on a call back")
         return True
 
+    def _person(self, ctx: TurnContext, text: str) -> bool:
+        """An applicant past the PIN who asks for a person: request_callback's applicant path, whose reason is
+        fixed words, then the fixed line and the hang-up, with no model call, so the ask never rests on the model
+        reading it (F11). The hand-off rides to the turn, which posts it and makes the turn tier 2. True when it
+        answered them."""
+        if not ctx.data.get("candidate") or not _is_person_ask(text):
+            return False
+        if screening.applicant(ctx, _ledger(ctx)) is None:
+            return False  # a candidate's call, not an applicant's: the model answers as ever
+        outcome = request_callback({}, ctx)
+        if outcome.is_error or outcome.escalate is None:
+            return False  # the model reads the refusal and answers in its own words
+        ctx.data.setdefault("hook_hand_offs", []).append(("request_callback", outcome.escalate))
+        ctx.data["hang_up"] = True
+        ctx.data["say"] = RECRUITER_CALLS_LINE
+        _span(
+            ctx,
+            "hook",
+            "person",
+            text="the applicant asked for a person; a recruiter's callback was requested",
+        )
+        return True
+
     def _hello(self, ctx: TurnContext, text: str) -> bool:
         """Hello words on an outbound call while the PIN is wanted: the PIN ask again by code, twice a call at
         most, and then not a turn at all (`not_a_turn`), as the media session lets them go. True when it answered
@@ -305,6 +334,7 @@ class LineHooks:
         return None
 
     def on_call_end(self, ctx: TurnContext, outcome: str | None) -> None:
+        self._unbooked_screen(ctx)
         # Tier 3 is written up once, after the call: every reason the turns gathered, in one post. The summary
         # job (Sonnet 5.5) is the next work item; until then the post carries the reasons and the trace link.
         try:
@@ -328,10 +358,40 @@ class LineHooks:
         except Exception:  # a hook never breaks a hang-up
             log.exception("on_call_end failed for %s", ctx.call_id)
 
+    def _unbooked_screen(self, ctx: TurnContext) -> None:
+        """A met screen that offered times and ended with none booked gets its screening hand-off now, on the
+        phone and in text mode alike (F9). It writes no record, as the tier-3 write-up in on_call_end writes none."""
+        try:
+            hand_off = screening.unbooked_hand_off(ctx)
+            if hand_off is None or ctx.escalations is None:
+                return
+            posted = tiers.escalation(
+                ctx,
+                hand_off.tier,
+                hand_off.reason,
+                hand_off.suggested_action,
+                record_code=hand_off.record_code,
+            )
+            submitted = tiers.submit(ctx, posted)
+            _span(
+                ctx,
+                "escalation",
+                hand_off.tier,
+                text=hand_off.reason,
+                meta={"suggested_action": hand_off.suggested_action, "submitted": submitted},
+            )
+        except Exception:  # a hook never breaks a hang-up
+            log.exception("the unbooked screen's hand-off failed for %s", ctx.call_id)
+
 
 def _is_stop(text: str) -> bool:
     words = re.findall(r"[a-z']+", text.lower())
     return bool(words) and "stop" in words and set(words) <= _STOP_WORDS
+
+
+def _is_person_ask(text: str) -> bool:
+    words = [w for w in _words(straighten(text)) if w not in FILLERS and w != "please"]
+    return " ".join(words) in _PERSON_ASKS
 
 
 def _is_opt_out(text: str) -> bool:

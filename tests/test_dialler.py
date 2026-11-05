@@ -181,6 +181,31 @@ def test_nothing_is_placed_while_the_kill_switch_or_the_no_dial_file_exists(tmp_
     assert w.dialler.tick() == "placed"
 
 
+def test_nothing_is_placed_while_the_state_file_is_set_aside_and_its_numbers_are_kept(
+    tmp_path, caplog
+) -> None:
+    """F6: with the file set aside the ledger reads no opt-out at all, so the dialler stops until an operator
+    restores it, and the opt-out sweep, which would read every application as forgotten, waits too."""
+    w = World(tmp_path)
+    applicant, dial = w.apply()
+    path = w.ledger.state_path
+    assert path is not None
+    kept = path.read_text(encoding="utf-8")
+    path.write_text("{not json " + fictional(143), encoding="utf-8")
+    with caplog.at_level(logging.INFO, logger="candidate_line"):
+        assert w.dialler.tick() == "the state file was set aside"
+        assert w.dialler.tick() == "the state file was set aside"
+    assert w.twilio.calls == [] and w.preflight.runs == 0
+    assert w.contacts.number(applicant.code) == fictional(142)  # not swept as forgotten
+    assert caplog.text.count("the state file was set aside") == 1  # said once, not every tick
+    assert fictional(143) not in caplog.text
+    [aside] = list(tmp_path.glob("state.json.bad-*"))
+    aside.write_text(kept, encoding="utf-8")
+    aside.replace(path)
+    assert w.dialler.tick() == "placed"
+    assert w.ledger.dial(dial["dial_id"])["status"] == "placed"
+
+
 def test_nothing_is_placed_in_the_tasks_first_120_seconds(tmp_path) -> None:
     w = World(tmp_path)
     w.clock.at = w.dialler.started_at + timedelta(seconds=119)
@@ -298,6 +323,64 @@ def test_polly_access_denied_sets_no_dial_and_places_nothing(tmp_path) -> None:
     assert w.no_dial.exists() and w.twilio.calls == []
     assert w.ledger.dial(dial["dial_id"])["status"] == "due"  # handed back, dialled once speech returns
     assert w.dialler.tick() == "the no-dial file is set"
+
+
+class DuringPreflight(Preflight):
+    """The Polly round trip, during which a `make forget` or an opt-out lands on the claimed dial (F3)."""
+
+    def __init__(self, act) -> None:
+        super().__init__()
+        self.act = act
+
+    def __call__(self) -> None:
+        super().__call__()
+        self.act()
+
+
+def test_a_deletion_request_landing_during_the_preflight_places_no_call(tmp_path, caplog) -> None:
+    """F3: forget_everywhere removes the contact and the dial while the preflight runs; the dial is gone, so
+    Calls.json is never sent for the number whose deletion was just asked for."""
+    from candidate_line.tools.ledger import forget_everywhere
+
+    w = World(tmp_path)
+    applicant, dial = w.apply()
+    w.dialler._preflight = DuringPreflight(
+        lambda: forget_everywhere(w.ledger, applicant.code, w.contacts.delete)
+    )
+    with caplog.at_level(logging.INFO, logger="candidate_line.dialler"):
+        assert w.dialler.tick() == "dial gone"
+    assert w.twilio.calls == []
+    assert w.ledger.dial(dial["dial_id"]) is None and w.contacts.number(applicant.code) is None
+    assert f"dial {dial['dial_id']} is gone or changed before Calls.json; not placed" in caplog.text
+
+
+def test_an_opt_out_landing_during_the_preflight_places_no_call_and_counts_no_dial(tmp_path) -> None:
+    """F3: the opt-out cancels due dials only, so the claimed one is checked again once it is marked placed."""
+    w = World(tmp_path, MAX_OUTBOUND_PER_DAY="1")
+    applicant, dial = w.apply()
+    w.dialler._preflight = DuringPreflight(lambda: w.ledger.opt_out(applicant.code, how="said stop"))
+    assert w.dialler.tick() == "no consent or opted out"
+    assert w.twilio.calls == []
+    stopped = w.ledger.dial(dial["dial_id"])
+    assert (stopped["status"], stopped["outcome"], stopped["placed_at"]) == ("cancelled", "opted_out", None)
+    assert w.contacts.number(applicant.code) is None
+    assert w.ledger.dials_placed_today() == 0  # a dial never sent spends none of the day's cap
+
+
+def test_a_consent_withdrawn_during_the_preflight_places_no_call(tmp_path) -> None:
+    """F3: the second check reads the application as it is after the preflight, not as the claim found it."""
+    w = World(tmp_path)
+    applicant, dial = w.apply()
+
+    def withdraw() -> None:
+        change_state(
+            w.ledger,
+            lambda doc: doc["applications"][applicant.code]["consent"].__setitem__("accepted", False),
+        )
+
+    w.dialler._preflight = DuringPreflight(withdraw)
+    assert w.dialler.tick() == "no consent or opted out"
+    assert w.twilio.calls == [] and w.ledger.dial(dial["dial_id"])["status"] == "cancelled"
 
 
 def test_another_preflight_failure_waits_for_the_next_tick_without_setting_no_dial(tmp_path) -> None:
@@ -534,6 +617,43 @@ def test_an_opt_out_on_the_call_stops_any_next_attempt(tmp_path) -> None:
     assert len(w.ledger.dials(applicant.code)) == 1
 
 
+def test_the_kill_switch_at_answer_time_ends_this_call_but_schedules_the_next_attempt(tmp_path) -> None:
+    """F5: the kill switch closes the line for now; it is not among spec 9.4's ends of dialling, so the
+    application keeps its next attempt, placed once the switch is off."""
+    w = World(tmp_path)
+    applicant, dial_id, sid = placed(w)
+    hooks.KILL_SWITCH.touch()
+    assert w.dialler.admit(w.ledger.dial(dial_id), fictional(142)) == ("kill", "")
+    w.dialler.on_status({"CallSid": sid, "CallStatus": "completed"})
+    assert w.ledger.dial(dial_id)["outcome"] == "kill"
+    [second] = [d for d in w.ledger.dials(applicant.code) if d["attempt"] == 2]
+    assert second["status"] == "due" and second["due_at"] == "2026-11-05T18:02:01+00:00"
+    hooks.KILL_SWITCH.unlink()
+    w.clock.at = datetime(2026, 11, 5, 18, 3, tzinfo=UTC)
+    assert w.dialler.tick() == "placed"
+
+
+@pytest.mark.parametrize("status_first", [False, True])
+def test_a_call_the_kill_switch_ended_mid_call_schedules_the_next_attempt(
+    tmp_path, status_first: bool
+) -> None:
+    """F5: the session's end writes `kill` for a call the switch closed before the PIN; the next attempt is
+    scheduled whichever of the session's end and Twilio's completed callback comes first, and only once."""
+    w = World(tmp_path)
+    applicant, dial_id, sid = placed(w)
+    w.dialler.on_amd({"CallSid": sid, "AnsweredBy": "human"})
+    hooks.KILL_SWITCH.touch()
+    completed = {"CallSid": sid, "CallStatus": "completed"}
+    if status_first:  # Twilio's callback can beat the session's end, which a worker thread writes
+        w.dialler.on_status(completed)
+        assert w.dialler.session_ended(dial_id, {}) == "kill"
+    else:
+        assert w.dialler.session_ended(dial_id, {}) == "kill"
+        w.dialler.on_status(completed)
+    assert w.ledger.dial(dial_id)["outcome"] == "kill"
+    assert [d["attempt"] for d in w.ledger.dials(applicant.code)] == [1, 2]
+
+
 def test_a_callback_for_a_call_with_no_dial_record_changes_nothing(tmp_path) -> None:
     w = World(tmp_path)
     w.dialler.on_status({"CallSid": "CAunknown", "CallStatus": "completed"})
@@ -567,15 +687,25 @@ def test_the_sessions_outcome(data, opted, killed, screened, expected) -> None:
     assert session_outcome(data, ledger, code, killed) == expected
 
 
-def test_a_claim_left_by_a_crash_is_marked_failed_and_retried(tmp_path) -> None:
+def test_a_claim_left_by_a_crash_is_handed_back_and_placed_as_the_same_attempt(tmp_path, caplog) -> None:
+    """F4: a claim with no CallSid never reached Calls.json (placed is written before it), so it rang nobody and
+    spends none of the three attempts: it is released and placed at once, not failed and moved two hours out."""
     w = World(tmp_path)
     applicant, dial = w.apply()
     w.ledger.update_dial(dial["dial_id"], status="claimed", claimed_at=w.clock().isoformat())
     assert w.dialler.tick() == "a call is in flight"
     w.clock.advance(seconds=121)
-    w.dialler.tick()
-    assert w.ledger.dial(dial["dial_id"])["outcome"] == "failed"
-    assert [d["attempt"] for d in w.ledger.dials(applicant.code)] == [1, 2]
+    with caplog.at_level(logging.WARNING, logger="candidate_line.dialler"):
+        assert w.dialler.tick() == "placed"
+    [again] = w.ledger.dials(applicant.code)
+    assert (again["dial_id"], again["attempt"], again["status"], again["outcome"]) == (
+        dial["dial_id"],
+        1,
+        "placed",
+        None,
+    )
+    assert len(w.twilio.calls) == 1
+    assert f"dial {dial['dial_id']}: a claim with no call, released" in caplog.text
 
 
 def test_a_lost_completed_callback_is_read_from_twilio_once_the_call_is_past_its_limit(tmp_path) -> None:

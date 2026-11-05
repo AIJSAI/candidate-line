@@ -119,11 +119,17 @@ def test_the_new_parameters_reach_the_task_with_their_defaults() -> None:
     ]
     assert params["MaxOutboundPerDay"]["Default"] == 20 and params["MaxOutboundPerDay"]["MinValue"] == 1
     assert params["MaxOutboundCallSeconds"]["Default"] == 480
+    # F2: the stack refuses what settings.py refuses at start, so a typo stops the deploy before the task.
+    assert params["MaxOutboundPerDay"]["MaxValue"] == 100
+    assert params["MaxOutboundCallSeconds"]["MaxValue"] == 900
     window = params["CallWindow"]
     assert window["Default"] == "09:00-20:00 Mon-Sat"
     assert re.fullmatch(window["AllowedPattern"], window["Default"])
     for sunday in ("09:00-20:00 Mon-Sun", "09:00-20:00 Sun-Sat"):
         assert not re.fullmatch(window["AllowedPattern"], sunday)
+    for night in ("06:00-20:00 Mon-Sat", "09:00-23:00 Mon-Sat", "07:59-20:00 Mon-Sat"):
+        assert not re.fullmatch(window["AllowedPattern"], night)
+    assert re.fullmatch(window["AllowedPattern"], "08:00-21:00 Mon-Sat")
     environment = {e["Name"]: e["Value"] for e in _container()["Environment"]}
     assert environment["OUTBOUND_ENABLED"] == {"Ref": "OutboundEnabled"}
     assert environment["MAX_OUTBOUND_PER_DAY"] == {"Ref": "MaxOutboundPerDay"}

@@ -50,6 +50,13 @@ TIMESTAMP_SKEW_S = 300
 # Twice the timestamp's window, so a request captured at the edge of one is still refused at the far edge.
 NONCE_MEMORY_S = 2 * TIMESTAMP_SKEW_S
 NONCE = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
+# ASCII digits only, and few enough for int(): str.isdigit takes a superscript two and a 5000-digit run, and int()
+# raises on both, which would be a traceback a request with no key can cause (F1). Twelve digits reach the year
+# 33658, and a Content-Length that long is far past MAX_BODY_BYTES anyway.
+WHOLE_NUMBER = re.compile(r"[0-9]{1,12}")
+# The signature as intake_signature writes it. compare_digest raises on a non-ASCII string, so the form is checked
+# first.
+SIGNATURE = re.compile(r"[0-9a-f]{64}")
 Status = Literal["scheduled", "no_consent", "opted_out", "not_allowed"]
 
 
@@ -151,6 +158,11 @@ class Intake:
         key = self.settings.intake_signing_key
         if not key:
             return _refuse(503, "intake is not configured")
+        if not self.settings.outbound_enabled:
+            # An application stored now would wait for dialling to be turned on and then be called as if it had
+            # just come in, days or weeks late (F7). Refused, it stays with the sender, and nothing is kept here.
+            log.warning("intake refused an application: OUTBOUND_ENABLED is off")
+            return _refuse(503, "intake is not configured")
         body = await _bounded_body(request)
         if body is None:
             return _refuse(413, "the application is over 4 KB")
@@ -158,12 +170,19 @@ class Intake:
         timestamp = request.headers.get(TIMESTAMP_HEADER, "")
         nonce = request.headers.get(NONCE_HEADER, "")
         given = request.headers.get(SIGNATURE_HEADER, "")
-        if not timestamp.isdigit() or abs(now.timestamp() - int(timestamp)) > TIMESTAMP_SKEW_S:
+        if not WHOLE_NUMBER.fullmatch(timestamp) or abs(now.timestamp() - int(timestamp)) > TIMESTAMP_SKEW_S:
             return _refuse(401, "the timestamp is missing or too far from now")
         if not NONCE.match(nonce):
             return _refuse(401, "the nonce is missing or malformed")
-        if not hmac.compare_digest(intake_signature(key, timestamp, nonce, body), given):
+        if not SIGNATURE.fullmatch(given) or not hmac.compare_digest(
+            intake_signature(key, timestamp, nonce, body), given
+        ):
             return _refuse(401, "the signature does not match")
+        # After the signature, so only a keyholder learns intake is paused, and before the nonce is spent, so the
+        # sender can send the same request again once the records are back (F6).
+        if await asyncio.to_thread(self._paused):
+            log.error("intake refused an application: the state file was set aside and is not restored")
+            return _refuse(503, "intake is paused")
         # Only a signed request spends a nonce, so nobody can burn a sender's nonces without the key.
         if not self._first_sight(nonce, now.timestamp()) or await asyncio.to_thread(self._stored, nonce, now):
             log.warning("intake refused a replayed nonce")
@@ -192,6 +211,11 @@ class Intake:
                 return False
             self._nonces[nonce] = now
             return True
+
+    def _paused(self) -> bool:
+        """The state file that holds the opt-outs is set aside: an application now could not be checked against
+        them (F6)."""
+        return self.ledger().is_set_aside()
 
     def _stored(self, nonce: str, now: datetime) -> bool:
         return self.ledger().nonce_seen(nonce, now - timedelta(seconds=NONCE_MEMORY_S))
@@ -246,7 +270,7 @@ class Intake:
 async def _bounded_body(request: Request) -> bytes | None:
     """The raw body, or None once it passes MAX_BODY_BYTES; read in chunks so an oversized one is never held."""
     declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+    if WHOLE_NUMBER.fullmatch(declared) and int(declared) > MAX_BODY_BYTES:
         return None
     chunks: list[bytes] = []
     size = 0

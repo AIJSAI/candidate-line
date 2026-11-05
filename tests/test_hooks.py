@@ -3,6 +3,8 @@ the tier-3 write-up after the call, and on an outbound call the stop phrases and
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from candidate_line import hooks
@@ -249,6 +251,54 @@ def test_the_call_end_posts_one_tier_three_hand_off_with_every_reason_once() -> 
     assert [(s.kind, s.name) for s in store.spans("CA-hooks")] == [("escalation", "3")]
 
 
+# Every posted requirement of the care-aide role met (data/roles.yaml), for the fixture applicant ACME-3108.
+CARE_AIDE_MET = {"q1": "yes", "q2": "both", "q3": "30", "q4": "yes", "q5": "yes"}
+THURSDAY_10_CENTRAL = datetime(2026, 11, 5, 16, 0, tzinfo=UTC)
+
+
+def _met_screen_call(booked: bool = False, screened_on: str = "CA-hooks") -> tuple[TurnContext, TraceStore]:
+    """An applicant's call whose last answer met every posted requirement while slots were open, so the met line
+    offered times and wrote no promised time (screening.record_answer)."""
+    store = TraceStore(":memory:")
+    store.start_call("CA-hooks", "outbound")
+    ctx = _outbound(confirmed=True)
+    ctx.store = store
+    ctx.escalations = EscalationQueue(store, LogPoster())
+    ledger = Ledger(now=lambda: THURSDAY_10_CENTRAL)
+    for question, value in CARE_AIDE_MET.items():
+        ledger.record_answer("ACME-3108", question, value, value, screened_on)
+    ledger.set_screen("ACME-3108", "met", screened_on, None)
+    if booked:
+        ledger.book("ACME-3108", ledger.open_slots(None, recruiter="Recruiter A")[0].id, "CA-hooks")
+    ctx.ledger = ledger
+    return ctx, store
+
+
+def test_a_met_screen_that_ends_with_no_booking_posts_one_tier_two_screening_hand_off() -> None:
+    """F9: the met line asks "Which suits you?"; an applicant who hangs up then had no slot and no promised call,
+    and nobody followed up (spec 4: nobody who met every requirement is left without a time)."""
+    ctx, store = _met_screen_call()
+    LineHooks().on_call_end(ctx, "9 turns")
+    ctx.escalations.drain()  # type: ignore[union-attr]
+    [row] = store.escalations("CA-hooks")
+    assert row.tier == "2"
+    assert row.reason == (
+        "screening hand-off from ACME-3108 (Lerato): Home Care Aide; recruiter call promised by "
+        "10:00 AM Central on Friday 6 November 2026"
+    )
+    assert [(s.kind, s.name) for s in store.spans("CA-hooks")] == [("escalation", "2")]
+
+
+@pytest.mark.parametrize(("booked", "screened_on"), [(True, "CA-hooks"), (False, "CA-earlier")])
+def test_a_booked_screen_or_one_finished_on_another_call_posts_no_screening_hand_off(
+    booked: bool, screened_on: str
+) -> None:
+    ctx, store = _met_screen_call(booked=booked, screened_on=screened_on)
+    LineHooks().on_call_end(ctx, "9 turns")
+    ctx.escalations.drain()  # type: ignore[union-attr]
+    assert store.escalations("CA-hooks") == []
+
+
 def test_a_call_with_nothing_to_write_up_posts_nothing() -> None:
     store = TraceStore(":memory:")
     store.start_call("CA-hooks", "voice")
@@ -384,6 +434,61 @@ def test_a_stop_phrase_ends_the_turn_with_no_model_call_and_a_wrong_person_is_ti
     assert any("wrong person" in reason for reason in wrong_ctx.data["tier3"])
 
 
+class NoModel:
+    """A brain that must not be called: the turn is code's alone."""
+
+    name = model = "none"
+
+    def reply(self, *args: object, **kwargs: object) -> None:
+        raise AssertionError("no model call")
+
+
+@pytest.mark.parametrize(
+    "heard", ["Person.", "A person, please.", "Um, a real person.", "Recruiter please", "person"]
+)
+def test_an_applicant_who_asks_for_a_person_gets_a_recruiters_callback_with_no_model_call(heard: str) -> None:
+    """F11: only the model's brief routed "person", so a model that read it as unclear left the applicant with
+    nothing behind the ask. A code rule requests the callback with the applicant path's fixed words, posts it as
+    a tier-2 hand-off and says one fixed line."""
+    from candidate_line.hooks import default_hooks
+    from candidate_line.persona import RECRUITER_CALLS_LINE
+    from candidate_line.turn import run_turn
+
+    store = TraceStore(":memory:")
+    store.start_call("CA-hooks", "outbound")
+    ctx = _outbound(confirmed=True)
+    ctx.store = store
+    ctx.escalations = EscalationQueue(store, LogPoster())
+    result = run_turn(NoModel(), default_hooks(), ctx, heard)  # type: ignore[arg-type]
+    assert result.spoken == RECRUITER_CALLS_LINE and result.hang_up is True
+    assert result.tier == "2" and result.tools_called == ("request_callback",)
+    [posted] = result.hand_offs
+    assert posted.reason == (
+        "callback request from ACME-3108 (Lerato): asked for a recruiter during the screening questions; "
+        "best time not given"
+    )
+    assert ctx.ledger is not None and ctx.ledger.callbacks()[0]["code"] == "ACME-3108"
+
+
+@pytest.mark.parametrize(
+    "heard", ["Is a person going to read this?", "a person reads it?", "I'm a people person"]
+)
+def test_a_person_said_inside_an_answer_or_a_question_goes_to_the_model(heard: str) -> None:
+    from candidate_line.hooks import default_hooks
+    from candidate_line.turn import run_turn
+
+    with pytest.raises(AssertionError, match="no model call"):
+        run_turn(NoModel(), default_hooks(), _outbound(confirmed=True), heard)  # type: ignore[arg-type]
+
+
+def test_before_the_pin_a_person_goes_to_the_model_which_says_nothing_from_the_record() -> None:
+    from candidate_line.hooks import default_hooks
+    from candidate_line.turn import run_turn
+
+    with pytest.raises(AssertionError, match="no model call"):
+        run_turn(NoModel(), default_hooks(), _outbound(), "A person, please.")  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     "heard",
     [
@@ -416,6 +521,24 @@ def test_the_hello_rule_says_the_pin_ask_twice_a_call_and_never_after_the_pin() 
     inbound = _ctx()
     LineHooks().on_turn(inbound, "Hello?")
     assert "say" not in inbound.data
+
+
+def test_with_the_kill_switch_set_a_hello_before_the_pin_hears_the_kill_line_in_text_mode_too() -> None:
+    """F5's text path: on_turn reads the kill switch before the hello rule, so a hello on a killed line closes
+    the call by code, as the phone now does (tests/test_media.py)."""
+    from candidate_line.turn import run_turn
+
+    class NoBrain:
+        name = model = "none"
+
+        def reply(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("the kill line is said by code")
+
+    hooks.KILL_SWITCH.touch()
+    ctx = _outbound()
+    result = run_turn(NoBrain(), LineHooks(), ctx, "Hello?")  # type: ignore[arg-type]
+    assert result.spoken == KILL_LINE and result.hang_up is True
+    assert "hello_asks" not in ctx.data
 
 
 def test_after_the_second_pin_miss_a_yes_answers_the_callback_offer_and_is_no_hello() -> None:

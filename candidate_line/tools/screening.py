@@ -252,6 +252,30 @@ def screening_hand_off(found: ApplicantRecord, role: Role, when: datetime) -> Ha
     )
 
 
+def unbooked_hand_off(ctx: TurnContext) -> HandOff | None:
+    """The screening hand-off for a call that ends after the met line offered times and nothing was booked (F9):
+    spec 4 leaves nobody who met every requirement without a time, so a recruiter calls by one business day after
+    the call. Only a screen finished on this call, met, with no promised time and no booking, so a later call in
+    posts nothing twice. It reads the call's own ledger and writes nothing: the readers take a promised time on a
+    met screen to mean no slot was open (the cockpit's words, the scorecard's offered count)."""
+    ledger = ctx.ledger
+    if ledger is None:
+        return None
+    found = applicant(ctx, ledger)
+    if found is None:
+        return None
+    screen = ledger.screen(found.code)
+    if (
+        not screen
+        or screen.get("result") != "met"
+        or screen.get("promised_by")
+        or screen.get("call_id") != ctx.call_id
+        or ledger.booked_slot(found.code) is not None
+    ):
+        return None
+    return screening_hand_off(found, role_of(found), promised_by(_clock(ledger)))
+
+
 # What the line says once the person is proved to be the applicant.
 
 

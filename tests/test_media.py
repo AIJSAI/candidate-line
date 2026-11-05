@@ -1120,7 +1120,7 @@ async def all_said(session, sent) -> None:
     await settle(lambda: not session.speaking)
 
 
-def outbound_session(transcriber, speaker, brain, sent, store=None, on_end=None, tools=()):
+def outbound_session(transcriber, speaker, brain, sent, store=None, on_end=None, tools=(), hooks=None):
     async def send(message: dict) -> None:
         sent.append(message)
 
@@ -1129,7 +1129,7 @@ def outbound_session(transcriber, speaker, brain, sent, store=None, on_end=None,
         transcriber,
         speaker,
         brain,
-        NoHooks(),
+        hooks if hooks is not None else NoHooks(),
         "sys",
         "CA1",
         SID,
@@ -1262,6 +1262,34 @@ def test_after_the_second_pin_miss_yes_reaches_the_model_as_the_answer_to_the_ca
 
     asyncio.run(session.run(script()))
     assert brain.calls == ["Yes."]
+
+
+def test_with_the_kill_switch_set_a_hello_before_the_pin_hears_the_kill_line_and_the_call_ends() -> None:
+    """F5 and F10: a hello before the PIN went straight to the PIN ask and never reached on_turn, where the kill
+    switch is read, so a killed line asked for a PIN instead of closing (spec 7)."""
+    from candidate_line import hooks
+    from candidate_line.hooks import default_hooks
+    from candidate_line.persona import KILL_LINE
+
+    hooks.KILL_SWITCH.touch()
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    brain = CountingBrain()
+    session = outbound_session(transcriber, speaker, brain, sent, hooks=default_hooks())
+    kill_said = split_sentences(KILL_LINE)
+
+    async def script():
+        await all_said(session, sent)
+        transcriber.hear("Hello?", is_partial=False)
+        await settle(lambda: speaker.said[-len(kill_said) :] == kill_said)
+        for m in [m for m in sent if m["event"] == "mark"]:
+            yield {"event": "mark", "streamSid": SID, "mark": {"name": m["mark"]["name"]}}
+        await settle(lambda: not session.speaking)
+        yield frame()  # the loop ends at the next message once the kill line has played
+
+    asyncio.run(session.run(script()))
+    assert brain.calls == []  # the kill line is said by code
+    assert speaker.said == PIN_ASK_SAID + kill_said  # the greeting once, never the PIN ask again
+    assert session._hang_up.is_set()
 
 
 def test_an_inbound_session_hears_hello_as_a_turn() -> None:

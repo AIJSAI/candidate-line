@@ -23,6 +23,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
+from candidate_line import hooks as line_hooks
 from candidate_line.brain import Brain, ToolSpec
 from candidate_line.escalation import EscalationQueue
 from candidate_line.hooks import MAX_HELLO_ASKS, Hooks, awaits_pin, is_hello
@@ -487,7 +488,11 @@ class MediaSession:
 
     def _hello_before_pin(self, text: str) -> bool:
         """An outbound call whose PIN is still wanted, hearing only hello words. `confirm_applicant` sets the
-        call's `candidate` on the match, and after the match or the second miss hello is a word like any other."""
+        call's `candidate` on the match, and after the match or the second miss hello is a word like any other.
+        With the kill switch set a hello is a turn, so it reaches on_turn, which closes the call with the kill line
+        (F5, F10); the switch is read from the hooks module each time, never cached, as on_turn reads it."""
+        if line_hooks.KILL_SWITCH.exists():
+            return False
         if self._outbound is None or not awaits_pin(self.ctx):
             return False
         return is_hello(text, str(self._outbound.get("first_name") or ""))

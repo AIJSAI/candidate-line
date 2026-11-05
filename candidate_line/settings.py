@@ -40,6 +40,15 @@ DEFAULT_CONTACTS_RETENTION_DAYS = 30
 DEFAULT_ANSWERS_RETENTION_DAYS = 1460
 DEFAULT_MAX_OUTBOUND_CALL_SECONDS = 480
 DEFAULT_CALL_WINDOW = "09:00-20:00 Mon-Sat"
+# The upper bounds a typo must not pass (spec 9.3: a cap that reads as nonsense stops the process). 4800 for 480
+# seconds would let one stuck call run 81 minutes, and 200 for 20 dials multiplies the bill with nobody calling.
+# The numbers are James's money call (card 08, open decision 3); a larger one is his to set here.
+MAX_OUTBOUND_PER_DAY_LIMIT = 100
+MAX_OUTBOUND_CALL_SECONDS_LIMIT = 900
+# The federal limit for a telephone solicitation, at the called party's location (47 CFR 64.1200(c)(1), spec 9.2).
+# The window's end is the first minute it does not call, so a window may end at 21:00 itself.
+EARLIEST_CALL = time(8, 0)
+LATEST_CALL = time(21, 0)
 DEFAULT_CONTACTS_PATH = Path(__file__).resolve().parent.parent / "var" / "contacts.json"
 # A US number in E.164 form with a real area code and exchange: the intake schema's form and the allow-list's.
 US_E164 = re.compile(r"^\+1[2-9]\d{2}[2-9]\d{6}$")
@@ -76,6 +85,8 @@ def parse_call_window(raw: str) -> CallWindow:
     start, end = time(h1, m1), time(h2, m2)
     if start >= end:
         raise ValueError(f"CALL_WINDOW must end after it starts: {raw!r}")
+    if start < EARLIEST_CALL or end > LATEST_CALL:
+        raise ValueError("CALL_WINDOW must sit inside 08:00-21:00 (47 CFR 64.1200(c)(1), spec 9.2)")
     days: set[int] = set()
     for part in (p.strip().lower() for p in m.group(5).split(",")):
         first, _, last = (x.strip()[:3] for x in part.partition("-"))
@@ -107,12 +118,17 @@ def parse_allowed_numbers(raw: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class Settings:
+    """The secrets and the numbers are kept out of the dataclass's repr, which str uses too, so a logged Settings
+    or a traceback that reprs one never shows a token, a key, a phone number, an address, an account id or a
+    webhook URL (F8). `field(repr=False)` with no default keeps each one positional."""
+
     brain_provider: Provider
     bedrock_model_id: str
     anthropic_model_id: str
     aws_region: str
-    public_base_url: str | None
-    twilio_auth_token: str | None
+    # The host every webhook URL Twilio calls is built on: no secret, but never written down (AGENTS.md rule 7).
+    public_base_url: str | None = field(repr=False)
+    twilio_auth_token: str | None = field(repr=False)
     allow_unsigned_webhooks: bool
     voice_mode: VoiceMode
     polly_voice: str
@@ -121,18 +137,20 @@ class Settings:
     trace_store_path: str | None
     eval_trace_store_path: str | None
     state_path: str | None  # None means in memory
-    slack_webhook_url: str | None
-    sns_topic_arn: str | None
+    slack_webhook_url: str | None = field(repr=False)
+    # The topic's ARN holds the account id.
+    sns_topic_arn: str | None = field(repr=False)
     # The hand-off email's verified sender and its recipients (SES_SENDER, SES_RECIPIENTS comma-separated).
-    ses_sender: str | None
-    ses_recipients: tuple[str, ...]
+    ses_sender: str | None = field(repr=False)
+    ses_recipients: tuple[str, ...] = field(repr=False)
     cockpit_base_url: str
     max_call_seconds: int
     max_calls_per_day: int
-    # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above.
-    twilio_account_sid: str | None
-    twilio_line_number: str | None
-    twilio_probe_number: str | None
+    # The probe caller's Twilio identifiers (DR-011); the line itself needs only the auth token above. The probe's
+    # number is on the allow-list, which DR-025 says is never logged.
+    twilio_account_sid: str | None = field(repr=False)
+    twilio_line_number: str | None = field(repr=False)
+    twilio_probe_number: str | None = field(repr=False)
     # The outbound call (DR-025 section 11). Defaults keep the dialling off and every cap at its contract value.
     outbound_enabled: bool = False
     max_outbound_per_day: int = DEFAULT_MAX_OUTBOUND_PER_DAY
@@ -143,7 +161,6 @@ class Settings:
     contacts_retention_days: int = DEFAULT_CONTACTS_RETENTION_DAYS
     answers_retention_days: int = DEFAULT_ANSWERS_RETENTION_DAYS
     max_outbound_call_seconds: int = DEFAULT_MAX_OUTBOUND_CALL_SECONDS
-    # Two secrets, kept out of the dataclass's repr so a logged Settings never shows them.
     intake_signing_key: str | None = field(default=None, repr=False)
     outbound_allowed_numbers: frozenset[str] = field(default_factory=frozenset, repr=False)
 
@@ -228,6 +245,12 @@ def _positive_int(e: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def _at_most(name: str, value: int, most: int) -> int:
+    if value > most:
+        raise ValueError(f"{name} must be at most {most}, not {value}")
+    return value
+
+
 def _outbound(e: Mapping[str, str]) -> dict[str, object]:
     """The outbound settings, each refused at start when it reads as zero or nonsense, so a mistyped cap never
     switches a control off without a word. With dialling on, every value the dial needs must be there."""
@@ -243,7 +266,11 @@ def _outbound(e: Mapping[str, str]) -> dict[str, object]:
         raise ValueError(f"MAX_DIAL_ATTEMPTS must be from 1 to 3, not {attempts}")
     values: dict[str, object] = {
         "outbound_enabled": enabled_raw == "1",
-        "max_outbound_per_day": _positive_int(e, "MAX_OUTBOUND_PER_DAY", DEFAULT_MAX_OUTBOUND_PER_DAY),
+        "max_outbound_per_day": _at_most(
+            "MAX_OUTBOUND_PER_DAY",
+            _positive_int(e, "MAX_OUTBOUND_PER_DAY", DEFAULT_MAX_OUTBOUND_PER_DAY),
+            MAX_OUTBOUND_PER_DAY_LIMIT,
+        ),
         "max_concurrent_outbound": concurrent,
         "call_window": parse_call_window(e.get("CALL_WINDOW") or DEFAULT_CALL_WINDOW),
         "max_dial_attempts": attempts,
@@ -252,8 +279,10 @@ def _outbound(e: Mapping[str, str]) -> dict[str, object]:
             e, "CONTACTS_RETENTION_DAYS", DEFAULT_CONTACTS_RETENTION_DAYS
         ),
         "answers_retention_days": _positive_int(e, "ANSWERS_RETENTION_DAYS", DEFAULT_ANSWERS_RETENTION_DAYS),
-        "max_outbound_call_seconds": _positive_int(
-            e, "MAX_OUTBOUND_CALL_SECONDS", DEFAULT_MAX_OUTBOUND_CALL_SECONDS
+        "max_outbound_call_seconds": _at_most(
+            "MAX_OUTBOUND_CALL_SECONDS",
+            _positive_int(e, "MAX_OUTBOUND_CALL_SECONDS", DEFAULT_MAX_OUTBOUND_CALL_SECONDS),
+            MAX_OUTBOUND_CALL_SECONDS_LIMIT,
         ),
         "intake_signing_key": e.get("INTAKE_SIGNING_KEY") or None,
         "outbound_allowed_numbers": parse_allowed_numbers(e.get("OUTBOUND_ALLOWED_NUMBERS") or ""),

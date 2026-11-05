@@ -55,6 +55,9 @@ FINISHED = ("done", "cancelled", "failed")
 TERMINAL_CALL_STATUSES = ("completed", "busy", "failed", "no-answer", "canceled")
 # Outcomes that mean no person was reached, so the next attempt is scheduled (spec 9.4).
 NOT_REACHED = frozenset({"no_answer", "busy", "failed", "machine", "voicemail"})
+# The kill switch closes the line for now and is not among spec 9.4's ends of dialling, so a call it ended keeps
+# the application's next attempt, which the dialler places once the switch is off (F5).
+KILLED = "kill"
 _CALL_STATUS_OUTCOME = {"busy": "busy", "no-answer": "no_answer", "failed": "failed", "canceled": "no_answer"}
 HANGUP_TWIML = "<Response><Hangup/></Response>"
 VOICE = "Polly.Matthew-Neural"
@@ -103,7 +106,7 @@ def session_outcome(data: Mapping[str, Any], ledger: Ledger, code: str, killed: 
     if confirmed and ledger.screen(code):
         return "screened"
     if killed:
-        return "kill"
+        return KILLED
     if int(data.get("verify_failures") or 0) >= 2:
         return "pin_missed"
     return "screen_unfinished" if confirmed else "hung_up_before_pin"
@@ -134,6 +137,8 @@ class Dialler:
         self._preflight = preflight
         self._no_dial = no_dial
         self.started_at = clock()
+        # Whether the log has said the state file is set aside, so it is said once and not on every tick.
+        self._said_set_aside = False
 
     async def run(self) -> None:
         """Ticks for the life of the process. A tick that fails is logged and the next one runs."""
@@ -200,6 +205,8 @@ class Dialler:
         if not codes:
             return
         ledger = self._ledger()
+        if ledger.is_set_aside():
+            return  # the overlay is empty, so every application would read as forgotten (F6)
         for code in codes:
             if ledger.applicant(code) is None or ledger.opted_out(code=code):
                 self._contacts.delete(code)
@@ -213,6 +220,13 @@ class Dialler:
             return "the kill switch is set"
         if self._no_dial.exists():
             return "the no-dial file is set"
+        if self._ledger().is_set_aside():
+            # The opt-outs live in the file set aside; the empty overlay would read as nobody having opted out.
+            if not self._said_set_aside:
+                log.error("dialling stopped: the state file was set aside and is not restored")
+                self._said_set_aside = True
+            return "the state file was set aside"
+        self._said_set_aside = False
         if now - self.started_at < STARTUP_GRACE:
             return "the task is under 120 s old"
         if self._twilio is None:
@@ -235,16 +249,8 @@ class Dialler:
             self._cancel(ledger, dial_id, "failed", now)
             log.warning("dial %s cancelled: no application %s", dial_id, code)
             return "no application"
-        hashed = applicant.number_hmac
-        if (
-            not applicant.consented
-            or ledger.opted_out(code=code)
-            or (hashed is not None and ledger.opted_out(number_hmac=hashed))
-        ):
-            self._cancel(ledger, dial_id, "opted_out", now)
-            self._contacts.delete(code)
-            log.info("dial %s cancelled: %s has no consent or opted out", dial_id, code)
-            return "no consent or opted out"
+        if self._stopped(ledger, applicant):
+            return self._cancel_stopped(ledger, dial_id, code, now)
         number = self._contacts.number(code)
         if number is None:
             self._cancel(ledger, dial_id, "failed", now)
@@ -282,7 +288,17 @@ class Dialler:
         base = str(self._settings.public_base_url).rstrip("/")
         # Marked placed before the request, so a /voice that Twilio fetches before the reply finds the dial in
         # flight, and a failed request still counts against the day's cap: a cap that undercounts is no cap.
-        ledger.update_dial(dial_id, status="placed", placed_at=stamp(now))
+        placed = ledger.update_dial(dial_id, status="placed", placed_at=stamp(now))
+        if placed is None or placed.get("status") != "placed":
+            # A deletion request removed the dial during the preflight's round trip (F3).
+            log.info("dial %s is gone or changed before Calls.json; not placed", dial_id)
+            return "dial gone"
+        current = ledger.applicant(applicant.code)
+        if current is None or self._stopped(ledger, current):
+            # An opt-out cancels due dials only, so one that landed during the preflight, or a consent withdrawn
+            # then, is read here, from the record as it is now, after the dial is marked placed; a later one finds
+            # the dial in flight and /voice refuses it.
+            return self._cancel_stopped(ledger, dial_id, applicant.code, now)
         assert self._twilio is not None
         try:
             call_sid = self._twilio.place_call(
@@ -321,6 +337,24 @@ class Dialler:
     def _cancel(self, ledger: Ledger, dial_id: str, outcome: str, now: datetime) -> None:
         ledger.update_dial(dial_id, status="cancelled", outcome=outcome, ended_at=stamp(now))
 
+    def _stopped(self, ledger: Ledger, applicant: Applicant) -> bool:
+        """No consent, or an opt-out by this code or by this number under any code."""
+        hashed = applicant.number_hmac
+        return (
+            not applicant.consented
+            or ledger.opted_out(code=applicant.code)
+            or (hashed is not None and ledger.opted_out(number_hmac=hashed))
+        )
+
+    def _cancel_stopped(self, ledger: Ledger, dial_id: str, code: str, now: datetime) -> str:
+        # placed_at goes back to None, so a dial never sent to Twilio spends none of the day's cap.
+        ledger.update_dial(
+            dial_id, status="cancelled", outcome="opted_out", ended_at=stamp(now), placed_at=None
+        )
+        self._contacts.delete(code)
+        log.info("dial %s cancelled: %s has no consent or opted out", dial_id, code)
+        return "no consent or opted out"
+
     def _release(self, ledger: Ledger, dial_id: str) -> None:
         """Hands a claim back, so the dial is due again on a later tick."""
         ledger.update_dial(dial_id, status="due", claimed_at=None, placed_at=None)
@@ -357,7 +391,10 @@ class Dialler:
             status, sid = d.get("status"), d.get("call_sid")
             claimed, placed = _parse(d.get("claimed_at")), _parse(d.get("placed_at"))
             if status == "claimed" and not sid and claimed is not None and now - claimed > STALE_CLAIM:
-                self._lost(ledger, d, now, "a claim with no call")
+                # `placed` is written before Calls.json, so a claim never reached Twilio and rang nobody: it is
+                # handed back, not failed, and spends none of the attempts (F4, spec 9.4).
+                self._release(ledger, str(d["dial_id"]))
+                log.warning("dial %s: a claim with no call, released", d.get("dial_id"))
             elif status in ("placed", "in-progress") and placed is not None and now - placed > limit:
                 if sid and self._twilio is not None:
                     try:
@@ -409,9 +446,9 @@ class Dialler:
             log.warning("outbound call %s hung up: %s is not on the allow-list", dial_id, mask_number(to))
             return "not_allowed", ""
         if hooks.KILL_SWITCH.exists():
-            ledger.update_dial(dial_id, status="done", outcome="kill", ended_at=stamp(now))
+            ledger.update_dial(dial_id, status="done", outcome=KILLED, ended_at=stamp(now))
             log.info("outbound call %s hung up: the kill switch is set", dial_id)
-            return "kill", ""
+            return KILLED, ""
         applicant = ledger.applicant(code)
         hashed = applicant.number_hmac if applicant is not None else None
         if (
@@ -464,7 +501,7 @@ class Dialler:
         if dial.get("status") not in FINISHED:
             fields["status"] = "failed" if call_status == "failed" else "done"
         ledger.update_dial(sid, **fields)
-        if outcome in NOT_REACHED:
+        if outcome in NOT_REACHED or outcome == KILLED:
             made_at = _parse(dial.get("placed_at")) or now
             self._schedule_next(ledger, dial, ledger.applicant(str(dial["code"])), made_at)
 
@@ -523,4 +560,9 @@ class Dialler:
         if dial.get("status") in IN_FLIGHT:
             fields["status"] = "done"
         ledger.update_dial(dial_id, **fields)
+        if outcome == KILLED:
+            # Twilio's completed callback may have come first and found no kill to act on; the ledger keeps one
+            # record per attempt, so whichever runs second schedules nothing more.
+            made_at = _parse(dial.get("placed_at")) or self._clock()
+            self._schedule_next(ledger, dial, ledger.applicant(code), made_at)
         return outcome

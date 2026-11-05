@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import copy
 import fcntl
+import glob
 import hashlib
 import hmac
 import json
@@ -562,6 +563,10 @@ class Ledger:
         self._roles, self._interview_slots = load_role_plans(Path(roles_path))
         self._overlay = _empty_overlay()
         self._seen: tuple[int, int] | None = None
+        # When this ledger last found the state file unreadable (F6), for the log and the operator.
+        self.set_aside_at: datetime | None = None
+        # The file could not be read and could not be moved aside either, so no change may be written over it.
+        self._unreadable = False
         with self._lock:
             self._refresh(force=True)
 
@@ -1516,6 +1521,23 @@ class Ledger:
             return None
         return (st.st_mtime_ns, st.st_size)
 
+    def is_set_aside(self) -> bool:
+        """True while a state file this line could not read lies set aside beside it, or could not be moved, and
+        no operator has restored it (F6). The file holds the opt-outs, which are compliance records, so intake and
+        the dialler refuse while it is out of reach rather than read the empty overlay as nobody having opted out.
+        The set-aside file on disk is the mark, so a restart keeps the refusal and an operator lifts it by putting
+        the records back as the state file or by removing the set-aside copy once they are recovered."""
+        if self._state_path is None:
+            return False
+        with self._lock:
+            self._refresh()
+            if self._unreadable:
+                return True
+            held = any(self._state_path.parent.glob(f"{glob.escape(self._state_path.name)}.bad-*"))
+            if not held:
+                self.set_aside_at = None
+            return held
+
     def _refresh(self, force: bool = False) -> None:
         if self._state_path is None:
             return
@@ -1523,12 +1545,14 @@ class Ledger:
         if not force and stamp == self._seen:
             return
         self._overlay = self._read_overlay()
-        self._seen = stamp
+        # A file read as unreadable is read again next time, so a fault that clears is seen at once.
+        self._seen = None if self._unreadable else stamp
 
     def _read_overlay(self) -> dict[str, Any]:
         """The file's records, each key checked for its shape. A top-level key this image does not know is kept
         as it was and written back, so an older or a newer image never erases another's records (DR-025 fix 6)."""
         assert self._state_path is not None
+        self._unreadable = False
         try:
             raw = json.loads(self._state_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
@@ -1587,16 +1611,25 @@ class Ledger:
         return overlay
 
     def _set_aside(self, why: str) -> dict[str, Any]:
-        """A state file that cannot be read is kept beside the new one for a person to look at, not overwritten."""
+        """A state file that cannot be read is kept beside the new one for a person to look at, not overwritten.
+        The log names the error's kind and the copy's name, never a word of the file, which holds applicants."""
         assert self._state_path is not None
+        self.set_aside_at = datetime.now(UTC)
         aside = self._state_path.with_name(
-            f"{self._state_path.name}.bad-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+            f"{self._state_path.name}.bad-{self.set_aside_at.strftime('%Y%m%dT%H%M%SZ')}"
         )
         try:
             os.replace(self._state_path, aside)
-            log.warning("state file unreadable (%s); set aside as %s", why, aside.name)
+            log.warning(
+                "state file unreadable (%s); set aside as %s; intake and the dialler wait until it is restored",
+                why,
+                aside.name,
+            )
         except OSError:
-            log.warning("state file unreadable (%s) and could not be set aside", why)
+            self._unreadable = True
+            log.warning(
+                "state file unreadable (%s) and could not be set aside; nothing is written over it", why
+            )
         return _empty_overlay()
 
     def _commit(self, change: Callable[[dict[str, Any]], object]) -> None:
@@ -1614,6 +1647,9 @@ class Ledger:
     def _write(self) -> None:
         if self._state_path is None:
             return
+        if self._unreadable:
+            # An empty overlay over records this ledger could not read would erase them, the opt-outs first.
+            raise OSError("the state file could not be read or set aside")
         parent = self._state_path.parent
         parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=parent, prefix=f".{self._state_path.name}.", suffix=".tmp")

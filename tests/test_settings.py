@@ -126,6 +126,34 @@ def test_more_than_three_attempts_and_more_than_one_call_at_once_are_refused() -
     assert Settings.from_env({"MAX_DIAL_ATTEMPTS": "1"}).max_dial_attempts == 1
 
 
+@pytest.mark.parametrize(
+    ("name", "most"), [("MAX_OUTBOUND_PER_DAY", 100), ("MAX_OUTBOUND_CALL_SECONDS", 900)]
+)
+def test_a_cap_past_its_upper_bound_stops_the_process_and_the_bound_itself_is_taken(
+    name: str, most: int
+) -> None:
+    """F2: a typo such as 4800 for 480 seconds, or 200 dials a day, multiplies the bill with nobody calling, so it
+    reads as nonsense and stops the process (spec 9.3). The bounds are James's money call, open decision 3."""
+    with pytest.raises(ValueError, match=name):
+        Settings.from_env({name: str(most + 1)})
+    field = name.lower()
+    assert getattr(Settings.from_env({name: str(most)}), field) == most
+
+
+@pytest.mark.parametrize("raw", ["07:59-20:00 Mon-Sat", "09:00-21:01 Mon-Sat", "06:00-23:00 Mon-Sat"])
+def test_a_call_window_outside_eight_to_nine_stops_the_process(raw: str) -> None:
+    """F2: the federal limit is 08:00 to 21:00 at the called party's location (47 CFR 64.1200(c)(1), spec 9.2);
+    the window's end is the first minute it does not call, so 21:00 itself is inside."""
+    from candidate_line.settings import parse_call_window
+
+    with pytest.raises(ValueError, match="08:00-21:00"):
+        parse_call_window(raw)
+    with pytest.raises(ValueError, match="CALL_WINDOW"):
+        Settings.from_env({"CALL_WINDOW": raw})
+    widest = parse_call_window("08:00-21:00 Mon-Sat")
+    assert (widest.start.hour, widest.end.hour) == (8, 21)
+
+
 def test_outbound_enabled_reads_only_zero_or_one() -> None:
     assert Settings.from_env({"OUTBOUND_ENABLED": "0"}).outbound_enabled is False
     assert Settings.from_env(outbound_on()).outbound_enabled is True
@@ -186,6 +214,35 @@ def test_the_secrets_are_never_in_the_settings_repr() -> None:
     assert fictional(142) not in repr(s) and "0142" not in repr(s)
 
 
+def test_no_token_key_number_address_or_webhook_url_is_in_the_settings_repr_or_str() -> None:
+    """F8: the token, the account SID, the line's and the probe's numbers (the probe's is on the allow-list,
+    which DR-025 says is never logged), the Slack webhook, the SNS topic's account id, the SES addresses and the
+    public base the webhooks are built on were all printed by repr(settings), so a future log line or a
+    traceback that reprs a dataclass would leak them. Every value here is built at run time and fictional."""
+    account = "0" * 11 + "7"
+    values = {
+        "TWILIO_AUTH_TOKEN": "tok-" + "f8" * 8,
+        "TWILIO_ACCOUNT_SID": "AC" + "f8" * 16,
+        "TWILIO_LINE_NUMBER": fictional(100),
+        "TWILIO_PROBE_NUMBER": fictional(142),
+        "SLACK_WEBHOOK_URL": "https://hooks.example/services/" + "f8" * 6,
+        "SNS_TOPIC_ARN": f"arn:aws:sns:us-east-1:{account}:candidate-line",
+        "SES_SENDER": "line@mail.example",
+        "SES_RECIPIENTS": "recruiter@mail.example,operator@mail.example",
+        "PUBLIC_BASE_URL": "https://f8-tunnel.example",
+        "INTAKE_SIGNING_KEY": "key-" + "f8" * 8,
+        "OUTBOUND_ALLOWED_NUMBERS": f"{fictional(142)},{fictional(143)}",
+    }
+    s = Settings.from_env(outbound_on(**values))
+    assert s.twilio_auth_token == values["TWILIO_AUTH_TOKEN"]  # still held, only never printed
+    shown = repr(s) + str(s)
+    for name, value in values.items():
+        for part in value.split(","):
+            assert part not in shown, name
+    assert account not in shown and "0100" not in shown and "0143" not in shown
+    assert "brain_provider='anthropic'" in shown  # the settings that are no secret still read
+
+
 @pytest.mark.parametrize(
     "raw",
     [
@@ -221,3 +278,11 @@ def test_a_call_window_reads_ranges_and_lists() -> None:
     assert (w.start, w.end, w.days) == (time(10, 30), time(18, 0), frozenset({0, 2, 3, 4}))
     assert w.middle == time(14, 15)
     assert parse_call_window("09:00-20:00 Sat").days == frozenset({5})
+
+
+def test_a_probe_answer_case_never_prints_its_pin() -> None:
+    """F8's sibling: the probe's answer case is a dataclass holding the PIN it applied with."""
+    from candidate_line.probe.dial import AnswerCase
+
+    case = AnswerCase("met", "4" + "7" * 3, ["yes"], "Which suits you?")
+    assert case.pin == "4777" and "4777" not in repr(case) and "4777" not in str(case)

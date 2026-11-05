@@ -36,9 +36,15 @@ class Line:
         # A file of its own in the test's folder, so a second Line on the same folder is the same line restarted.
         self.ledger = scratch_ledger(tmp_path / "state.json", KEY, self.clock, ledger_class)
         self.contacts = Contacts(tmp_path / "contacts.json")
+        # Dialling on, since intake takes applications only then (F7); every value is fictional or a test word.
         settings = {
+            "OUTBOUND_ENABLED": "1",
             "INTAKE_SIGNING_KEY": KEY,
             "OUTBOUND_ALLOWED_NUMBERS": fictional(142),
+            "TWILIO_LINE_NUMBER": fictional(100),
+            "TWILIO_ACCOUNT_SID": "ACtest",
+            "TWILIO_AUTH_TOKEN": "test-token",
+            "PUBLIC_BASE_URL": "https://line.example",
             "TRACE_STORE_PATH": ":memory:",
         } | env
         deps = Deps(
@@ -125,9 +131,20 @@ def test_an_application_outside_the_window_waits_for_its_next_opening(tmp_path) 
 
 
 def test_no_key_answers_503_and_stores_nothing(tmp_path) -> None:
-    line = Line(tmp_path, INTAKE_SIGNING_KEY="")
+    line = Line(tmp_path, OUTBOUND_ENABLED="0", INTAKE_SIGNING_KEY="")
     assert line.post(body(), signed_headers("any", body(), NOW.timestamp())).status_code == 503
     assert nothing_stored(line)
+
+
+def test_with_dialling_off_intake_answers_503_and_stores_nothing(tmp_path, caplog) -> None:
+    """F7: with OUTBOUND_ENABLED off intake still stored the number and attempt 1, so turning dialling on a week
+    later called week-old applications as if they had just come in. Off, nothing is accepted to wait."""
+    line = Line(tmp_path, OUTBOUND_ENABLED="0")
+    with caplog.at_level(logging.INFO):
+        refused = line.post(body())
+    assert refused.status_code == 503 and refused.json() == {"error": "intake is not configured"}
+    assert nothing_stored(line)
+    assert "OUTBOUND_ENABLED is off" in caplog.text
 
 
 def test_a_bad_signature_is_refused(tmp_path) -> None:
@@ -146,6 +163,67 @@ def test_a_missing_signature_is_refused(tmp_path) -> None:
     del headers["X-Intake-Signature"]
     assert line.post(body(), headers).status_code == 401
     assert nothing_stored(line)
+
+
+def raw_post(line: Line, raw: bytes, headers: dict[str, str], **override: bytes) -> int:
+    """The status for a request whose named headers carry these exact bytes. Starlette's TestClient re-encodes a
+    header as UTF-8, so a byte such as 0xB2 (a superscript two in latin-1, the way Starlette reads a header) only
+    reaches the app through httpx's own ASGI transport, which passes the bytes as given."""
+    import asyncio
+
+    import httpx
+
+    sent = [(k.encode(), v.encode()) for k, v in headers.items() if k not in override]
+    sent += [(k.encode(), v) for k, v in override.items()]
+
+    async def go() -> int:
+        transport = httpx.ASGITransport(app=line.client.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://line.test") as client:
+            return (await client.post("/applications", content=raw, headers=sent)).status_code
+
+    return asyncio.run(go())
+
+
+@pytest.mark.parametrize("timestamp", [b"\xb2", b"\xb9" * 10, b"9" * 5000])
+def test_a_timestamp_header_int_cannot_read_is_refused_401_never_500(tmp_path, timestamp: bytes) -> None:
+    """F1: str.isdigit takes a superscript two and a 5000-digit run, and int() refuses both, so a request with no
+    key raised a traceback."""
+    line = Line(tmp_path)
+    raw = body()
+    headers = signed_headers(KEY, raw, NOW.timestamp())
+    assert raw_post(line, raw, headers, **{"X-Intake-Timestamp": timestamp}) == 401
+    assert nothing_stored(line)
+
+
+@pytest.mark.parametrize("signature", [b"\xe9" * 64, b"\xe9" + b"a" * 63, b"A" * 64, b"a" * 63, b"a" * 65])
+def test_a_signature_header_that_is_not_64_lowercase_hex_is_refused_401_never_500(
+    tmp_path, signature: bytes
+) -> None:
+    """F1: hmac.compare_digest raises TypeError on a non-ASCII string, so a request with no key raised a
+    traceback."""
+    line = Line(tmp_path)
+    raw = body()
+    headers = signed_headers(KEY, raw, NOW.timestamp())
+    assert raw_post(line, raw, headers, **{"X-Intake-Signature": signature}) == 401
+    assert nothing_stored(line)
+
+
+@pytest.mark.parametrize("declared", ["\u00b2", "9" * 5000])
+def test_a_content_length_int_cannot_read_never_raises(declared: str) -> None:
+    """F1's sibling: the body's declared length took the same isdigit test before int(). The body is still read
+    and bounded in chunks, so a declared length that is not a plain number decides nothing."""
+    import asyncio
+
+    from candidate_line.outbound.intake import _bounded_body
+
+    class Sent:
+        def __init__(self) -> None:
+            self.headers = {"content-length": declared}
+
+        async def stream(self):
+            yield b"{}"
+
+    assert asyncio.run(_bounded_body(Sent())) == b"{}"  # type: ignore[arg-type]
 
 
 def test_a_signature_over_the_timestamp_and_body_but_not_the_nonce_is_refused(tmp_path) -> None:
@@ -336,6 +414,17 @@ def test_a_body_over_4_kb_is_refused_413(tmp_path) -> None:
     assert nothing_stored(line)
 
 
+def test_a_body_of_exactly_4_kb_is_taken(tmp_path) -> None:
+    """F12: the other side of the 4 KB bound, so `>=` for `>` in _bounded_body fails a test."""
+    line = Line(tmp_path)
+    raw = body()
+    raw += b" " * (4096 - len(raw))  # JSON allows the trailing spaces
+    assert len(raw) == 4096
+    assert line.post(raw).status_code == 202
+    over = raw + b" "
+    assert Line(tmp_path / "over").post(over).status_code == 413
+
+
 def test_a_body_that_is_not_json_is_refused_422(tmp_path) -> None:
     line = Line(tmp_path)
     assert line.post(b"first_name=Ada").status_code == 422
@@ -373,9 +462,44 @@ def test_a_number_off_the_allow_list_is_stored_as_not_allowed_with_no_number_or_
     assert not line.contacts.path.exists()  # no raw number was ever written
 
 
+def damage(path, hint: str) -> None:
+    """The state file as an EFS fault or a bad manual edit leaves it: not JSON. `hint` is a fictional number in
+    it, so a test can show the log never prints the file's contents."""
+    path.write_text('{"opt_outs": [{"hint": "' + hint + '"', encoding="utf-8")
+
+
+def test_an_unreadable_state_file_holds_intake_at_503_until_an_operator_restores_it(tmp_path, caplog) -> None:
+    """F6: the set-aside replaced the file with an empty overlay, so a number that had opted out read as never
+    having opted out and was stored scheduled and dialled. Opt-outs are compliance records: while the file that
+    holds them is set aside, intake refuses and stores nothing, after a restart too."""
+    line = Line(tmp_path)
+    hashed = number_hmac(number_key(KEY), fictional(142))
+    line.ledger.opt_out("ACME-1000", how="said on the call", number_hmac=hashed)
+    path = line.ledger.state_path
+    assert path is not None
+    kept = path.read_text(encoding="utf-8")
+    damage(path, fictional(143))
+    with caplog.at_level(logging.INFO):
+        refused = line.post(body())
+    assert refused.status_code == 503 and refused.json() == {"error": "intake is paused"}
+    [aside] = list(tmp_path.glob("state.json.bad-*"))
+    assert line.contacts.number("ACME-1000") is None and not line.contacts.path.exists()
+    assert "the state file was set aside" in caplog.text
+    assert fictional(143) not in caplog.text and fictional(143)[-4:] not in caplog.text
+    restarted = Line(tmp_path)  # a new process: the set-aside file on disk still holds intake
+    assert restarted.post(body()).status_code == 503
+    aside.write_text(kept, encoding="utf-8")
+    aside.replace(path)  # the operator puts the records back
+    answer = restarted.post(body())
+    assert answer.status_code == 202 and answer.json()["status"] == "opted_out"
+
+
 def test_an_empty_allow_list_dials_nobody(tmp_path) -> None:
-    line = Line(tmp_path, OUTBOUND_ALLOWED_NUMBERS="")
-    assert line.post(body()).json()["status"] == "not_allowed"
+    # Dialling on with an empty list stops the process at start; with dialling off intake takes nothing (F7).
+    with pytest.raises(ValueError, match="OUTBOUND_ALLOWED_NUMBERS"):
+        Line(tmp_path, OUTBOUND_ALLOWED_NUMBERS="")
+    line = Line(tmp_path, OUTBOUND_ENABLED="0", OUTBOUND_ALLOWED_NUMBERS="")
+    assert line.post(body()).status_code == 503 and nothing_stored(line)
 
 
 def test_a_failed_dial_write_takes_the_number_back_out(tmp_path) -> None:

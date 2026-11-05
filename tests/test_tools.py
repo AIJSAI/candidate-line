@@ -442,6 +442,47 @@ def test_an_unreadable_state_file_is_set_aside_not_overwritten(tmp_path: Path) -
     assert [p.name.startswith("state.json.bad-") for p in tmp_path.iterdir()].count(True) == 1
 
 
+def test_an_unreadable_state_file_is_read_as_set_aside_until_it_is_restored(tmp_path: Path) -> None:
+    """F6: what intake and the dialler read, on this ledger and on a new one over the same file."""
+    path = tmp_path / "state.json"
+    ledger = _ledger(path)
+    assert ledger.is_set_aside() is False and ledger.set_aside_at is None
+    path.write_text("{not json", encoding="utf-8")
+    assert ledger.is_set_aside() is True and ledger.set_aside_at is not None
+    assert _ledger(path).is_set_aside() is True
+    for aside in tmp_path.glob("state.json.bad-*"):
+        aside.unlink()  # the operator read it and let it go
+    assert ledger.is_set_aside() is False and ledger.set_aside_at is None
+
+
+def test_an_unreadable_state_file_that_cannot_be_moved_is_never_written_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F6: a fault that stops the read can stop the move too; the next change must not then replace the records
+    it could not read with an empty file."""
+    from candidate_line.tools import ledger as ledger_module
+
+    path = tmp_path / "state.json"
+    path.write_text("{not json", encoding="utf-8")
+    real_replace = ledger_module.os.replace
+
+    def no_move(src, dst):
+        if ".bad-" in str(dst):
+            raise OSError("read-only")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(ledger_module.os, "replace", no_move)
+    ledger = _ledger(path)
+    assert ledger.is_set_aside() is True
+    with pytest.raises(actions.LedgerError):
+        ledger.book("ACME-9004", "S1105-0930")
+    assert path.read_text(encoding="utf-8") == "{not json"
+    monkeypatch.setattr(ledger_module.os, "replace", real_replace)
+    path.write_text("{}", encoding="utf-8")  # the fault cleared and the file reads again
+    assert ledger.is_set_aside() is False
+    ledger.book("ACME-9004", "S1105-0930")
+
+
 def test_two_calls_booking_one_slot_at_once_get_it_once(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path / "state.json")
     won: list[str] = []

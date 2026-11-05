@@ -148,6 +148,7 @@ def run_turn(
     # A hook's request that the turn be written up (a wrong person answered the dial): the reason, said by no one.
     ctx.data.pop("tier_request", None)
     ctx.data.pop("missed_this_turn", None)
+    ctx.data.pop("hook_hand_offs", None)
     failures_before = int(ctx.data.get("verify_failures", 0))
     tier3_before = len(ctx.data.get("tier3") or ())
     heard = hooks.on_turn(ctx, user_text)
@@ -169,9 +170,18 @@ def run_turn(
         _span(ctx, "transcribe", "heard", text=_masked(heard))
     loop = _Loop()
     if ctx.data.get("hang_up") or ctx.data.get("say"):
-        # The kill switch, the caller's "stop", an opt-out, or the PIN ask said again for a hello: the fixed line,
-        # and no model call to wait for or to reword it.
+        # The kill switch, the caller's "stop", an opt-out, the PIN ask said again for a hello, or an applicant's
+        # ask for a person: the fixed line, and no model call to wait for or to reword it.
         text = str(ctx.data.pop("say", None) or STOP_LINE)
+        for tool, carried in ctx.data.pop("hook_hand_offs", ()):
+            # A hook that ran a tool for the caller (F11) hands its hand-off here, so it is posted once and the
+            # turn's tier and hand-offs read it as they read a tool's.
+            loop.tools_called.append(tool)
+            loop.done.append(tool)
+            loop.carried.append(carried)
+            posted = _hand_off(ctx, tool, carried)
+            if posted is not None:
+                loop.posted.append(posted)
     else:
         text = _tool_loop(brain, hooks, ctx, cap, specs, loop)
         if loop.said_by_code:

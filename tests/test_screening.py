@@ -494,6 +494,27 @@ def test_a_value_outside_the_questions_kind_names_the_values_it_takes(
     )
 
 
+@pytest.mark.parametrize(("value", "recorded"), [("0", True), ("60", True), ("61", False)])
+def test_a_range_answer_is_recorded_at_its_posted_min_and_max_and_refused_one_past(
+    value: str, recorded: bool
+) -> None:
+    """F12: both sides of q3's posted range (0 to 60 hours a week), so an off-by-one in _value's comparison fails."""
+    ctx = outbound_ctx()
+    confirm(ctx, LERATO["pin"])
+    for earlier, value_ in MET_AIDE.items():
+        if earlier < "q3":
+            answer(ctx, earlier, value_)
+    outcome = actions.run_tool("record_answer", {"question_id": "q3", "value": value, "heard": value}, ctx)
+    assert outcome.is_error is not recorded
+    if recorded:
+        assert json.loads(outcome.content)["value"] == value
+        assert ctx.ledger is not None and ctx.ledger.answers(LERATO["code"])["q3"]["value"] == value
+    else:
+        assert json.loads(outcome.content)["error"] == (
+            "For this question the value is a whole number from 0 to 60 (hours a week), declined or unclear."
+        )
+
+
 def test_an_earlier_answer_may_be_recorded_again_until_the_last_then_the_answers_are_fixed() -> None:
     ctx = outbound_ctx()
     confirm(ctx, LERATO["pin"])

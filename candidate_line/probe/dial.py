@@ -158,7 +158,8 @@ NOT_MET_PHRASE = "the posting asks for"
 @dataclass(frozen=True)
 class AnswerCase:
     name: str  # "met" or "not_met"
-    pin: str
+    # A PIN is never printed (spec 5, Never 4), so a failing run's repr of a case leaves it out (F8's sibling).
+    pin: str = field(repr=False)
     lines: list[str]
     expect: str
 

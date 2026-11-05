@@ -34,17 +34,19 @@ Parameters:
     Type: Number
     Default: 20
     MinValue: 1
+    MaxValue: 100
     Description: Dials placed per Central-time day; with the 480 s cap this bounds the outbound bill (DR-025, Spend).
   CallWindow:
     Type: String
     Default: "09:00-20:00 Mon-Sat"
-    AllowedPattern: "^[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9] (Mon|Tue|Wed|Thu|Fri|Sat)-(Mon|Tue|Wed|Thu|Fri|Sat)$"
-    ConstraintDescription: HH:MM-HH:MM and a day range from Mon to Sat; the line never calls on a Sunday.
+    AllowedPattern: "^(0[89]|1[0-9]|20):[0-5][0-9]-((0[89]|1[0-9]|20):[0-5][0-9]|21:00) (Mon|Tue|Wed|Thu|Fri|Sat)-(Mon|Tue|Wed|Thu|Fri|Sat)$"
+    ConstraintDescription: HH:MM-HH:MM inside 08:00-21:00 (47 CFR 64.1200(c)(1)) and a day range from Mon to Sat; the line never calls on a Sunday.
     Description: The hours a dial may be placed, in the applicant's own time zone.
   MaxOutboundCallSeconds:
     Type: Number
     Default: 480
     MinValue: 1
+    MaxValue: 900
     Description: The length cap of an outbound call; Twilio's TimeLimit is this plus 60 seconds.
   BudgetStopUsd:
     Type: Number
