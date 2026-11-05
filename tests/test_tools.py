@@ -554,3 +554,49 @@ def test_a_bare_code_beside_a_pin_is_the_code_whatever_the_transcriber_put_betwe
         == "ACME-3233, PIN 9683, and 1234 is my street"
     )
     assert normalise_transcript("it's 3233") == "it's 3233"  # no PIN beside it: four digits may be anything
+
+
+@pytest.mark.parametrize(
+    ("heard", "brain_reads"),
+    [
+        # the deployed line's hearing of CL-021 on 2026-11-05 (the store's masked final "application *,****,***.")
+        (
+            "I'm calling about application 3,2339,683.",
+            "I'm calling about application code ACME-3233 PIN 9683.",
+        ),
+        ("application 3,233,968,3", "application code ACME-3233 PIN 9683"),
+        ("it's 32,339,683", "it's ACME-3233 PIN 9683"),
+    ],
+)
+def test_eight_comma_grouped_digits_with_no_code_are_the_code_and_the_pin(
+    heard: str, brain_reads: str
+) -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    assert normalise_transcript(heard) == brain_reads
+
+
+@pytest.mark.parametrize(
+    ("heard", "brain_reads"),
+    [
+        ("ACME-3233, 9,683", "ACME-3233, PIN 9683"),
+        ("acne 3233 96,83", "ACME-3233 PIN 9683"),
+        ("code 3233 and 9,683", "code ACME-3233 and PIN 9683"),
+        ("acne 3,233 9,683", "ACME-3233 PIN 9683"),
+    ],
+)
+def test_four_comma_grouped_digits_right_after_a_code_are_its_pin(heard: str, brain_reads: str) -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    assert normalise_transcript(heard) == brain_reads
+
+
+def test_a_comma_grouped_run_is_otherwise_only_its_digits() -> None:
+    from candidate_line.tools.codes import normalise_transcript
+
+    # eight digits beside a code already said are not a second code, and four with no code before them are no PIN
+    assert normalise_transcript("ACME-3233, ref 12,345,678") == "ACME-3233, ref 12345678"
+    assert normalise_transcript("it's 9,683") == "it's 9683"
+    # a PIN word already there keeps the run a PIN, and a list of small numbers is not a thousands run
+    assert normalise_transcript("ACME-3233 PIN 9,683") == "ACME-3233 PIN 9683"
+    assert normalise_transcript("I have 2,3 questions") == "I have 2,3 questions"

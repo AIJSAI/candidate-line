@@ -233,7 +233,7 @@ def test_a_probe_holding_the_auth_token_opens_the_stream_with_a_token_for_its_ca
             ScriptedTranscriber(),
             FakeSpeaker(),
             [],
-            stream_sid="probe-CL-001",
+            stream_sid="CL-001",
             silence_ms=60,
             reply_timeout_s=0.2,
             real_time=False,
@@ -241,7 +241,7 @@ def test_a_probe_holding_the_auth_token_opens_the_stream_with_a_token_for_its_ca
         )
         asyncio.run(probe.run(nothing()))
         [start] = [m["start"] for m in sent if m["event"] == "start"]
-        assert start["callSid"] == "probe-probe-CL-001"
+        assert start["callSid"] == "probe-CL-001"
         if auth_token:
             assert stream_token_ok(auth_token, start["callSid"], start["customParameters"]["token"])
         else:

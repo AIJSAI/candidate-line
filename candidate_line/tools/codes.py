@@ -92,6 +92,13 @@ _PIN = re.compile(
     re.IGNORECASE,
 )
 _THOUSANDS = re.compile(r"(?<![0-9,])([0-9]),([0-9]{3})(?![0-9]|,[0-9])")
+# Transcribe groups a long run of digits with thousands commas, and not always where a thousands comma goes: the
+# probe's "application 3233 PI 9683" reached the deployed line on 2026-11-05 as "application 3,2339,683", the PIN's
+# word lost and the two numbers run into one (the trace store's masked final, confidence 0.971; CL-021, DR-024). So
+# a run with commas and no spaces is read as its digits. Eight of them with no code anywhere else are the code and
+# the PIN said in one breath; four of them right after a code are its PIN.
+_GROUPED = re.compile(r"(?<![\w,\-])[0-9]{1,4}(?:,[0-9]{1,4})+(?!\w|,[0-9])")
+_AFTER_CODE = re.compile(r"[\s,]*(?:and\s+)?", re.IGNORECASE)
 
 
 def _joined(digits: str) -> str:
@@ -135,9 +142,40 @@ def _bare_code_beside_pin(text: str) -> str:
     return text
 
 
+def _cued_codes(text: str) -> list[re.Match[str]]:
+    """The codes in the text that carry a cue, a code word or ACME; four digits alone may be anything."""
+    return [m for m in _CODE.finditer(text) if m.group("lead") or m.group("acme")]
+
+
+def _ends_with_code(text: str) -> bool:
+    return any(_AFTER_CODE.fullmatch(text[m.end() :]) for m in _cued_codes(text))
+
+
+def _grouped_runs(text: str) -> str:
+    """Each comma-grouped run of four or more digits as its digits, split into a code and a PIN, or named as the
+    PIN, by the rule above. A shorter run ("2,3") is left alone, since a thousands comma needs four digits."""
+    out: list[str] = []
+    last = 0
+    for match in _GROUPED.finditer(text):
+        digits = match.group().replace(",", "")
+        if len(digits) < 4:
+            continue
+        before = "".join(out) + text[last : match.start()]
+        if len(digits) == 8 and not _cued_codes(f"{before} {text[match.end() :]}"):
+            said = f"{code_label(digits[:4])} PIN {digits[4:]}"
+        elif len(digits) == 4 and _ends_with_code(before):
+            said = f"PIN {digits}"
+        else:
+            said = digits
+        out.append(text[last : match.start()] + said)
+        last = match.end()
+    return "".join(out) + text[last:]
+
+
 def normalise_transcript(text: str) -> str:
     """The caller's words with each code written "ACME-dddd" and each PIN "PIN dddd". The PIN keeps its digits as
     heard, a dropped leading zero included, since pin_digits puts the zero back when the tool reads it."""
+    text = _grouped_runs(text)
     text = _THOUSANDS.sub(r"\1\2", text)
     text = _PIN.sub(lambda m: f"PIN {_joined(m.group('digits'))}", text)
     text = _CODE.sub(_code, text)

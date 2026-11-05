@@ -88,7 +88,7 @@ async def run_direct(url: str, case: Case, settings: Settings, voice: str) -> Pr
             TranscribeStreamingTranscriber(settings.aws_region),
             PollySpeaker(settings.aws_region, voice_id=voice),
             [t.user for t in case.turns if t.user is not None],
-            stream_sid=f"probe-{case.id}",
+            stream_sid=case.id,  # the session puts "probe-" before it, so the store's call id is probe-<case id>
             auth_token=settings.twilio_auth_token,
         )
         transcript = await session.run(incoming())

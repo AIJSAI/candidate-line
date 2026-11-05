@@ -56,6 +56,9 @@ class ProbeTranscript:
     exchanges: list[Exchange] = field(default_factory=list)
     clears: int = 0
     onset_gaps_ms: list[int] = field(default_factory=list)  # one per reply, from the first audio frame
+    # The wall clock at the session's zero, so an exchange's at_ms can be set beside the line's own span times
+    # (the voice regression places each store turn under the probe line it answers, DR-024).
+    started_unix: float = field(default_factory=time.time)
 
     def gus_lines(self) -> list[str]:
         return [e.text for e in self.exchanges if e.who == "gus"]
