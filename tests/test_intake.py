@@ -1,5 +1,5 @@
 """POST /applications: each refusal in its own test, and what a good application stores (spec 9.1, DR-025
-section 10, fixes 13 and 14). The ledger is `tests/outbound_fakes.FakeLedger` until lane C's lands."""
+section 10, fixes 13 and 14), against the real ledger on a scratch state file."""
 
 import json
 import logging
@@ -14,7 +14,9 @@ from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.intake import intake_signature, signed_headers
 from candidate_line.settings import Settings
 from candidate_line.telephony.app import Deps, create_app
-from tests.outbound_fakes import FakeLedger, fictional
+from candidate_line.tools.ledger import Ledger
+from tests.outbound_support import application as record_of
+from tests.outbound_support import everything, fictional, scratch_ledger, state
 
 KEY = "test-signing-key"
 NOW = datetime(2026, 11, 5, 16, 0, tzinfo=UTC)  # Thursday 10:00 Central
@@ -29,9 +31,10 @@ class Clock:
 
 
 class Line:
-    def __init__(self, tmp_path, ledger: FakeLedger | None = None, **env: str) -> None:
+    def __init__(self, tmp_path, ledger_class: type[Ledger] = Ledger, **env: str) -> None:
         self.clock = Clock(NOW)
-        self.ledger = ledger or FakeLedger(now=self.clock)
+        # A file of its own in the test's folder, so a second Line on the same folder is the same line restarted.
+        self.ledger = scratch_ledger(tmp_path / "state.json", KEY, self.clock, ledger_class)
         self.contacts = Contacts(tmp_path / "contacts.json")
         settings = {
             "INTAKE_SIGNING_KEY": KEY,
@@ -84,7 +87,8 @@ def body(**changes) -> bytes:
 
 
 def nothing_stored(line: Line) -> bool:
-    return line.ledger.applications == {} and line.ledger.dial_rows == [] and not line.contacts.path.exists()
+    written = state(line.ledger)
+    return not written.get("applications") and not written.get("dials") and not line.contacts.path.exists()
 
 
 def test_a_good_application_answers_202_with_the_code_and_never_the_number_or_the_pin(
@@ -99,12 +103,12 @@ def test_a_good_application_answers_202_with_the_code_and_never_the_number_or_th
     assert answer["code"].startswith("ACME-") and len(answer["code"]) == 9
     assert "4721" not in response.text and "0142" not in response.text
     code = answer["code"]
-    stored = line.ledger.applications[code]
+    stored = record_of(line.ledger, code)
     assert stored["number_hmac"] == number_hmac(number_key(KEY), fictional(142))
     assert stored["number_masked"] == "***-***-0142"
     assert stored["not_dialled"] is None and len(stored["nonce"]) >= 22
     assert stored["consent"]["text_sha256"] and stored["consent"]["accepted"] is True
-    assert "4721" not in line.ledger.everything() and fictional(142) not in line.ledger.everything()
+    assert "4721" not in everything(line.ledger) and fictional(142) not in everything(line.ledger)
     assert line.contacts.number(code) == fictional(142)
     [dial] = line.ledger.dials(code)
     assert (dial["attempt"], dial["status"], dial["due_at"]) == (1, "due", "2026-11-05T16:02:00+00:00")
@@ -198,7 +202,7 @@ def test_a_nonce_seen_in_the_last_ten_minutes_is_refused_409(tmp_path) -> None:
     line.clock.at = NOW + timedelta(seconds=290)
     again = signed_headers(KEY, raw, line.clock().timestamp(), nonce=headers["X-Intake-Nonce"])
     assert line.post(raw, again).status_code == 409  # re-signed with a fresh timestamp, same nonce
-    assert len(line.ledger.applications) == 1
+    assert len(state(line.ledger)["applications"]) == 1
 
 
 def test_a_nonce_seen_before_a_restart_is_found_on_the_stored_application(tmp_path) -> None:
@@ -206,11 +210,11 @@ def test_a_nonce_seen_before_a_restart_is_found_on_the_stored_application(tmp_pa
     raw = body()
     headers = signed_headers(KEY, raw, NOW.timestamp())
     assert first.post(raw, headers).status_code == 202
-    restarted = Line(tmp_path, ledger=first.ledger)  # a new process: its own memory is empty
+    restarted = Line(tmp_path)  # a new process on the same state file: its own memory is empty
     restarted.clock.at = NOW + timedelta(seconds=200)
     replay = signed_headers(KEY, raw, restarted.clock().timestamp(), nonce=headers["X-Intake-Nonce"])
     assert restarted.post(raw, replay).status_code == 409
-    assert len(first.ledger.applications) == 1
+    assert len(state(first.ledger)["applications"]) == 1
 
 
 def test_a_nonce_older_than_ten_minutes_is_no_longer_remembered(tmp_path) -> None:
@@ -327,18 +331,18 @@ def test_no_consent_is_stored_with_its_reason_and_no_number_or_dial(tmp_path) ->
     response = line.post(body(consent_accepted=False))
     assert response.status_code == 202 and response.json()["status"] == "no_consent"
     code = response.json()["code"]
-    assert line.ledger.applications[code]["not_dialled"] == "no_consent"
+    assert record_of(line.ledger, code)["not_dialled"] == "no_consent"
     assert line.contacts.number(code) is None and line.ledger.dials(code) == []
 
 
 def test_an_opted_out_number_is_stored_with_its_reason_and_no_number_or_dial(tmp_path) -> None:
     line = Line(tmp_path)
     hashed = number_hmac(number_key(KEY), fictional(142))
-    line.ledger.opt_outs.append({"code": "ACME-1000", "number_hmac": hashed, "how": "said stop"})
+    line.ledger.opt_out("ACME-1000", how="said on the call", number_hmac=hashed)
     response = line.post(body())
     assert response.status_code == 202 and response.json()["status"] == "opted_out"
     code = response.json()["code"]
-    assert line.ledger.applications[code]["not_dialled"] == "opted_out"
+    assert record_of(line.ledger, code)["not_dialled"] == "opted_out"
     assert line.contacts.number(code) is None and line.ledger.dials(code) == []
 
 
@@ -347,8 +351,8 @@ def test_a_number_off_the_allow_list_is_stored_as_not_allowed_with_no_number_or_
     response = line.post(body(phone=fictional(143)))
     assert response.status_code == 202 and response.json()["status"] == "not_allowed"
     code = response.json()["code"]
-    assert line.ledger.applications[code]["not_dialled"] == "not_allowed"
-    assert line.ledger.applications[code]["number_masked"] == "***-***-0143"
+    assert record_of(line.ledger, code)["not_dialled"] == "not_allowed"
+    assert record_of(line.ledger, code)["number_masked"] == "***-***-0143"
     assert line.contacts.number(code) is None and line.ledger.dials(code) == []
     assert not line.contacts.path.exists()  # no raw number was ever written
 
@@ -359,12 +363,12 @@ def test_an_empty_allow_list_dials_nobody(tmp_path) -> None:
 
 
 def test_a_failed_dial_write_takes_the_number_back_out(tmp_path) -> None:
-    class Unscheduled(FakeLedger):
+    class Unscheduled(Ledger):
         def schedule_dial(self, code, attempt, due_at):
             raise OSError("disk full")
 
-    line = Line(tmp_path, ledger=Unscheduled())
+    line = Line(tmp_path, ledger_class=Unscheduled)
     with pytest.raises(OSError):
         line.post(body())
-    [code] = line.ledger.applications
+    [code] = state(line.ledger)["applications"]
     assert line.contacts.number(code) is None

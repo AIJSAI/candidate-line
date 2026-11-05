@@ -3,8 +3,6 @@ the tier-3 write-up after the call, and on an outbound call the stop phrases and
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from candidate_line import hooks
@@ -19,6 +17,7 @@ from candidate_line.persona import (
     PIN_ASK,
     STOP_LINE,
 )
+from candidate_line.tools.ledger import Ledger, LedgerError
 from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, run_silence
 
@@ -263,35 +262,25 @@ def test_a_call_with_nothing_to_write_up_posts_nothing() -> None:
 # The outbound stop phrases (DR-025 section 14, fix 4) and the hello rule (spec 9.7, fix 2).
 
 
-class StopLedger:
-    """The ledger reads and the one write the opt-out rule makes (DR-025 section 7), so these tests need no data."""
+class StopLedger(Ledger):
+    """The real in-memory ledger over data/, noting each opt-out the rule writes, or failing to save one."""
 
-    def __init__(self, applicants: tuple[str, ...] = (), fail: bool = False) -> None:
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__()
         self.stops: list[tuple[str, str, str | None]] = []
-        self._applicants = set(applicants)
         self._fail = fail
-
-    def candidate(self, code: object) -> None:
-        return None
-
-    def applicant(self, code: object) -> SimpleNamespace | None:
-        if code not in self._applicants:
-            return None
-        return SimpleNamespace(code=code, first_name="Lerato", role="care-aide", zone="America/Chicago")
 
     def opt_out(self, code: str, how: str, call_id: str | None = None, number_hmac: str | None = None) -> int:
         if self._fail:
-            raise OSError("disk full")
+            raise LedgerError("unsaved", "The change could not be saved.")
+        cancelled = super().opt_out(code, how, call_id, number_hmac)
         self.stops.append((code, how, call_id))
-        return 1
-
-    def screen(self, code: str) -> None:
-        return None
+        return cancelled
 
 
 def _outbound(ledger: StopLedger | None = None, confirmed: bool = False) -> TurnContext:
     ctx = _ctx()
-    ctx.ledger = ledger or StopLedger(("ACME-3108",))  # type: ignore[assignment]
+    ctx.ledger = ledger or StopLedger()
     ctx.data["outbound"] = {
         "code": "ACME-3108",
         "first_name": "Lerato",
@@ -317,7 +306,7 @@ def _outbound(ledger: StopLedger | None = None, confirmed: bool = False) -> Turn
     ],
 )
 def test_a_stop_phrase_on_an_outbound_call_stops_the_calls_with_the_outbound_stop_line(heard: str) -> None:
-    ledger = StopLedger(("ACME-3108",))
+    ledger = StopLedger()
     ctx = _outbound(ledger)
     assert LineHooks().on_turn(ctx, heard) is None
     assert ctx.data["hang_up"] is True and ctx.data["say"] == OUTBOUND_STOP_LINE
@@ -327,7 +316,7 @@ def test_a_stop_phrase_on_an_outbound_call_stops_the_calls_with_the_outbound_sto
 
 @pytest.mark.parametrize("heard", ["Wrong number.", "Sorry, not me.", "You have the wrong person."])
 def test_a_wrong_person_before_the_pin_stops_the_calls_to_that_number_and_is_written_up(heard: str) -> None:
-    ledger = StopLedger(("ACME-3108",))
+    ledger = StopLedger()
     ctx = _outbound(ledger)
     LineHooks().on_turn(ctx, heard)
     assert ctx.data["say"] == OUTBOUND_STOP_LINE and ledger.stops == [
@@ -340,14 +329,14 @@ def test_a_wrong_person_before_the_pin_stops_the_calls_to_that_number_and_is_wri
     "heard", ["don't stop", "stop the booking", "Can you stop by Friday?", "I'm nothing like that"]
 )
 def test_words_that_only_look_like_a_stop_go_to_the_model_on_an_outbound_call(heard: str) -> None:
-    ledger = StopLedger(("ACME-3108",))
+    ledger = StopLedger()
     ctx = _outbound(ledger, confirmed=True)
     LineHooks().on_turn(ctx, heard)
     assert "hang_up" not in ctx.data and "say" not in ctx.data and ledger.stops == []
 
 
 def test_after_the_pin_not_me_is_an_answer_but_a_stop_phrase_still_stops() -> None:
-    ledger = StopLedger(("ACME-3108",))
+    ledger = StopLedger()
     ctx = _outbound(ledger, confirmed=True)
     LineHooks().on_turn(ctx, "No, not me, my back won't take it.")
     assert "hang_up" not in ctx.data and ledger.stops == []
@@ -356,14 +345,14 @@ def test_after_the_pin_not_me_is_an_answer_but_a_stop_phrase_still_stops() -> No
 
 
 def test_an_applicant_who_called_in_stops_the_calls_and_anyone_else_keeps_todays_lines() -> None:
-    ledger = StopLedger(("ACME-3108",))
+    ledger = StopLedger()
     applicant = _ctx()
-    applicant.ledger = ledger  # type: ignore[assignment]
+    applicant.ledger = ledger
     applicant.data["candidate"] = "ACME-3108"
     LineHooks().on_turn(applicant, "stop")
     assert applicant.data["say"] == OUTBOUND_STOP_LINE and ledger.stops[0][1] == "said stop"
     stranger = _ctx()
-    stranger.ledger = StopLedger()  # type: ignore[assignment]
+    stranger.ledger = StopLedger()
     LineHooks().on_turn(stranger, "stop")
     assert stranger.data["say"] == STOP_LINE
     LineHooks().on_turn(phrase := _ctx(), "please stop calling me")
@@ -371,7 +360,7 @@ def test_an_applicant_who_called_in_stops_the_calls_and_anyone_else_keeps_todays
 
 
 def test_an_opt_out_that_cannot_be_saved_promises_nothing_and_is_written_up() -> None:
-    ctx = _outbound(StopLedger(("ACME-3108",), fail=True))
+    ctx = _outbound(StopLedger(fail=True))
     LineHooks().on_turn(ctx, "Don't call me.")
     assert ctx.data["say"] == STOP_LINE and ctx.data["hang_up"] is True
     assert "could not be saved" in ctx.data["tier_request"]
@@ -418,14 +407,48 @@ def test_the_hello_rule_says_the_pin_ask_twice_a_call_and_never_after_the_pin() 
     for _ in range(2):
         LineHooks().on_turn(ctx, "Hello?")
         assert ctx.data.pop("say") == PIN_ASK
-    LineHooks().on_turn(ctx, "Hello?")
-    assert "say" not in ctx.data  # a third goes to the model
+    LineHooks().on_turn(ctx, "um, hello")
+    # A third is not a turn (spec 9.7), as the phone lets it go: no line, and the loop calls no model.
+    assert "say" not in ctx.data and ctx.data.pop("not_a_turn") is True
     after = _outbound(confirmed=True)
     LineHooks().on_turn(after, "Yes.")
     assert "say" not in after.data
     inbound = _ctx()
     LineHooks().on_turn(inbound, "Hello?")
     assert "say" not in inbound.data
+
+
+def test_after_the_second_pin_miss_a_yes_answers_the_callback_offer_and_is_no_hello() -> None:
+    # PIN_SECOND_MISS_LINE ends the checking and asks "Would you like that?", so "Yes." goes to the model, which
+    # calls request_callback; before the second miss it is still a hello.
+    ctx = _outbound()
+    ctx.data["verify_failures"] = 1
+    LineHooks().on_turn(ctx, "Yes.")
+    assert ctx.data.pop("say") == PIN_ASK
+    ctx.data["verify_failures"] = 2
+    LineHooks().on_turn(ctx, "Yes.")
+    assert "say" not in ctx.data and "not_a_turn" not in ctx.data and "hang_up" not in ctx.data
+
+
+def test_a_third_hello_before_the_pin_is_no_turn_in_text_mode_either() -> None:
+    from candidate_line.turn import run_turn
+
+    class NoBrain:
+        name = model = "none"
+
+        def reply(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("hello words before the PIN never reach the model")
+
+    ctx = _outbound()
+    asks = [run_turn(NoBrain(), LineHooks(), ctx, "Hello?") for _ in range(2)]  # type: ignore[arg-type]
+    assert [r.spoken for r in asks] == [PIN_ASK, PIN_ASK]
+    before = list(ctx.history)
+    third = run_turn(NoBrain(), LineHooks(), ctx, "Hello? Hello?")  # type: ignore[arg-type]
+    assert third.spoken == "" and not third.hang_up and third.tools_called == ()
+    assert ctx.history == before and "not_a_turn" not in ctx.data  # nothing said, nothing kept
+    # The PIN itself still goes to the model as ever.
+    with pytest.raises(AssertionError, match="never reach the model"):
+        run_turn(NoBrain(), LineHooks(), ctx, "It's 4398.")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

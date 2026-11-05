@@ -1,5 +1,5 @@
-"""The dialler with a fake Twilio, a fake ledger and a pinned clock (spec 9.2 to 9.5, DR-025 sections 9 and 12;
-fixes 8, 13 and 16). The ledger is `tests/outbound_fakes.FakeLedger` until lane C's lands (DR-025 section 7)."""
+"""The dialler with a fake Twilio, the real ledger on a scratch state file and a pinned clock (spec 9.2 to 9.5,
+DR-025 sections 7, 9 and 12; fixes 8, 13 and 16)."""
 
 import logging
 from datetime import UTC, datetime, timedelta
@@ -13,10 +13,13 @@ from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.dialler import Dialler, session_outcome
 from candidate_line.settings import Settings
 from candidate_line.telephony.twilio_rest import TwilioError
-from tests.outbound_fakes import FakeLedger, fictional
+from candidate_line.tools.ledger import Ledger
+from tests.outbound_support import application, change_state, fictional, scratch_ledger
 
 KEY = "test-signing-key"
 THURSDAY_10_CENTRAL = datetime(2026, 11, 5, 16, 0, tzinfo=UTC)
+# Every posted requirement of the care-aide role met (data/roles.yaml).
+CARE_AIDE_MET = {"q1": "yes", "q2": "both", "q3": "30", "q4": "yes", "q5": "yes"}
 
 
 class Clock:
@@ -82,11 +85,22 @@ def settings(**env: str) -> Settings:
     return Settings.from_env(base | env)
 
 
+class PurgeSpy(Ledger):
+    """The real ledger, noting the cut-off of every retention sweep the dialler asks it for."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.purged_before: list[datetime] = []
+
+    def purge_answers(self, before: datetime) -> int:
+        self.purged_before.append(before)
+        return super().purge_answers(before)
+
+
 class World:
-    def __init__(self, tmp_path: Path, ledger: FakeLedger | None = None, **env: str) -> None:
+    def __init__(self, tmp_path: Path, ledger_class: type[Ledger] = PurgeSpy, **env: str) -> None:
         self.clock = Clock(THURSDAY_10_CENTRAL)
-        self.ledger = ledger or FakeLedger(now=self.clock)
-        self.ledger.now = self.clock
+        self.ledger = scratch_ledger(tmp_path / "state.json", KEY, self.clock, ledger_class)
         self.contacts = Contacts(tmp_path / "contacts.json")
         self.twilio = FakeTwilio()
         self.preflight = Preflight()
@@ -103,21 +117,21 @@ class World:
         )
         self.clock.advance(seconds=121)  # past the task's first 120 s
 
-    def apply(self, number: str = "", consent: bool = True, zone: str = "America/Chicago", due_in_s: int = 0):
+    def apply(self, number: str = "", zone: str = "America/Chicago", due_in_s: int = 0, attempt: int = 1):
         number = number or fictional(142)
         applicant = self.ledger.add_application(
             first_name="Ada",
             role="care-aide",
             zone=zone,
             pin="1234",
-            consent={"version": "consent-2026-11-05", "accepted": consent},
+            consent={"version": "consent-2026-11-05", "accepted": True},
             number_hmac=number_hmac(number_key(KEY), number),
             number_masked="***-***-" + number[-4:],
             nonce="n" * 22,
             received_at=self.clock(),
         )
         self.contacts.put(applicant.code, number, self.clock())
-        dial = self.ledger.schedule_dial(applicant.code, 1, self.clock() + timedelta(seconds=due_in_s))
+        dial = self.ledger.schedule_dial(applicant.code, attempt, self.clock() + timedelta(seconds=due_in_s))
         return applicant, dial
 
 
@@ -194,20 +208,24 @@ def test_nothing_is_placed_outside_the_applicants_window(tmp_path) -> None:
     assert w.dialler.tick() == "placed"
 
 
-class LaxClaim(FakeLedger):
+class LaxClaim(Ledger):
     """A claim that lets through what DR-025 section 7 says it never will, to prove the dialler checks again."""
 
     def claim_due_dial(self, now, max_per_day, ready):
-        for d in self.dial_rows:
+        for d in self.dials():
             if d["status"] == "due":
-                d.update(status="claimed", claimed_at=now.isoformat())
-                return dict(d)
+                return self.update_dial(d["dial_id"], status="claimed", claimed_at=now)
         return None
 
 
 def test_an_applicant_with_no_consent_is_never_dialled_even_past_a_lax_claim(tmp_path) -> None:
-    w = World(tmp_path, ledger=LaxClaim())
-    applicant, dial = w.apply(consent=False)
+    w = World(tmp_path, ledger_class=LaxClaim)
+    applicant, dial = w.apply()
+
+    def withdraw(doc: dict) -> None:  # the record as another process left it, consent gone after the dial
+        doc["applications"][applicant.code]["consent"]["accepted"] = False
+
+    change_state(w.ledger, withdraw)
     assert w.dialler.tick() == "no consent or opted out"
     assert w.twilio.calls == []
     assert w.ledger.dial(dial["dial_id"])["status"] == "cancelled"
@@ -215,9 +233,23 @@ def test_an_applicant_with_no_consent_is_never_dialled_even_past_a_lax_claim(tmp
 
 
 def test_an_opted_out_applicant_is_never_dialled_by_code_or_by_number(tmp_path) -> None:
-    w = World(tmp_path, ledger=LaxClaim())
+    w = World(tmp_path, ledger_class=LaxClaim)
     applicant, dial = w.apply()
-    w.ledger.opt_outs.append({"code": "ACME-0000", "number_hmac": applicant.number_hmac, "how": "said stop"})
+
+    def stopped(
+        doc: dict,
+    ) -> None:  # an opt-out under another code for the same number, its dials not cancelled
+        doc["opt_outs"].append(
+            {
+                "code": "ACME-0000",
+                "number_hmac": applicant.number_hmac,
+                "at": "x",
+                "call_id": None,
+                "how": "operator",
+            }
+        )
+
+    change_state(w.ledger, stopped)
     assert w.dialler.tick() == "no consent or opted out"
     assert w.twilio.calls == []
     assert w.ledger.dial(dial["dial_id"])["outcome"] == "opted_out"
@@ -234,7 +266,7 @@ def test_a_number_off_the_allow_list_is_never_dialled_even_when_every_other_gate
     assert w.twilio.calls == [] and w.preflight.runs == 0
     cancelled = w.ledger.dial(dial["dial_id"])
     assert (cancelled["status"], cancelled["outcome"]) == ("cancelled", "not_allowed")
-    assert w.ledger.applications[applicant.code]["not_dialled"] == "not_allowed"
+    assert application(w.ledger, applicant.code)["not_dialled"] == "not_allowed"
     assert w.contacts.number(applicant.code) is None
     lines = [r.getMessage() for r in caplog.records if "allow-list" in r.getMessage()]
     assert lines == [f"dial {dial['dial_id']} not placed: ***-***-0142 is not on the allow-list"]
@@ -249,7 +281,7 @@ def test_a_number_off_the_allow_list_is_never_dialled_even_when_every_other_gate
 
 
 def test_a_number_the_store_cannot_vouch_for_is_never_dialled(tmp_path) -> None:
-    w = World(tmp_path, ledger=LaxClaim(), OUTBOUND_ALLOWED_NUMBERS=fictional(142))
+    w = World(tmp_path, ledger_class=LaxClaim, OUTBOUND_ALLOWED_NUMBERS=fictional(142))
     applicant, _ = w.apply()
     w.contacts._write(
         {applicant.code: {"number": " " + fictional(142), "added_at": "x", "delete_after": "x"}}
@@ -307,11 +339,11 @@ def test_the_sweep_deletes_a_number_on_the_first_tick_after_the_retention_with_d
 
 
 def test_one_half_of_the_sweep_failing_never_stops_the_other(tmp_path, caplog) -> None:
-    class NoPurge(FakeLedger):
+    class NoPurge(Ledger):
         def purge_answers(self, before):
             raise OSError("disk full")
 
-    w = World(tmp_path, ledger=NoPurge())
+    w = World(tmp_path, ledger_class=NoPurge)
     applicant, _ = w.apply(due_in_s=10**8)
     w.clock.advance(days=31)
     w.dialler.tick()
@@ -322,8 +354,8 @@ def test_one_half_of_the_sweep_failing_never_stops_the_other(tmp_path, caplog) -
 # The callbacks.
 
 
-def placed(w: World):
-    applicant, dial = w.apply()
+def placed(w: World, attempt: int = 1):
+    applicant, dial = w.apply(attempt=attempt)
     assert w.dialler.tick() == "placed"
     sid = w.ledger.dial(dial["dial_id"])["call_sid"]
     return applicant, dial["dial_id"], sid
@@ -401,8 +433,7 @@ def test_a_machine_on_the_first_attempt_hears_the_voicemail_once_and_the_call_en
 
 def test_a_machine_on_a_later_attempt_and_a_fax_end_the_call_with_no_message(tmp_path) -> None:
     w = World(tmp_path)
-    _applicant, dial_id, sid = placed(w)
-    w.ledger.update_dial(dial_id, attempt=2)
+    _applicant, dial_id, sid = placed(w, attempt=2)
     w.dialler.on_amd({"CallSid": sid, "AnsweredBy": "machine_end_silence"})
     assert w.twilio.updates == [(sid, "<Response><Hangup/></Response>")]
     assert w.ledger.dial(dial_id)["outcome"] == "machine" and not w.ledger.dial(dial_id)["voicemail_left"]
@@ -422,8 +453,7 @@ def test_no_attempt_is_scheduled_past_max_dial_attempts(tmp_path) -> None:
 
 def test_attempt_three_lands_the_next_calling_day_at_the_windows_middle(tmp_path) -> None:
     w = World(tmp_path)
-    applicant, dial_id, sid = placed(w)
-    w.ledger.update_dial(dial_id, attempt=2)
+    applicant, _dial_id, sid = placed(w, attempt=2)
     w.dialler.on_status({"CallSid": sid, "CallStatus": "busy"})
     [third] = [d for d in w.ledger.dials(applicant.code) if d["attempt"] == 3]
     assert third["due_at"] == "2026-11-06T20:30:00+00:00"  # Friday 14:30 Central
@@ -458,14 +488,16 @@ def test_a_callback_for_a_call_with_no_dial_record_changes_nothing(tmp_path) -> 
     ],
 )
 def test_the_sessions_outcome(data, opted, killed, screened, expected) -> None:
-    class Ledger:
-        def opted_out(self, code=None, number_hmac=None):
-            return opted
-
-        def screen(self, code):
-            return {"result": "met"} if screened else None
-
-    assert session_outcome(data, Ledger(), "C", killed) == expected  # type: ignore[arg-type]
+    code = "ACME-3108"  # a fixture applicant for the care-aide role
+    ledger = Ledger(now=lambda: THURSDAY_10_CENTRAL)
+    if screened:
+        for question, value in CARE_AIDE_MET.items():
+            ledger.record_answer(code, question, value, value, "CA1")
+        ledger.set_screen(code, "met", "CA1", None)
+    if opted:
+        ledger.opt_out(code, how="said stop")
+    data = {key: code if value == "C" else value for key, value in data.items()}
+    assert session_outcome(data, ledger, code, killed) == expected
 
 
 def test_a_claim_left_by_a_crash_is_marked_failed_and_retried(tmp_path) -> None:
@@ -527,16 +559,9 @@ def test_the_sweep_deletes_the_number_of_an_application_that_opted_out_or_was_fo
 
 
 def test_a_next_attempt_the_ledger_refuses_is_let_go(tmp_path, caplog) -> None:
-    from candidate_line.tools.ledger import LedgerError
-
-    class Refusing(FakeLedger):
-        def schedule_dial(self, code, attempt, due_at):
-            if attempt > 1:
-                raise LedgerError("not_dialable", "This application is not dialled (not_allowed).")
-            return super().schedule_dial(code, attempt, due_at)
-
-    w = World(tmp_path, ledger=Refusing())
+    w = World(tmp_path)
     applicant, _, sid = placed(w)
+    w.ledger.set_not_dialled(applicant.code, "not_allowed")  # the ledger now refuses any dial for it
     with caplog.at_level(logging.INFO):
         w.dialler.on_status({"CallSid": sid, "CallStatus": "busy"})
     assert len(w.ledger.dials(applicant.code)) == 1

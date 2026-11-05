@@ -146,6 +146,17 @@ def run_turn(
     tier3_before = len(ctx.data.get("tier3") or ())
     heard = hooks.on_turn(ctx, user_text)
     heard = user_text if heard is None else heard
+    if ctx.data.pop("not_a_turn", False):
+        # Hello words before the PIN once the PIN ask has been said twice (spec 9.7): not a turn, so no model call,
+        # no reply and nothing in the history, as the phone lets them go (telephony/media.py).
+        return TurnResult(
+            heard=heard,
+            spoken="",
+            reply=_fold((), brain),
+            tools_called=(),
+            state=_current_state(ctx),
+            tier="1",
+        )
     ctx.history.append(Message("user", heard))
     if ctx.channel == "text":
         # On a call media.py writes the heard span, with the transcriber's confidence and lag (card 03).

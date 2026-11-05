@@ -3,20 +3,16 @@ PIN, the intro and the questions said by code, "Noted:" after each answer, the u
 line whole, the not-met line and its hand-off, the gate in book_slot and list_open_slots, the second PIN miss and
 the stop.
 
-The ledger: lane C owns tools/ledger.py, and until its commit lands the Ledger there has no applicant surface, so
-these tests run on FakeLedger below, written to DR-025 section 7's method names and shapes. Once the real Ledger
-has every method the tests use, `make_ledger` picks it instead, so the same tests hold lane C's ledger to the
-contract. Every ledger pins its clock to the evening before the first interview slot (the eval runner's
+The ledger is the real in-memory Ledger (DR-025 section 7), so these tests hold the tools and the ledger to the
+contract together. Every ledger pins its clock to the evening before the first interview slot (the eval runner's
 EVAL_CLOCK), so no test waits for the calendar.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 import re
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -38,14 +34,10 @@ from candidate_line.persona import (
 from candidate_line.tools import OUTBOUND_TOOL_SPECS, TOOL_SPECS, actions, screening
 from candidate_line.tools.codes import code_digits, spoken_digits
 from candidate_line.tools.ledger import (
-    MAX_LISTED,
-    DayFilter,
     Ledger,
     LedgerError,
-    Slot,
-    normalise_slot_id,
 )
-from candidate_line.tools.roles import DATA, ROLES_PATH, Role, load_roles, spoken_value
+from candidate_line.tools.roles import DATA, Role, load_roles, spoken_value
 from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, TurnResult, run_turn
 
@@ -64,214 +56,8 @@ MET_AIDE = {"q1": "yes", "q2": "weekends", "q3": "25", "q4": "yes", "q5": "yes"}
 TEST_NUMBER = "+15555550142"  # a fictional 555-01xx number, injected at run time (DR-025 section 6)
 
 
-# The fake ledger: DR-025 section 7's applicant surface, in memory, over the committed fixtures.
-
-
-@dataclass(frozen=True)
-class FakeApplicant:
-    code: str
-    first_name: str
-    role: str
-    zone: str
-    received_at: str
-    consent: dict[str, Any]
-    number_hmac: str | None = None
-
-    @property
-    def consented(self) -> bool:
-        return bool(self.consent.get("accepted"))
-
-
-class FakeLedger(Ledger):
-    """The real Ledger for candidates and first-round slots, and DR-025 section 7's methods for applicants."""
-
-    def __init__(self, now: datetime = NOW) -> None:
-        super().__init__(now=lambda: now)
-        self._apps = {
-            a["code"]: FakeApplicant(
-                a["code"], a["first_name"], a["role"], a["zone"], a["applied_at"], dict(a["consent"])
-            )
-            for a in APPLICATIONS
-        }
-        self._app_pins = {a["code"]: str(a["pin"]) for a in APPLICATIONS}
-        doc = yaml.safe_load(ROLES_PATH.read_text(encoding="utf-8"))
-        rows = [
-            Slot(
-                str(s["id"]),
-                datetime.fromisoformat(str(s["start"])),
-                int(s["duration_min"]),
-                str(s["recruiter"]),
-                str(s["status"]),
-                None,
-            )
-            for s in doc["interview_slots"]
-        ]
-        self._interview = {s.id: s for s in sorted(rows, key=lambda s: s.start)}
-        self._recorded: dict[str, dict[str, dict[str, Any]]] = {}
-        self._screens: dict[str, dict[str, Any]] = {}
-        self._stops: list[dict[str, Any]] = []
-        self._held: dict[str, str] = {}
-        self._dial_rows: list[dict[str, Any]] = []
-
-    def applicant(self, code: object) -> FakeApplicant | None:
-        digits = code_digits(code)
-        return next((a for c, a in self._apps.items() if code_digits(c) == digits), None) if digits else None
-
-    def match(self, code: str, pin: str) -> Any:
-        return super().match(code, pin) or self.match_applicant_pin(code, pin)
-
-    def match_applicant_pin(self, code: str, pin: str) -> FakeApplicant | None:
-        found = self.applicant(code)
-        return found if found is not None and self._app_pins[found.code] == pin else None
-
-    def answers(self, code: str) -> dict[str, dict[str, Any]]:
-        return copy.deepcopy(self._recorded.get(code, {}))
-
-    def record_answer(
-        self, code: str, question_id: str, value: str, heard: str, call_id: str | None
-    ) -> dict[str, Any] | None:
-        book = self._recorded.setdefault(code, {})
-        previous = copy.deepcopy(book.get(question_id))
-        book[question_id] = {"value": value, "heard": heard, "at": self._stamp_now(), "call_id": call_id}
-        return previous
-
-    def restore_answer(self, code: str, question_id: str, previous: dict[str, Any] | None) -> None:
-        if previous is None:
-            self._recorded.get(code, {}).pop(question_id, None)
-        else:
-            self._recorded.setdefault(code, {})[question_id] = previous
-
-    def screen(self, code: str) -> dict[str, Any] | None:
-        return copy.deepcopy(self._screens.get(code))
-
-    def set_screen(self, code: str, result: str, call_id: str | None, promised_by: str | None) -> None:
-        self._screens[code] = {
-            "result": result,
-            "at": self._stamp_now(),
-            "call_id": call_id,
-            "promised_by": promised_by,
-        }
-
-    def clear_screen(self, code: str) -> None:
-        self._screens.pop(code, None)
-
-    def schedule_dial(self, code: str, attempt: int, due_at: datetime) -> dict[str, Any]:
-        row = {"dial_id": f"D-{len(self._dial_rows):012x}", "code": code, "attempt": attempt, "status": "due"}
-        row["due_at"] = due_at.astimezone(UTC).isoformat(timespec="seconds")
-        self._dial_rows.append(row)
-        return dict(row)
-
-    def dials(self, code: str | None = None) -> list[dict[str, Any]]:
-        return [dict(d) for d in self._dial_rows if code is None or d["code"] == code]
-
-    def opt_out(self, code: str, how: str, call_id: str | None = None, number_hmac: str | None = None) -> int:
-        cancelled = 0
-        for row in self._dial_rows:
-            if row["code"] == code and row["status"] == "due":
-                row["status"], row["outcome"], cancelled = "cancelled", "opted_out", cancelled + 1
-        self._stops.append(
-            {
-                "code": code,
-                "number_hmac": number_hmac,
-                "at": self._stamp_now(),
-                "call_id": call_id,
-                "how": how,
-            }
-        )
-        return cancelled
-
-    def opted_out(self, code: str | None = None, number_hmac: str | None = None) -> bool:
-        return any(
-            s["code"] == code or (number_hmac and s["number_hmac"] == number_hmac) for s in self._stops
-        )
-
-    def open_slots(
-        self, day: DayFilter | None = None, limit: int = MAX_LISTED, recruiter: str | None = None
-    ) -> list[Slot]:
-        if recruiter is None:
-            return super().open_slots(day, limit)
-        held = set(self._held.values())
-        return [
-            s
-            for s in self._interview.values()
-            if s.interviewer == recruiter
-            and s.status == "open"
-            and s.id not in held
-            and s.start > self._now()
-            and (day is None or day.matches(s.start))
-        ][:limit]
-
-    def find_slot(self, text: object) -> Slot | None:
-        found = super().find_slot(text)
-        sid = normalise_slot_id(text)
-        return found or (self._interview.get(sid) if sid else None)
-
-    def booked_slot(self, code: str) -> Slot | None:
-        if code in self._apps:
-            sid = self._held.get(code)
-            return self._interview.get(sid) if sid else None
-        return super().booked_slot(code)
-
-    def book(self, code: str, slot_id: object, call_id: str | None = None) -> Slot:
-        if code not in self._apps:
-            return super().book(code, slot_id, call_id)
-        screen = self._screens.get(code)
-        if not screen or screen["result"] != "met":
-            raise LedgerError("screen_not_met", "This applicant's screen is not met, so nothing is booked.")
-        if code in self._held:
-            raise LedgerError("already_booked", "This applicant already holds a slot.")
-        sid = normalise_slot_id(slot_id)
-        slot = self._interview.get(sid) if sid else None
-        if slot is None:
-            raise LedgerError("unknown_slot", "There is no slot with that id.")
-        if slot.id in self._held.values() or slot.start <= self._now():
-            raise LedgerError("not_open", "That slot is not open.")
-        self._held[code] = slot.id
-        return slot
-
-    def unbook(self, code: str, slot_id: str) -> bool:
-        if code not in self._apps:
-            return super().unbook(code, slot_id)
-        if self._held.get(code) != slot_id:
-            return False
-        del self._held[code]
-        return True
-
-    def state(self, code: str) -> dict[str, Any]:
-        if code not in self._apps:
-            return super().state(code)
-        role = ROLES[self._apps[code].role]
-        recorded = self._recorded.get(code, {})
-        screen = self._screens.get(code)
-        return {
-            "booked_slot": self._held.get(code),
-            "answers_recorded": len(recorded),
-            "questions_left": sum(1 for q in role.questions if q.id not in recorded),
-            "screen": screen["result"] if screen else None,
-            "opted_out": self.opted_out(code),
-            "dials_due": sum(1 for d in self._dial_rows if d["code"] == code and d["status"] == "due"),
-            "callback_requested": any(c.get("code") == code for c in self.callbacks()),
-        }
-
-
-_CONTRACT = (
-    "applicant",
-    "match_applicant_pin",
-    "answers",
-    "record_answer",
-    "restore_answer",
-    "screen",
-    "set_screen",
-    "clear_screen",
-    "schedule_dial",
-    "opt_out",
-    "opted_out",
-)
-REAL_LEDGER = all(hasattr(Ledger, name) for name in _CONTRACT)
-
-
 def make_ledger(now: datetime = NOW) -> Ledger:
-    return Ledger(now=lambda: now) if REAL_LEDGER else FakeLedger(now)
+    return Ledger(now=lambda: now)
 
 
 # The scripted brain and the call.

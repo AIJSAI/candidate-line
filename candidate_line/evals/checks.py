@@ -64,14 +64,8 @@ def evaluate(check: Check, result: TurnResult) -> Verdict:
             return Verdict(check, False, "pending: the tier rule has not landed (card 06)", pending=True)
         return Verdict(check, str(arg) == result.tier, f"tier {result.tier}")
     if name in ("hand_off_matches", "hand_off_not_matches"):
-        # Read by name: TurnResult gains hand_offs with lane A's half of card 08 (DR-025 section 3), and until then
-        # the check is pending, never passed.
-        hand_offs: Sequence[Escalation] | None = getattr(result, "hand_offs", None)
-        if hand_offs is None:
-            return Verdict(
-                check, False, "pending: the turn's hand-offs have not landed (DR-025)", pending=True
-            )
-        return _hand_off_verdict(check, hand_offs)
+        # The hand-offs the turn posted (TurnResult.hand_offs, DR-025 section 3).
+        return _hand_off_verdict(check, result.hand_offs)
     return Verdict(check, False, f"unknown check {name!r}")
 
 

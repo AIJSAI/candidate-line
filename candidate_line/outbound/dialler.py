@@ -25,7 +25,7 @@ from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfoNotFoundError
 
 from candidate_line import hooks
-from candidate_line.outbound import Applicant, OutboundLedger, voicemail_line
+from candidate_line.outbound import Applicant, Ledger, voicemail_line
 from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.window import in_window, next_attempt
 from candidate_line.settings import Settings
@@ -79,7 +79,7 @@ def is_access_denied(error: BaseException) -> bool:
     return "AccessDenied" in str(code) or "AccessDenied" in type(error).__name__
 
 
-def _mark_not_dialled(ledger: OutboundLedger, code: str) -> None:
+def _mark_not_dialled(ledger: Ledger, code: str) -> None:
     """Records on the application that its number is off the allow-list, for the cockpit's "not dialled" and so
     no later attempt is ever scheduled for it. The dial is already cancelled and the number deleted before this
     runs, so a failure here is logged and never undoes either."""
@@ -93,10 +93,10 @@ def _machine(answered_by: object) -> bool:
     return str(answered_by or "").startswith("machine")
 
 
-def session_outcome(data: Mapping[str, Any], ledger: OutboundLedger, code: str, killed: bool) -> str:
+def session_outcome(data: Mapping[str, Any], ledger: Ledger, code: str, killed: bool) -> str:
     """The dial's outcome from what the media session's call did (DR-025 section 8). The PIN match is the
     session's `candidate`, which `confirm_applicant` sets; two misses are the shared `verify_failures`; an opt-out
-    on the call leaves its `how` in `opted_out` (lane A's `screening.record_opt_out`)."""
+    on the call leaves its `how` in `opted_out` (`screening.record_opt_out`)."""
     if data.get("opted_out") or ledger.opted_out(code=code):
         return "wrong_person" if data.get("opted_out") == "wrong person" else "opted_out"
     confirmed = data.get("candidate") == code
@@ -111,12 +111,12 @@ def session_outcome(data: Mapping[str, Any], ledger: OutboundLedger, code: str, 
 
 class Dialler:
     """The tick, the dial and the callbacks. `run` is the lifespan task; everything else is a plain method the
-    tests call with a fake ledger, a fake Twilio and a pinned clock."""
+    tests call with the real ledger on a scratch file, a fake Twilio and a pinned clock."""
 
     def __init__(
         self,
         settings: Settings,
-        ledger: Callable[[], OutboundLedger],
+        ledger: Callable[[], Ledger],
         contacts: Contacts,
         twilio: TwilioRest | None,
         clock: Callable[[], datetime],
@@ -218,7 +218,7 @@ class Dialler:
 
         return ready
 
-    def _place(self, ledger: OutboundLedger, dial: dict[str, Any], now: datetime) -> str:
+    def _place(self, ledger: Ledger, dial: dict[str, Any], now: datetime) -> str:
         dial_id, code = str(dial["dial_id"]), str(dial["code"])
         applicant = ledger.applicant(code)
         if applicant is None:
@@ -266,7 +266,7 @@ class Dialler:
         return self._dial(ledger, dial, applicant, number, now)
 
     def _dial(
-        self, ledger: OutboundLedger, dial: dict[str, Any], applicant: Applicant, number: str, now: datetime
+        self, ledger: Ledger, dial: dict[str, Any], applicant: Applicant, number: str, now: datetime
     ) -> str:
         dial_id = str(dial["dial_id"])
         base = str(self._settings.public_base_url).rstrip("/")
@@ -299,15 +299,15 @@ class Dialler:
         )
         return "placed"
 
-    def _cancel(self, ledger: OutboundLedger, dial_id: str, outcome: str, now: datetime) -> None:
+    def _cancel(self, ledger: Ledger, dial_id: str, outcome: str, now: datetime) -> None:
         ledger.update_dial(dial_id, status="cancelled", outcome=outcome, ended_at=stamp(now))
 
-    def _release(self, ledger: OutboundLedger, dial_id: str) -> None:
+    def _release(self, ledger: Ledger, dial_id: str) -> None:
         """Hands a claim back, so the dial is due again on a later tick."""
         ledger.update_dial(dial_id, status="due", claimed_at=None, placed_at=None)
 
     def _schedule_next(
-        self, ledger: OutboundLedger, dial: Mapping[str, Any], applicant: Applicant | None, made_at: datetime
+        self, ledger: Ledger, dial: Mapping[str, Any], applicant: Applicant | None, made_at: datetime
     ) -> None:
         """The next attempt after one that reached nobody, while attempts remain and nobody opted out."""
         code = str(dial["code"])
@@ -329,7 +329,7 @@ class Dialler:
             return
         log.info("attempt %d for %s scheduled", attempt + 1, code)
 
-    def _recover(self, ledger: OutboundLedger, now: datetime) -> None:
+    def _recover(self, ledger: Ledger, now: datetime) -> None:
         """Ends a dial left in flight by a lost callback or a crash, so one lost message never stops the dialler."""
         limit = timedelta(
             seconds=self._settings.max_outbound_call_seconds + TIME_LIMIT_MARGIN_S + RING_TIMEOUT_S + 120
@@ -354,7 +354,7 @@ class Dialler:
                 if now - placed > 2 * limit:
                     self._lost(ledger, d, now, "no end heard from Twilio")
 
-    def _lost(self, ledger: OutboundLedger, d: Mapping[str, Any], now: datetime, why: str) -> None:
+    def _lost(self, ledger: Ledger, d: Mapping[str, Any], now: datetime, why: str) -> None:
         ledger.update_dial(str(d["dial_id"]), status="failed", outcome="failed", ended_at=stamp(now))
         log.warning("dial %s marked failed: %s", d.get("dial_id"), why)
         self._schedule_next(ledger, d, ledger.applicant(str(d["code"])), _parse(d.get("placed_at")) or now)

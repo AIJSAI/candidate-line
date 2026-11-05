@@ -21,9 +21,9 @@ from candidate_line.telephony.app import (
     twilio_signature,
     twiml_closed,
 )
-from candidate_line.tools.ledger import Ledger
+from candidate_line.tools.ledger import Ledger, LedgerError
 from candidate_line.traces.store import TraceStore
-from tests.outbound_fakes import FakeLedger, fictional
+from tests.outbound_support import application, everything, fictional, scratch_ledger
 
 # Twilio's documented example (security page, read 2026-11-01): auth token 12345, this URL and these fields.
 DOC_URL = "https://example.com/myapp.php?foo=1&bar=2"
@@ -308,8 +308,8 @@ def test_the_warm_up_opens_the_speech_clients_before_the_first_call() -> None:
     assert transcriber.started and transcriber.stopped
 
 
-# The outbound /voice and its callbacks (DR-025 section 12; fixes 7, 8 and 13). The ledger is
-# tests/outbound_fakes.FakeLedger until lane C's lands; numbers are fictional 555-01xx ones made at run time.
+# The outbound /voice and its callbacks (DR-025 section 12; fixes 7, 8 and 13), on the real ledger over a scratch
+# state file; numbers are fictional 555-01xx ones made at run time.
 KEY = "test-signing-key"
 TOKEN = "12345"
 BASE = "https://line.example"
@@ -325,10 +325,10 @@ class FakeTwilio:
 
 
 class Outbound:
-    """The phone app over a fake ledger holding one placed dial, with Twilio's signature checked."""
+    """The phone app over the real ledger, holding the dials a test places, with Twilio's signature checked."""
 
     def __init__(self, tmp_path, **env: str) -> None:
-        self.ledger = FakeLedger(now=lambda: NOW)
+        self.ledger = scratch_ledger(tmp_path / "state.json", KEY, lambda: NOW)
         self.store = TraceStore(":memory:")
         self.twilio = FakeTwilio()
         self.contacts = Contacts(tmp_path / "contacts.json")
@@ -384,7 +384,7 @@ def test_an_outbound_call_with_no_dial_record_is_hung_up(tmp_path) -> None:
         answer = line.post(path, outbound_form())
         assert answer.status_code == 200
         assert answer.text == '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
-    assert line.store.call("CA77") is None and line.ledger.calls == {}
+    assert line.store.call("CA77") is None and line.ledger.calls_today() == 0
 
 
 def test_an_outbound_call_found_by_the_signed_dial_id_is_bound_and_answered_with_the_opening(
@@ -408,7 +408,7 @@ def test_an_outbound_call_found_by_the_signed_dial_id_is_bound_and_answered_with
     assert '<Parameter name="channel" value="outbound" />' in twiml
     assert line.ledger.dial(dial_id)["call_sid"] == "CA77"
     # Skips the inbound count, and the call row is the outbound channel with the applicant's masked number (fix 7).
-    assert line.ledger.calls == {}
+    assert line.ledger.calls_today() == 0
     row = line.store.call("CA77")
     assert row is not None and row.channel == "outbound" and row.caller_masked == "***-***-0142"
 
@@ -444,7 +444,7 @@ def test_an_outbound_call_whose_to_is_not_on_the_allow_list_is_hung_up(tmp_path,
     assert "<Hangup/>" in answer.text and "<Say" not in answer.text
     dial = line.ledger.dial(dial_id)
     assert (dial["status"], dial["outcome"]) == ("cancelled", "not_allowed")
-    assert line.ledger.applications[code]["not_dialled"] == "not_allowed"
+    assert application(line.ledger, code)["not_dialled"] == "not_allowed"
     assert line.store.call("CA77").outcome == "hung up: not_allowed"
     assert all(fictional(142)[-7:] not in r.getMessage() for r in caplog.records)
 
@@ -520,14 +520,23 @@ def _roles() -> dict[str, dict]:
 
 def test_the_opening_names_each_fixture_applicant_and_nothing_else_from_the_record(tmp_path) -> None:
     roles = _roles()
+    fixtures = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent / "data" / "applications.yaml").read_text()
+    )
     line = Outbound(tmp_path)
-    for n, (code, applicant) in enumerate(line.ledger.fixtures.items()):
+    for n, row in enumerate(fixtures["applications"]):
+        code = row["code"]
+        applicant = line.ledger.applicant(code)
+        assert applicant is not None
+        if not applicant.consented:
+            # No consent: the ledger never holds a dial for it, so no opening is ever said.
+            with pytest.raises(LedgerError) as refused:
+                line.ledger.schedule_dial(code, 1, NOW)
+            assert refused.value.kind == "not_dialable"
+            continue
         dial = line.ledger.schedule_dial(code, 1, NOW)
         line.ledger.update_dial(dial["dial_id"], status="placed")
         twiml = line.post(f"/voice?dial={dial['dial_id']}", outbound_form(sid=f"CA9{n}")).text
-        if not applicant.consented:
-            assert "<Hangup/>" in twiml  # no consent: never an opening at all
-            continue
         [opening] = re.findall(r"<Say[^>]*>(.+?)</Say>", twiml)
         assert f"calling for {applicant.first_name} about a job application" in opening
         role = roles[applicant.role]
@@ -537,7 +546,7 @@ def test_the_opening_names_each_fixture_applicant_and_nothing_else_from_the_reco
             assert question["asks"] not in opening and question["say"] not in opening
             for option in question.get("options") or ():
                 assert option["say"] not in opening
-        assert line.ledger.fixture_pins[code] not in opening
+        assert str(row["pin"]) not in opening
 
 
 def test_a_full_scripted_outbound_call_leaves_the_raw_number_in_no_span_log_post_or_cockpit_page(
@@ -554,7 +563,6 @@ def test_a_full_scripted_outbound_call_leaves_the_raw_number_in_no_span_log_post
     from candidate_line.escalation import EscalationQueue
     from candidate_line.outbound.intake import signed_headers
     from candidate_line.telephony.speech import FakeSpeaker, ScriptedTranscriber
-    from candidate_line.tools import TOOL_SPECS
     from candidate_line.traces.cockpit import create_cockpit
 
     number = fictional(142)
@@ -621,7 +629,7 @@ def test_a_full_scripted_outbound_call_leaves_the_raw_number_in_no_span_log_post
             raise AssertionError("a person answered; nothing is updated")
 
     clock, store, posts, twilio = Clock(), TraceStore(":memory:"), Posts(), Twilio()
-    ledger = FakeLedger(now=clock)
+    ledger = scratch_ledger(tmp_path / "state.json", KEY, clock)
     transcriber, speaker, brain = ScriptedTranscriber(), FakeSpeaker(), Brain()
     escalations = EscalationQueue(store, posts)
     deps = Deps(
@@ -635,7 +643,6 @@ def test_a_full_scripted_outbound_call_leaves_the_raw_number_in_no_span_log_post
         contacts=Contacts(tmp_path / "contacts.json"),
         twilio=twilio,  # type: ignore[arg-type]
         clock=clock,
-        outbound_tools=tuple(s for s in TOOL_SPECS if s.name in ("request_callback", "end_call")),
     )
     settings = Settings.from_env(
         {
@@ -736,19 +743,21 @@ def test_a_full_scripted_outbound_call_leaves_the_raw_number_in_no_span_log_post
     spans = [f"{s.kind} {s.name} {s.text} {json.dumps(s.meta)}" for s in store.spans(sid)]
     rows = [repr(store.call(sid))] + [repr(e) for e in store.escalations()]
     logs = [r.getMessage() for r in caplog.records] + [caplog.text]
-    everything = spans + rows + posts.texts + logs + pages + seen + [ledger.everything()]
+    written = spans + rows + posts.texts + logs + pages + seen + [everything(ledger)]
     # The call really ran: the PIN turn, the hand-off and the masked number are all there.
     assert any("request_callback" in s for s in spans) and posts.texts, (spans, posts.texts)
     assert store.call(sid).channel == "outbound" and store.call(sid).caller_masked == "***-***-0142"
-    # No PIN matched (the scripted brain never calls confirm_applicant), and "stop" ended the call: before lane A's
-    # hooks land that is the inbound stop; with them it is an opt-out.
-    assert ledger.dial(dial_id)["outcome"] in ("hung_up_before_pin", "opted_out")
+    # No PIN matched (the scripted brain never calls confirm_applicant), and "stop" on an outbound call is an
+    # opt-out: the outbound stop line, every dial cancelled and the number deleted at once (spec 9.12).
+    assert ledger.dial(dial_id)["outcome"] == "opted_out" and ledger.opted_out(code=ledger.dials()[0]["code"])
+    assert "Understood. This line won't call this number again. Goodbye." in " ".join(speaker.said)
+    assert deps.contacts is not None and deps.contacts.codes() == ()
     assert any("partial" in r.getMessage() for r in caplog.records)  # the DEBUG lines were read too
 
     # The exchange and line digits with any separators between them, and the same seven digits spelled out.
     digits = re.compile(r"\D{0,3}".join(number[-7:]))
     words = re.compile("(?i)" + r"\W+".join(names[int(d)] for d in number[-7:]))
-    for text in everything:
+    for text in written:
         assert number not in text
         assert not digits.search(text), text
         assert not words.search(text), text

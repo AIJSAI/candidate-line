@@ -25,9 +25,8 @@ from typing import Any
 
 from candidate_line.brain import Brain, ToolSpec
 from candidate_line.escalation import EscalationQueue
-from candidate_line.hooks import Hooks
-from candidate_line.outbound import PIN_ASK
-from candidate_line.persona import RECOVERY_LINE, length_line
+from candidate_line.hooks import MAX_HELLO_ASKS, Hooks, awaits_pin, is_hello
+from candidate_line.persona import PIN_ASK, RECOVERY_LINE, length_line
 from candidate_line.settings import DEFAULT_MAX_CALL_SECONDS
 from candidate_line.telephony.audio import (
     decode_twilio_payload,
@@ -37,6 +36,7 @@ from candidate_line.telephony.audio import (
     split_sentences,
 )
 from candidate_line.telephony.speech import Heard, Speaker, Transcriber
+from candidate_line.text import FILLERS
 from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import TraceStore
 from candidate_line.turn import TurnContext, run_silence, run_turn
@@ -65,11 +65,6 @@ GRACE_BACKSTOP_MS = 2000  # a partial that never becomes a final still releases 
 SILENCE_AFTER_S = 6.0
 _HANDOVER_MARKS = ("?", "!")
 
-# Sounds a caller makes while thinking. On a real call on 2026-11-04 the caller's "Um," cut Gus off mid-sentence and
-# then became a turn of its own that Gus answered. So a transcript made only of these is not speech: it never barges
-# in, never supersedes a turn, never holds the turn open and never becomes one. "Mm-hmm" and "uh-huh" are not here
-# because callers say them for yes.
-FILLERS = frozenset({"um", "uh", "hmm", "mm", "mhm", "er", "erm", "ah", "huh"})
 # "Uh huh" and "mm hmm" written as two words are still a caller's yes, and "huh?" asks Gus to say it again, so
 # none of them is dropped even though each word alone is a filler.
 _NOT_FILLER = re.compile(r"(?i)^\W*(?:uh\W*huh|mm\W*hmm|huh\W*\?)\W*$")
@@ -81,35 +76,6 @@ _NOT_FILLER = re.compile(r"(?i)^\W*(?:uh\W*huh|mm\W*hmm|huh\W*\?)\W*$")
 _DIGIT_WORD = r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
 _DIGIT_RUN = re.compile(r"\d(?:[ ,.\-]{0,2}\d){2,}")
 _DIGIT_WORD_RUN = re.compile(rf"\b{_DIGIT_WORD}(?:[ ,.\-]{{1,2}}{_DIGIT_WORD}){{2,}}\b", re.IGNORECASE)
-
-
-# What a person says on picking up, before they know a PIN is wanted (spec 9.7, DR-025 section 14). "This is
-# {first name}" counts too, since the opening has just said that name.
-HELLO_WORDS = frozenset({"hello", "hi", "hey", "yes", "yeah", "speaking"})
-HELLO_PHRASES = ("this is she", "this is he")
-# The PIN ask said again by code for hello words, at most this many times on a call.
-MAX_HELLO_ASKS = 2
-
-
-def _words(text: str) -> list[str]:
-    return [
-        w for w in ("".join(ch for ch in token if ch.isalnum()).casefold() for token in text.split()) if w
-    ]
-
-
-def is_hello(text: str, first_name: str = "") -> bool:
-    """True when every word is a hello word, a filler or the applicant's first name, and at least one is not a
-    filler. "Hello, this is Lerato" is one; "hello, my PIN is 4398" is not."""
-    words = _words(text)
-    if not words or all(w in FILLERS for w in words):
-        return False
-    names = _words(first_name.replace("-", " "))
-    phrases = [*HELLO_PHRASES, *(f"this is {name}" for name in names)]
-    joined = f" {' '.join(words)} "
-    for phrase in sorted(phrases, key=len, reverse=True):
-        joined = joined.replace(f" {phrase} ", " ")
-    allowed = HELLO_WORDS | FILLERS | set(names)
-    return all(w in allowed for w in joined.split())
 
 
 def is_filler(text: str) -> bool:
@@ -327,6 +293,8 @@ class MediaSession:
         if elapsed < self._max_call_s:
             return False
         self._capped = True
+        # Read by the call-end hook, which writes up a screen the cap left unfinished (spec section 7).
+        self.ctx.data["length_capped"] = True
         log.info("length cap %s after %.0f s", self.ctx.call_id, elapsed)
         # A hook span and not a kill span: the line is open, and only this call has run its length.
         self._trace(
@@ -518,9 +486,9 @@ class MediaSession:
                 await self._end_at_length_cap()
 
     def _hello_before_pin(self, text: str) -> bool:
-        """An outbound call whose PIN has not matched, hearing only hello words. `confirm_applicant` sets the
-        call's `candidate` on the match, and from then on hello is a word like any other."""
-        if self._outbound is None or self.ctx.data.get("candidate"):
+        """An outbound call whose PIN is still wanted, hearing only hello words. `confirm_applicant` sets the
+        call's `candidate` on the match, and after the match or the second miss hello is a word like any other."""
+        if self._outbound is None or not awaits_pin(self.ctx):
             return False
         return is_hello(text, str(self._outbound.get("first_name") or ""))
 

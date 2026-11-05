@@ -494,10 +494,10 @@ def _lock_for(state_path: Path | None) -> threading.RLock:
 
 
 def _pin_key(settings: Settings) -> bytes | None:
-    """The PIN key from INTAKE_SIGNING_KEY. Read by name, because the setting arrives with lane B's half of card 08
-    (DR-025 section 11) and the ledger lands first; without it no intake application can be stored or matched."""
-    root = getattr(settings, "intake_signing_key", None)
-    return derive_key(root, PIN_PURPOSE) if isinstance(root, str) and root else None
+    """The PIN key from INTAKE_SIGNING_KEY (DR-025 section 11); without it no intake application can be stored or
+    matched."""
+    root = settings.intake_signing_key
+    return derive_key(root, PIN_PURPOSE) if root else None
 
 
 class Ledger:
@@ -978,6 +978,22 @@ class Ledger:
                 overlay["answers"][key]["screen"] = None
 
             self._commit(change)
+
+    def set_not_dialled(self, code: str, reason: str) -> None:
+        """Records why an intake application is never dialled when the reason is found after intake: the dialler's
+        allow-list check at dial time and /voice's (DR-025 section 12, fix 13), so the cockpit shows it and no
+        later attempt is scheduled. A fixture keeps its row in data/, which is never rewritten, so nothing changes
+        for one."""
+        if reason not in NOT_DIALLED_REASONS:
+            raise LedgerError(
+                "bad_reason", f"A reason not to dial is one of {', '.join(NOT_DIALLED_REASONS)}."
+            )
+        with self._exclusive():
+            key = self._canonical(code)
+            record = self._overlay["applications"].get(key)
+            if not isinstance(record, dict) or record.get("removed") or record.get("not_dialled") == reason:
+                return
+            self._commit(lambda overlay: overlay["applications"][key].__setitem__("not_dialled", reason))
 
     def opt_out(self, code: str, how: str, call_id: str | None = None, number_hmac: str | None = None) -> int:
         """Records that no more calls go to this applicant or this number, and cancels every dial still due to
@@ -1543,13 +1559,11 @@ def forget_everywhere(ledger: Ledger, code: str, delete_contact: Callable[[str],
 
 
 def _contacts_deleter(settings: Settings) -> Callable[[str], bool]:
-    """Contacts.delete over CONTACTS_PATH (DR-025 section 9). The store arrives with lane B's half of card 08; a
-    build without it holds no raw number anywhere, so there is nothing for this step to delete there."""
-    try:
-        from candidate_line.outbound.contacts import Contacts
-    except ImportError:
-        return lambda code: False
-    path = getattr(settings, "contacts_path", None)
+    """Contacts.delete over CONTACTS_PATH (DR-025 section 9)."""
+    # Imported here: the outbound package imports the tools, which import this module.
+    from candidate_line.outbound.contacts import Contacts
+
+    path = settings.contacts_path
     if not path:
         raise LedgerError("no_contacts_path", "CONTACTS_PATH is not set, so the number cannot be deleted.")
     store = Contacts(Path(str(path)))

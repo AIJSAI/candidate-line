@@ -26,8 +26,8 @@ from candidate_line.persona import (
     PIN_ASK,
     STOP_LINE,
 )
-from candidate_line.text import straighten
-from candidate_line.tools import screening
+from candidate_line.text import FILLERS, straighten
+from candidate_line.tools import MAX_VERIFY_ATTEMPTS, screening
 from candidate_line.tools.actions import _ledger
 from candidate_line.tools.codes import normalise_transcript
 
@@ -76,9 +76,13 @@ _OPT_OUT = re.compile(
     r"\b(?:don't call me|do not call me|stop calling|take me off|wrong number|not me|you have the wrong person)\b"
 )
 _WRONG_PERSON = re.compile(r"\b(?:wrong number|not me|you have the wrong person)\b")
-# Before the PIN matches, a transcript made only of these is a person picking up, not a turn for the model (spec
-# 9.7, DR-025 section 14): it gets the PIN ask by code, at most twice a call, and a third goes to the model.
-_HELLO_WORDS = ("hello", "hi", "hey", "yes", "yeah", "speaking", "this is she", "this is he")
+# What a person says on picking up, before they know a PIN is wanted (spec 9.7, DR-025 section 14). "This is
+# {first name}" counts too, since the opening has just said that name. Before the PIN matches, a transcript made
+# only of these, fillers and the first name is not a turn: it gets the PIN ask by code, at most MAX_HELLO_ASKS
+# times a call, and after that no reply and no model call. The media session reads the same rule, so the phone
+# and text mode treat a hello alike.
+HELLO_WORDS = frozenset({"hello", "hi", "hey", "yes", "yeah", "speaking"})
+HELLO_PHRASES = ("this is she", "this is he")
 MAX_HELLO_ASKS = 2
 _SPELLED_DIGIT = re.compile(r"\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b", re.IGNORECASE)
 _WORD_TO_DIGIT = {
@@ -205,12 +209,19 @@ class LineHooks:
         return True
 
     def _hello(self, ctx: TurnContext, text: str) -> bool:
+        """Hello words on an outbound call while the PIN is wanted: the PIN ask again by code, twice a call at
+        most, and then not a turn at all (`not_a_turn`), as the media session lets them go. True when it answered
+        them."""
         seed = screening.dialled(ctx)
-        if seed is None or ctx.data.get("candidate"):
+        if seed is None or not awaits_pin(ctx):
+            return False
+        if not is_hello(text, str(seed.get("first_name") or "")):
             return False
         asked = int(ctx.data.get("hello_asks", 0))
-        if asked >= MAX_HELLO_ASKS or not is_hello(text, str(seed.get("first_name") or "")):
-            return False
+        if asked >= MAX_HELLO_ASKS:
+            ctx.data["not_a_turn"] = True
+            _span(ctx, "hook", "hello", text="hello words before the PIN; let go", meta={"hello_asks": asked})
+            return True
         ctx.data["hello_asks"] = asked + 1
         ctx.data["say"] = PIN_ASK
         return True
@@ -290,15 +301,37 @@ def _is_opt_out(text: str) -> bool:
     return bool(_OPT_OUT.search(straighten(text).lower()))
 
 
+def awaits_pin(ctx: TurnContext) -> bool:
+    """An outbound call whose PIN is still wanted: dialled, not yet matched, and short of the second miss. After
+    the second miss the line has offered a recruiter's callback and asked "Would you like that?", so a "yes" is an
+    answer for the model, never a hello (spec 3.6 and 9.7)."""
+    return (
+        screening.dialled(ctx) is not None
+        and not ctx.data.get("candidate")
+        and int(ctx.data.get("verify_failures") or 0) < MAX_VERIFY_ATTEMPTS
+    )
+
+
+def _words(text: str) -> list[str]:
+    return [
+        w for w in ("".join(ch for ch in token if ch.isalnum()).casefold() for token in text.split()) if w
+    ]
+
+
 def is_hello(text: str, first_name: str = "") -> bool:
-    """A transcript made only of hello words or the applicant's first name ("Hello? Yes, speaking."). The media
-    session reads it too, so these words never barge in on the PIN ask (DR-025 fix 2)."""
-    words = list(_HELLO_WORDS)
-    name = first_name.strip().lower()
-    if name:
-        words += [name, f"this is {name}"]
-    pattern = "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
-    return bool(re.fullmatch(rf"(?:[\s,.!?]*(?:{pattern})\b)+[\s,.!?]*", straighten(text).lower()))
+    """True when every word is a hello word, a filler or the applicant's first name, and at least one is not a
+    filler ("Hello? Yes, speaking.", "um, hello"). "Hello, this is Lerato" is one; "hello, my PIN is 4398" is not.
+    The media session reads it too, so these words never barge in on the PIN ask (DR-025 fix 2)."""
+    words = _words(text)
+    if not words or all(w in FILLERS for w in words):
+        return False
+    names = _words(first_name.replace("-", " "))
+    phrases = [*HELLO_PHRASES, *(f"this is {name}" for name in names)]
+    joined = f" {' '.join(words)} "
+    for phrase in sorted(phrases, key=len, reverse=True):
+        joined = joined.replace(f" {phrase} ", " ")
+    allowed = HELLO_WORDS | FILLERS | set(names)
+    return all(w in allowed for w in joined.split())
 
 
 def _span(ctx: TurnContext, kind: str, name: str, **fields: Any) -> None:

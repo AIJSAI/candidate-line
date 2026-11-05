@@ -13,14 +13,15 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
 
+from candidate_line.outbound.contacts import Contacts
+from candidate_line.settings import Settings
 from candidate_line.tools import ledger as ledger_module
 from candidate_line.tools.ledger import (
     DIAL_OUTCOMES,
@@ -118,10 +119,10 @@ def test_the_keys_are_hmacs_one_per_purpose_and_the_code_is_inside_the_pin_mac()
     assert re.fullmatch(r"[0-9a-f]{64}", NUMBER_HASH) and NUMBER not in NUMBER_HASH
 
 
-def test_the_default_ledger_takes_its_pin_key_from_intake_signing_key_by_name() -> None:
-    assert ledger_module._pin_key(SimpleNamespace(intake_signing_key=ROOT)) == PIN_KEY  # type: ignore[arg-type]
-    assert ledger_module._pin_key(SimpleNamespace()) is None  # type: ignore[arg-type]
-    assert ledger_module._pin_key(SimpleNamespace(intake_signing_key="")) is None  # type: ignore[arg-type]
+def test_the_default_ledger_takes_its_pin_key_from_intake_signing_key() -> None:
+    assert ledger_module._pin_key(Settings.from_env({"INTAKE_SIGNING_KEY": ROOT})) == PIN_KEY
+    assert ledger_module._pin_key(Settings.from_env({})) is None
+    assert ledger_module._pin_key(Settings.from_env({"INTAKE_SIGNING_KEY": ""})) is None
 
 
 # The fixtures.
@@ -528,6 +529,30 @@ def test_the_claim_skips_what_ready_refuses_and_what_may_never_be_dialled(tmp_pa
     assert _ledger(path).claim_due_dial(NOW, 20, _always) is not None
 
 
+def test_set_not_dialled_marks_an_intake_application_and_keeps_every_later_dial_from_it(
+    tmp_path: Path,
+) -> None:
+    # The dialler's allow-list check at dial time and /voice's call this (DR-025 sections 7 and 12).
+    path = tmp_path / "state.json"
+    ledger = _ledger(path)
+    app = _apply(ledger)
+    ledger.schedule_dial(app.code, 1, NOW - timedelta(minutes=1))
+    ledger.set_not_dialled(app.code, "not_allowed")
+    assert json.loads(path.read_text())["applications"][app.code]["not_dialled"] == "not_allowed"
+    assert ledger.claim_due_dial(NOW, 20, _always) is None
+    with pytest.raises(LedgerError) as refused:
+        ledger.schedule_dial(app.code, 2, NOW + timedelta(hours=2))
+    assert refused.value.kind == "not_dialable"
+    with pytest.raises(LedgerError) as bad:
+        ledger.set_not_dialled(app.code, "busy")
+    assert bad.value.kind == "bad_reason"
+    # A fixture's row lives in data/, which is never rewritten, and an unknown code changes nothing.
+    before = path.read_text()
+    ledger.set_not_dialled("ACME-3108", "not_allowed")
+    ledger.set_not_dialled("ACME-0001", "not_allowed")
+    assert path.read_text() == before and ledger.applicant("ACME-3108") is not None
+
+
 def test_one_dial_is_claimed_once_across_two_ledgers_on_one_file(tmp_path: Path) -> None:
     path = tmp_path / "state.json"
     first, second = _ledger(path), _ledger(path)
@@ -702,28 +727,15 @@ def test_make_forget_runs_against_the_state_file(
     assert ledger_module.main(["forget", "ACME-3108"]) == 2
 
 
-def test_the_contacts_store_is_called_through_its_own_delete(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    # A small fake of lane B's store (candidate_line/outbound/contacts.py, DR-025 section 9), which this lane's
-    # branch does not hold; the real one replaces it at the merge.
-    deleted: list[tuple[Path, str]] = []
-
-    class FakeContacts:
-        def __init__(self, path: Path) -> None:
-            self.path = path
-
-        def delete(self, code: str) -> bool:
-            deleted.append((self.path, code))
-            return True
-
-    fake = ModuleType("candidate_line.outbound.contacts")
-    fake.Contacts = FakeContacts  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "candidate_line.outbound.contacts", fake)
-    deleter = ledger_module._contacts_deleter(SimpleNamespace(contacts_path=str(tmp_path / "c.json")))  # type: ignore[arg-type]
-    assert deleter("ACME-3108") and deleted == [(tmp_path / "c.json", "ACME-3108")]
+def test_the_contacts_store_is_called_through_its_own_delete(tmp_path: Path) -> None:
+    store = Contacts(tmp_path / "c.json")
+    store.put("ACME-3108", NUMBER, NOW)
+    settings = Settings.from_env({"CONTACTS_PATH": str(tmp_path / "c.json")})
+    deleter = ledger_module._contacts_deleter(settings)
+    assert deleter("ACME-3108") and store.number("ACME-3108") is None
+    assert not deleter("ACME-3108")  # nothing left to delete
     with pytest.raises(LedgerError):
-        ledger_module._contacts_deleter(SimpleNamespace(contacts_path=None))  # type: ignore[arg-type]
+        ledger_module._contacts_deleter(replace(settings, contacts_path=""))
 
 
 # The file.

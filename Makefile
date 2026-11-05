@@ -1,7 +1,7 @@
 # Candidate Line. The targets the build plan names; each one is real now (see PREBUILT.md for when it landed).
 # `make trace last` passes `last` as a second goal, so `last` is a no-op target here.
 
-.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial bakeoff test secret eval baseline gate scorecard trace text last image deploy cockpit-forward line-off line-on dial-off dial-on apply forget
+.PHONY: help up down restart dev tunnel webhook cockpit probe probe-dial probe-answer bakeoff test secret eval baseline gate scorecard trace text last image deploy cockpit-forward line-off line-on dial-off dial-on apply forget
 
 help:
 	@echo "make up          a build day in one command: tunnel, line on the Identity Center profile, number re-pointed, health"
@@ -13,6 +13,7 @@ help:
 	@echo "make cockpit     the recruiter's list of calls on 127.0.0.1:8001 (loopback only)"
 	@echo "make probe CASE=evals/cases/x.yaml [URL=ws://127.0.0.1:8000/media]   a synthetic candidate talks to the line as speech"
 	@echo "make probe-dial CASE=bakeoff/cases/x.yaml PUBLIC=https://probe-host ARM=A|B   the probe places a real call, records it, measures both ways"
+	@echo "make probe-answer PUBLIC=https://probe-host WATCHED=1 [LINE=https://line-host]   the probe applies for its own number and answers the line's call, met then not met; James watching (DR-025)"
 	@echo "make bakeoff PUBLIC=https://probe-host ARM=A|B   every case in bakeoff/cases through a real call"
 	@echo "make test        pytest"
 	@echo "make secret NAME=VAR   store the clipboard as VAR in the login keychain, then clear it"
@@ -55,6 +56,11 @@ probe:
 
 probe-dial:
 	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.dial --case "$(CASE)" --public-url "$(PUBLIC)" --arm "$(or $(ARM),A)" --csv "$(or $(CSV),bakeoff/2026-11-01.csv)"
+
+# The outbound call's live check (card 08, lane B). It rings a real line and spends money, so the probe refuses
+# to run without --watched, and this target passes that only when the command line says WATCHED=1.
+probe-answer:
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.dial --answer $(if $(WATCHED),--watched) --public-url "$(PUBLIC)" $(if $(LINE),--line-url "$(LINE)")
 
 bakeoff:
 	@for c in bakeoff/cases/*.yaml; do echo "== $$c"; $(MAKE) --no-print-directory probe-dial CASE=$$c PUBLIC="$(PUBLIC)" ARM="$(ARM)" || true; done

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import threading
 import time
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +10,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from candidate_line.brain import EchoBrain
 from candidate_line.hooks import NoHooks
-from candidate_line.outbound import PIN_ASK
+from candidate_line.persona import PIN_ASK
 from candidate_line.settings import Settings
 from candidate_line.telephony.app import Deps, create_app, twiml_stream
 from candidate_line.telephony.audio import MULAW_FRAME_BYTES, mulaw_to_pcm16, pcm16_to_mulaw, split_sentences
@@ -21,6 +22,7 @@ from candidate_line.telephony.media import (
     mask_spoken_digits,
 )
 from candidate_line.telephony.speech import FakeSpeaker, Heard, ScriptedTranscriber
+from candidate_line.tools.ledger import Ledger
 from candidate_line.traces.store import TraceStore
 
 SID = "MZ123"
@@ -941,6 +943,8 @@ def test_the_length_cap_waits_for_a_turn_in_progress_and_follows_its_reply() -> 
     [span] = length_cap_spans(store)
     assert span.seconds is not None and span.seconds >= 0.3 and span.meta == {"max_call_seconds": 0.3}
     assert not [s for s in store.spans("CA1") if s.kind == "kill"]  # the line is open; only this call ended
+    # The call-end hook reads this to write up a screen the cap left unfinished (spec section 7).
+    assert session.ctx.data["length_capped"] is True
 
 
 def test_the_silence_watcher_ends_a_quiet_call_at_the_cap_once_gus_has_finished() -> None:
@@ -1189,6 +1193,22 @@ def test_after_the_pin_matches_hello_is_a_word_like_any_other() -> None:
     assert brain.calls == ["Yes."]
 
 
+def test_after_the_second_pin_miss_yes_reaches_the_model_as_the_answer_to_the_callback_offer() -> None:
+    transcriber, speaker, sent = ScriptedTranscriber(), FakeSpeaker(), []
+    brain = CountingBrain()
+    session = outbound_session(transcriber, speaker, brain, sent)
+    session.ctx.data["verify_failures"] = 2  # PIN_SECOND_MISS_LINE asked "Would you like that?"
+
+    async def script():
+        await all_said(session, sent)
+        transcriber.hear("Yes.", is_partial=False)
+        await settle(lambda: session.turns == 1)
+        yield {"event": "stop", "streamSid": SID}
+
+    asyncio.run(session.run(script()))
+    assert brain.calls == ["Yes."]
+
+
 def test_an_inbound_session_hears_hello_as_a_turn() -> None:
     transcriber, speaker = ScriptedTranscriber(), FakeSpeaker()
 
@@ -1298,10 +1318,11 @@ def test_the_phone_gives_an_outbound_stream_the_pin_ask_its_tools_its_cap_and_it
     import re
 
     from candidate_line.brain import ToolSpec
+    from candidate_line.outbound import number_hmac, number_key
     from candidate_line.outbound.contacts import Contacts
     from candidate_line.telephony import app as app_module
     from candidate_line.telephony.app import twilio_signature
-    from tests.outbound_fakes import FakeLedger, fictional
+    from tests.outbound_support import fictional, scratch_ledger
 
     built: list[dict] = []
 
@@ -1313,18 +1334,19 @@ def test_the_phone_gives_an_outbound_stream_the_pin_ask_its_tools_its_cap_and_it
             return None
 
     monkeypatch.setattr(app_module, "MediaSession", Recorder)
-    ledger = FakeLedger()
+    ledger = scratch_ledger(tmp_path / "state.json", "test-signing-key")
+    hashed = number_hmac(number_key("test-signing-key"), fictional(142))
     applicant = ledger.add_application(
         first_name="Ada",
         role="care-aide",
         zone="America/Chicago",
         pin="4721",
-        consent={"accepted": True},
-        number_hmac="h",
+        consent={"version": "consent-2026-11-05", "accepted": True},
+        number_hmac=hashed,
         number_masked="***-***-0142",
         nonce="n" * 22,
     )
-    dial = ledger.schedule_dial(applicant.code, 1, ledger.now())
+    dial = ledger.schedule_dial(applicant.code, 1, datetime.now(UTC))
     ledger.update_dial(dial["dial_id"], status="placed")
     spec = ToolSpec("confirm_applicant", "x", {"type": "object"})
     deps = Deps(
@@ -1379,14 +1401,13 @@ def test_the_phone_gives_an_outbound_stream_the_pin_ask_its_tools_its_cap_and_it
         "first_name": "Ada",
         "dial_id": dial["dial_id"],
         "attempt": 1,
-        "number_hmac": "h",  # the HMAC, never the number, so a wrong person's stop holds for the number
+        "number_hmac": hashed,  # the HMAC, never the number, so a wrong person's stop holds for the number
     }
     assert callable(kwargs["on_end"])
 
 
 def test_a_stream_that_says_outbound_with_no_dial_record_is_refused(monkeypatch) -> None:
     from candidate_line.telephony import app as app_module
-    from tests.outbound_fakes import FakeLedger
 
     built: list[dict] = []
 
@@ -1398,7 +1419,7 @@ def test_a_stream_that_says_outbound_with_no_dial_record_is_refused(monkeypatch)
             return None
 
     monkeypatch.setattr(app_module, "MediaSession", Recorder)
-    ledger = FakeLedger()
+    ledger = Ledger()
     deps = Deps(
         transcriber=lambda: None, speaker=lambda: None, brain=EchoBrain, hooks=NoHooks, ledger=lambda: ledger
     )  # type: ignore[arg-type]

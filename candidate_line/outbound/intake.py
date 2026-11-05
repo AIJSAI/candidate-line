@@ -31,17 +31,16 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, StringConstraints, ValidationError
 
-from candidate_line.outbound import OutboundLedger, number_hmac, number_key
+from candidate_line.outbound import Ledger, number_hmac, number_key
 from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.window import first_dial_at
 from candidate_line.settings import Settings
+from candidate_line.tools.ledger import APPLICATIONS_PATH
+from candidate_line.tools.roles import ROLES_PATH, load_roles
 from candidate_line.traces.store import mask_number
 
 log = logging.getLogger("candidate_line.intake")
 
-DATA = Path(__file__).resolve().parents[2] / "data"
-ROLES_PATH = DATA / "roles.yaml"
-APPLICATIONS_PATH = DATA / "applications.yaml"
 
 TIMESTAMP_HEADER = "X-Intake-Timestamp"
 NONCE_HEADER = "X-Intake-Nonce"
@@ -114,9 +113,9 @@ class ApplicationIn(BaseModel):
 
 
 def load_role_ids(path: Path = ROLES_PATH) -> frozenset[str]:
-    """The role ids an application may name. Read once at start; the roles loader proper is lane A's."""
-    doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return frozenset(str(r["id"]) for r in doc.get("roles") or () if isinstance(r, dict) and r.get("id"))
+    """The role ids an application may name, read once at start through the roles loader, which refuses a roles
+    file the gate must never read (DR-025 section 4)."""
+    return frozenset(load_roles(path))
 
 
 def load_consent_texts(path: Path = APPLICATIONS_PATH) -> dict[str, str]:
@@ -134,7 +133,7 @@ def _refuse(status: int, reason: str) -> JSONResponse:
 @dataclass
 class Intake:
     settings: Settings
-    ledger: Callable[[], OutboundLedger]
+    ledger: Callable[[], Ledger]
     contacts: Contacts
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     role_ids: frozenset[str] = field(default_factory=load_role_ids)
