@@ -202,8 +202,8 @@
     <div class="box" style="grid-column:5">
       <span class="pill">Live: when it posts</span>
       <h3>Hand-Off to a Person</h3>
-      <div class="cap">Slack, or the on-screen log</div>
-      <p>Posted from a queue, so the call never waits. Carries the masked number and a link to the call.</p>
+      <div class="cap">Email through Amazon SES, with SNS behind it</div>
+      <p>Posted from a queue, so the call never waits. Says who asked for what, the masked number and the call record.</p>
     </div>
     <div class="box" style="grid-column:7">
       <span class="pill">Live: the test cases</span>
@@ -214,7 +214,7 @@
     <div class="box" style="grid-column:9">
       <h3>Sign-In and Keys</h3>
       <div class="cap">AWS IAM Identity Center</div>
-      <p>Short-lived credentials, no long-lived key in a file. API keys come from the Mac's keychain.</p>
+      <p>Short-lived credentials, no long-lived key in a file. The container reads its keys from Secrets Manager; a local run reads the Mac's keychain.</p>
     </div>
   </div>
 
@@ -225,7 +225,7 @@
   </div>
 
   <div class="footer">
-    <div>Built the evening of 4 November, in the cards' order: the rules page, the tests, the call-record wiring, the tools and persona, the safety filter, the tiers, the hand-off rule and the off switch. The scorecard is not built.</div>
+    <div>Built the evening of 4 November, in the cards' order: the rules page, the tests, the call-record wiring, the tools and persona, the safety filter, the tiers, the hand-off rule and the off switch; then the scorecard and CI (DR-022) and the container on AWS (DR-023).</div>
     <div class="date">From the code, 2026-11-04</div>
   </div>
 </div>
