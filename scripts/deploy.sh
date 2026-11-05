@@ -11,6 +11,9 @@ TEMPLATE=$ROOT/infra/aws/candidate-line-stack.yaml
 STACK=candidate-line
 # The operator's address is a stack parameter and is read from the environment only by the stack step, never from a file.
 OPERATOR_EMAIL="${OPERATOR_EMAIL:-}"
+# The dialler's switch is a stack parameter too, off unless the environment says OUTBOUND_ENABLED=1 for this step: a
+# deploy that does not say so turns dialling off, which is the safe way round (DR-025 section 19).
+OUTBOUND_ENABLED="${OUTBOUND_ENABLED:-0}"
 mask() { sed -E 's/[0-9]{12}/<account>/g'; }
 registry() { aws sts get-caller-identity --profile "$ADMIN" --query Account --output text | sed 's/$/.dkr.ecr.'"$REGION"'.amazonaws.com/'; }
 sha() { git -C "$REPO" rev-parse --short HEAD; }
@@ -67,7 +70,7 @@ case "${1:?step}" in
     aws cloudformation deploy --profile "$ADMIN" --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
       --capabilities CAPABILITY_NAMED_IAM --no-fail-on-empty-changeset \
       --parameter-overrides ImageUri="$(registry)/candidate-line:$(sha)" OperatorEmail="$OPERATOR_EMAIL" CloudFrontPrefixListId="$pl" \
-        PublicBaseUrl="${PUBLIC_BASE_URL:-}" 2>&1 | mask | tail -5 ;;
+        PublicBaseUrl="${PUBLIC_BASE_URL:-}" OutboundEnabled="${OUTBOUND_ENABLED:-0}" 2>&1 | mask | tail -5 ;;
   url)
     aws cloudformation describe-stacks --profile "$ADMIN" --region "$REGION" --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomain'].OutputValue" --output text ;;
   status)
