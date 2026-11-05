@@ -48,6 +48,9 @@ class Settings:
     state_path: str | None  # None means in memory
     slack_webhook_url: str | None
     sns_topic_arn: str | None
+    # The hand-off email's verified sender and its recipients (SES_SENDER, SES_RECIPIENTS comma-separated).
+    ses_sender: str | None
+    ses_recipients: tuple[str, ...]
     cockpit_base_url: str
     max_call_seconds: int
     max_calls_per_day: int
@@ -102,6 +105,8 @@ class Settings:
             # no secret but holds the account id, so it too comes from the environment and is never written down.
             slack_webhook_url=e.get("SLACK_WEBHOOK_URL") or None,
             sns_topic_arn=e.get("SNS_TOPIC_ARN") or None,
+            ses_sender=e.get("SES_SENDER") or None,
+            ses_recipients=tuple(a.strip() for a in (e.get("SES_RECIPIENTS") or "").split(",") if a.strip()),
             # Where a hand-off's trace link points (escalation.trace_link). An empty value reads as unset.
             cockpit_base_url=e.get("COCKPIT_BASE_URL") or DEFAULT_COCKPIT_BASE_URL,
             # A cap that reads as zero or as nonsense would switch the control off without a word, so it stops

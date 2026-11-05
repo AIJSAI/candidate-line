@@ -152,6 +152,11 @@ Resources:
   HandOffSubscription:
     Type: AWS::SNS::Subscription
     Properties: { TopicArn: !Ref HandOffTopic, Protocol: email, Endpoint: !Ref OperatorEmail }
+  # The hand-off note goes through SES from the operator's own verified address (one verification click), so it
+  # arrives from the line's name with no footer; the SNS topic above is the fallback when a send fails.
+  OperatorIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties: { EmailIdentity: !Ref OperatorEmail }
 
   # ---------- Identity: pull and log (execution), speak and listen (task); nothing else ----------
   ExecutionRole:
@@ -198,6 +203,9 @@ Resources:
                 Action: sns:Publish
                 Resource: !Ref HandOffTopic
               - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${OperatorEmail}
+              - Effect: Allow
                 Action: [elasticfilesystem:ClientMount, elasticfilesystem:ClientWrite]
                 Resource: !GetAtt FileSystem.Arn
                 Condition:
@@ -241,6 +249,8 @@ Resources:
             - { Name: TRACE_STORE_PATH, Value: /app/var/traces.sqlite }
             - { Name: STATE_PATH, Value: /app/var/state.json }
             - { Name: SNS_TOPIC_ARN, Value: !Ref HandOffTopic }
+            - { Name: SES_SENDER, Value: !Ref OperatorEmail }
+            - { Name: SES_RECIPIENTS, Value: !Ref OperatorEmail }
             - { Name: MAX_CALL_SECONDS, Value: !Ref MaxCallSeconds }
             - { Name: MAX_CALLS_PER_DAY, Value: !Ref MaxCallsPerDay }
             - { Name: LOG_LEVEL, Value: INFO }

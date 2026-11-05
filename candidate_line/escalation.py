@@ -13,11 +13,13 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import re
 import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -58,32 +60,82 @@ def central_now() -> str:
     return datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M")
 
 
+_WHO = re.compile(r"^(?P<kind>.+?) from (?P<who>[^:]+?)(?::\s*(?P<detail>.*))?$", re.DOTALL)
+_CODE_NAME = re.compile(r"^(?P<code>ACME-\d{4}) \((?P<name>[^)]+)\)$")
+
+
+def _parts(e: Escalation) -> tuple[str, str, str]:
+    """The kind of hand-off, who it is from and the detail, from the reason the tools write ("callback request
+    from ACME-1022 (Mei Petrov): relocation; best time tomorrow afternoon"). A reason in another shape is kept
+    whole as the detail."""
+    match = _WHO.match(e.reason.strip())
+    if not match:
+        return (f"tier {e.tier} hand-off", "", e.reason.strip())
+    kind, who, detail = (
+        match.group("kind").strip(),
+        match.group("who").strip(),
+        (match.group("detail") or "").strip(),
+    )
+    named = _CODE_NAME.match(who)
+    if named:
+        who = f"{named.group('name')} ({named.group('code')})"
+    elif who == "the caller":
+        who = "a caller"
+    return (kind, who, detail)
+
+
+def _when(raised_at: str) -> str:
+    """ "8:52 PM Central on Wednesday 4 November 2026" from the stored "2026-11-04 20:52"."""
+    try:
+        stamp = datetime.strptime(raised_at, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return f"{raised_at} Central"
+    return stamp.strftime("%-I:%M %p Central on %A %-d %B %Y")
+
+
 def format_subject(e: Escalation) -> str:
-    """One line a coordinator can act on from the inbox list: the kind of hand-off and who it is from ("callback
-    request from ACME-3233 (Hannah Haddad)"), never the detail after it, which may hold free text. Cut to SNS's
-    limit on one line of printable ASCII."""
-    head = e.reason.split(":", 1)[0].strip() or f"tier {e.tier} hand-off"
-    subject = f"Candidate Line: {head}"
+    """One line a coordinator can act on from the inbox list: "Callback request: Mei Petrov (ACME-1022)". Never the
+    detail, which may hold free text. Cut to SES's and SNS's limit on one line of printable ASCII."""
+    kind, who, _ = _parts(e)
+    subject = f"{kind[:1].upper()}{kind[1:]}: {who}" if who else kind[:1].upper() + kind[1:]
     subject = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in subject)
     return subject[:SNS_SUBJECT_MAX]
 
 
+_NEXT = {
+    "callback request": "call the candidate back within one business day, as the FAQ promises (F8.2)",
+    "move request": "call the candidate back about the move; the slot stays as booked until a person moves it (F3.2)",
+}
+
+
 def format_email(e: Escalation) -> str:
-    """The email body: what the caller asked, who they are (masked), what to do next, and where the call's
-    record is. The Slack and log template stays as it was; this one reads as a note, because the first hand-off
-    email of 2026-11-04 arrived as the template's bare lines and the operator called it messy."""
-    what = e.reason
+    """The email body, written as a note: who asked for what, when and from which number, what to do, and the call
+    record's id. No template lines, no internal words: the first hand-off email of 2026-11-04 arrived as the
+    Slack template's bare lines and the operator called it messy."""
+    kind, who, detail = _parts(e)
+    ask = {"callback request": "for a callback", "move request": "to move a first-round slot"}.get(
+        kind, f"for {kind}"
+    )
+    first = (
+        f"{who} asked the ACME candidate line {ask}" if who else f"The ACME candidate line raised a {kind}"
+    )
+    if detail:
+        first += f": {detail}"
+    first = first.rstrip(".") + "."
+    where = (
+        f"The call came from {e.caller} at {_when(e.raised_at)}."
+        if e.caller and e.caller != "-"
+        else f"The call came in at {_when(e.raised_at)}; no number is on record for it."
+    )
+    todo = _NEXT.get(kind, e.suggested_action)
     return (
-        "A caller on the ACME candidate line needs a person.\n"
+        f"{first}\n"
         "\n"
-        f"What:   {what}\n"
-        f"Caller: {e.caller} (the number the call came from, masked)\n"
-        f"Next:   {e.suggested_action}\n"
-        f"When:   {e.raised_at} Central\n"
-        f"Call:   {e.call_id}\n"
+        f"{where}\n"
         "\n"
-        "The call's steps are on the cockpit's page for this call, which the operator reaches through the private "
-        "port-forward; log what you did there, and that closes the loop."
+        f"What to do: {todo}.\n"
+        "\n"
+        f"Call record {e.call_id}, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
     )
 
 
@@ -173,6 +225,65 @@ class SnsPoster:
             raise RuntimeError(f"SNS publish failed: {code}") from None
 
 
+class SesPoster:
+    """One email per hand-off through Amazon SES from a verified sender, so the note arrives from the line's own
+    name with no footer and no raw link (SNS's email channel appends an unsubscribe block with the topic's ARN).
+    The task role holds ses:SendEmail on that one identity. In SES's sandbox the recipients must be verified too,
+    which the operator's own address is. A failed send falls back to the SNS poster when one is given, so a
+    hand-off is never lost to the mail service."""
+
+    channel = "ses"
+
+    def __init__(
+        self,
+        sender: str,
+        recipients: Sequence[str],
+        region: str = "us-east-1",
+        client: Any | None = None,
+        fallback: Poster | None = None,
+    ) -> None:
+        if not sender or not recipients:
+            raise ValueError("SES_SENDER and SES_RECIPIENTS are not both set")
+        self._sender = sender
+        self._recipients = tuple(recipients)
+        self._fallback = fallback
+        if client is None:
+            import boto3  # here, so text mode and the evals, which never send, do not pay for the import
+
+            client = boto3.client("ses", region_name=region)
+        self._client = client
+
+    def post_escalation(self, e: Escalation) -> None:
+        try:
+            self._client.send_email(
+                Source=f"ACME Candidate Line <{self._sender}>",
+                Destination={"ToAddresses": list(self._recipients)},
+                Message={
+                    "Subject": {"Data": format_subject(e), "Charset": "UTF-8"},
+                    "Body": {"Text": {"Data": format_email(e), "Charset": "UTF-8"}},
+                },
+            )
+        except Exception as error:  # noqa: BLE001  (reported by its code; the account id never reaches a trace)
+            response = getattr(error, "response", None) or {}
+            code = response.get("Error", {}).get("Code") or type(error).__name__
+            if self._fallback is None:
+                raise RuntimeError(f"SES send failed: {code}") from None
+            log.warning("SES send failed (%s); the hand-off goes through the fallback channel", code)
+            post_escalation = getattr(self._fallback, "post_escalation", None)
+            if post_escalation is not None:
+                post_escalation(e)
+            else:
+                self._fallback.post(format_message(e))
+
+    def post(self, text: str) -> None:
+        """The plain form, for a poster that is handed text alone."""
+        self._client.send_email(
+            Source=f"ACME Candidate Line <{self._sender}>",
+            Destination={"ToAddresses": list(self._recipients)},
+            Message={"Subject": {"Data": SNS_SUBJECT}, "Body": {"Text": {"Data": text}}},
+        )
+
+
 class LogPoster:
     """No channel: the message is kept in memory and shown. Text mode, the eval runner and the tests use it."""
 
@@ -240,18 +351,30 @@ class EscalationQueue:
         self._thread.join(timeout)
 
 
-def default_poster(webhook_url: str | None, sns_topic_arn: str | None = None) -> Poster:
-    """SNS when the topic is set, Slack when the webhook is, the log poster otherwise; the same interface either
-    way. Both set means SNS, the deployment's channel, so a Slack webhook left in the environment never splits
-    the hand-offs over two places."""
-    if sns_topic_arn:
-        return SnsPoster(sns_topic_arn)
+def default_poster(
+    webhook_url: str | None,
+    sns_topic_arn: str | None = None,
+    ses_sender: str | None = None,
+    ses_recipients: Sequence[str] = (),
+) -> Poster:
+    """SES when a sender and recipients are set (the deployment's channel, with SNS as its fallback when a topic is
+    set too), SNS when only the topic is, Slack when the webhook is, the log poster otherwise; the same interface
+    either way, so a Slack webhook left in the environment never splits the hand-offs over two places."""
+    sns = SnsPoster(sns_topic_arn) if sns_topic_arn else None
+    if ses_sender and ses_recipients:
+        return SesPoster(ses_sender, ses_recipients, fallback=sns)
+    if sns is not None:
+        return sns
     return SlackWebhookPoster(webhook_url) if webhook_url else LogPoster()
 
 
 def default_queue(
-    store: TraceStore, webhook_url: str | None, sns_topic_arn: str | None = None
+    store: TraceStore,
+    webhook_url: str | None,
+    sns_topic_arn: str | None = None,
+    ses_sender: str | None = None,
+    ses_recipients: Sequence[str] = (),
 ) -> EscalationQueue:
     """What the phone and text mode run: one queue per process over the room's store. The eval runner passes no
     channel, so an eval never posts to a real one (card 06 submits through `ctx.escalations`)."""
-    return EscalationQueue(store, default_poster(webhook_url, sns_topic_arn))
+    return EscalationQueue(store, default_poster(webhook_url, sns_topic_arn, ses_sender, ses_recipients))

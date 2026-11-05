@@ -133,7 +133,13 @@ def default_deps(settings: Settings) -> Deps:
         hooks=default_hooks,
         system=settings.system_prompt(),
         store=(store := TraceStore(settings.trace_store_path or DEFAULT_PATH)),
-        escalations=default_queue(store, settings.slack_webhook_url, settings.sns_topic_arn),
+        escalations=default_queue(
+            store,
+            settings.slack_webhook_url,
+            settings.sns_topic_arn,
+            settings.ses_sender,
+            settings.ses_recipients,
+        ),
         ledger=Ledger.default,
         warm_up=settings.brain_provider != "echo",
     )

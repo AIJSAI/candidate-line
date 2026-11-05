@@ -261,11 +261,15 @@ def test_the_queue_sends_the_email_form_to_a_poster_that_has_one() -> None:
     queue.submit(e)
     queue.drain()
     [published] = client.published
-    assert published["Subject"] == "Candidate Line: callback request from ACME-3233 (Hannah Haddad)"
+    assert published["Subject"] == "Callback request: Hannah Haddad (ACME-3233)"
     assert published["Message"] == format_email(e)
     body = published["Message"]
     assert "relocation; best time tomorrow afternoon" in body
-    assert "***-***-0657" in body and "call the candidate back" in body and "2026-11-04 20:15 Central" in body
+    assert (
+        "***-***-0657" in body
+        and "call the candidate back" in body
+        and "8:15 PM Central on Wednesday 4 November 2026" in body
+    )
     assert "9683" not in body
     assert format_subject(e) == published["Subject"]
 
@@ -276,11 +280,98 @@ def test_the_subject_is_one_short_ascii_line() -> None:
     long = Escalation(
         "CA2", "2", "move request from ACME-6792 (Priya Marchetti)" + ": " + "x" * 300, "a", "u"
     )
-    assert format_subject(long) == "Candidate Line: move request from ACME-6792 (Priya Marchetti)"
+    assert format_subject(long) == "Move request: Priya Marchetti (ACME-6792)"
     odd = Escalation("CA3", "3", "guard\u00a0hit\nagain" + ": " + "y" * 300, "a", "u")
     subject = format_subject(odd)
     assert (
         "\n" not in subject and len(subject) <= SNS_SUBJECT_MAX and all(32 <= ord(c) < 127 for c in subject)
     )
     bare = Escalation("CA4", "3", "", "a", "u")
-    assert format_subject(bare) == "Candidate Line: tier 3 hand-off"
+    assert format_subject(bare) == "Tier 3 hand-off"
+
+
+class FakeSes:
+    def __init__(self, fail: Exception | None = None) -> None:
+        self.sent: list[dict] = []
+        self.fail = fail
+
+    def send_email(self, **kwargs: object) -> dict[str, str]:
+        if self.fail is not None:
+            raise self.fail
+        self.sent.append(kwargs)
+        return {"MessageId": "m-1"}
+
+
+def test_the_ses_poster_sends_the_note_from_the_lines_name_to_the_operator() -> None:
+    from candidate_line.escalation import SesPoster, format_email
+
+    ses = FakeSes()
+    e = Escalation(
+        call_id="CA9",
+        tier="2",
+        reason="callback request from ACME-1022 (Mei Petrov): relocation; best time tomorrow afternoon",
+        suggested_action="call the candidate back",
+        trace_url="u",
+        caller="***-***-0657",
+        raised_at="2026-11-04 20:52",
+    )
+    SesPoster("ops@example.test", ["ops@example.test"], client=ses).post_escalation(e)
+    [sent] = ses.sent
+    assert sent["Source"] == "ACME Candidate Line <ops@example.test>"
+    assert sent["Destination"] == {"ToAddresses": ["ops@example.test"]}
+    assert sent["Message"]["Subject"]["Data"] == "Callback request: Mei Petrov (ACME-1022)"
+    body = sent["Message"]["Body"]["Text"]["Data"]
+    assert body == format_email(e)
+    assert body.startswith(
+        "Mei Petrov (ACME-1022) asked the ACME candidate line for a callback: relocation; best time tomorrow afternoon."
+    )
+    assert "The call came from ***-***-0657 at 8:52 PM Central on Wednesday 4 November 2026." in body
+    assert "What to do: call the candidate back within one business day, as the FAQ promises (F8.2)." in body
+    assert "Call record CA9" in body and "port-forward" not in body and "unsubscribe" not in body
+
+
+def test_a_failed_ses_send_goes_through_the_sns_fallback() -> None:
+    from candidate_line.escalation import SesPoster, SnsPoster
+
+    sns = FakeSns()
+    poster = SesPoster(
+        "ops@example.test",
+        ["ops@example.test"],
+        client=FakeSes(fail=RuntimeError("down")),
+        fallback=SnsPoster(TOPIC, client=sns),
+    )
+    e = Escalation(
+        "CA10",
+        "2",
+        "move request from ACME-6792 (Priya Marchetti): booked Monday, prefers Tuesday; moves used 0",
+        "a",
+        "u",
+        caller="***-***-0001",
+    )
+    poster.post_escalation(e)
+    [published] = sns.published
+    assert published["Subject"] == "Move request: Priya Marchetti (ACME-6792)"
+    assert (
+        "asked the ACME candidate line to move a first-round slot: booked Monday, prefers Tuesday; moves used 0."
+        in published["Message"]
+    )
+    assert "the slot stays as booked until a person moves it (F3.2)" in published["Message"]
+
+
+def test_a_hand_off_with_no_number_says_so_and_an_unverified_caller_is_a_caller() -> None:
+    from candidate_line.escalation import format_email, format_subject
+
+    e = Escalation(
+        "probe-1",
+        "2",
+        "callback request from the caller: no reason given; best time not given",
+        "a",
+        "u",
+        raised_at="2026-11-04 20:40",
+    )
+    assert format_subject(e) == "Callback request: a caller"
+    body = format_email(e)
+    assert body.startswith(
+        "a caller asked the ACME candidate line for a callback: no reason given; best time not given."
+    )
+    assert "no number is on record for it" in body
