@@ -475,6 +475,47 @@ def test_an_inbound_call_never_reads_the_dial_records(tmp_path) -> None:
     assert line.ledger.calls_today() == 1 and line.store.call("CA80").channel == "voice"
 
 
+def test_a_call_in_gives_its_stream_only_the_from_numbers_hmac(tmp_path, monkeypatch) -> None:
+    """Spec 9.12: the voicemail tells a person to call the line and say stop, so the stream of a call in carries the
+    From number's HMAC, which the hooks look the applications up by; the number itself is kept nowhere."""
+    from types import SimpleNamespace
+
+    from candidate_line.telephony import app as app_module
+
+    sessions: list[SimpleNamespace] = []
+
+    class Recorder:
+        def __init__(self, *args, call_id: str, **kwargs) -> None:
+            self.ctx = SimpleNamespace(data={})
+            sessions.append(self.ctx)
+
+        async def run(self, incoming) -> None:
+            return None
+
+    monkeypatch.setattr(app_module, "MediaSession", Recorder)
+    line = Outbound(tmp_path)
+
+    def call_in(sid: str, caller: str) -> None:
+        twiml = line.post(
+            "/voice", {"CallSid": sid, "Direction": "inbound", "From": caller, "To": fictional(100)}
+        )
+        [token] = re.findall(r'<Parameter name="token" value="([^"]+)" />', twiml.text)
+        with line.client.websocket_connect("/media") as ws:
+            ws.send_json(
+                {
+                    "event": "start",
+                    "streamSid": "MZ1",
+                    "start": {"callSid": sid, "customParameters": {"token": token}},
+                }
+            )
+
+    call_in("CA81", fictional(142))
+    call_in("CA82", "anonymous")  # a withheld number has no HMAC to keep
+    assert sessions[0].data == {"caller_number_hmac": number_hmac(number_key(KEY), fictional(142))}
+    assert sessions[1].data == {}
+    assert fictional(142) not in repr(sessions) and fictional(142)[2:] not in repr(sessions)
+
+
 @pytest.mark.parametrize("path", ["/voice/status", "/voice/amd"])
 def test_the_callbacks_refuse_a_bad_signature(tmp_path, path: str) -> None:
     line = Outbound(tmp_path)

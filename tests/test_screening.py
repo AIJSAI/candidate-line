@@ -184,8 +184,9 @@ def test_the_pin_confirms_and_the_intro_and_first_question_are_said_by_code_in_o
     # The history alternates as on the refusal path: tool use, results, then the words code said.
     assert [m.role for m in ctx.history] == ["user", "assistant", "tool", "assistant"]
     assert ctx.history[-1] == Message("assistant", result.spoken)
-    # The intro offers a person at any time, routed through request_callback by the brief.
-    assert "Say person at any time and a recruiter will call you instead." in result.spoken
+    # The intro is spec 9.9's as lane 0 wrote it: whether it offers a person in place of the questions is card 08's
+    # open decision 8, James's to answer.
+    assert "Say person" not in result.spoken
 
 
 def test_each_answer_is_followed_by_noted_and_the_next_question_with_one_model_call() -> None:
@@ -228,6 +229,48 @@ def test_a_skip_counts_as_asked_and_meets_no_rule() -> None:
     q1 = role_of(LERATO).questions[0]
     assert f"For this role, the posting asks for {q1.asks}." in last.spoken
     assert ctx.ledger.screen("ACME-3108")["result"] == "not_met"  # type: ignore[index, union-attr]
+
+
+def test_a_reply_with_two_answers_records_only_the_one_the_line_had_asked() -> None:
+    """Spec 9.8: a question is asked once the line has said it. The first record_answer's say holds q2, which the
+    applicant has not heard yet, so the second call in the same reply is not run."""
+    ctx = outbound_ctx()
+    confirm(ctx, LERATO["pin"])
+    q2 = role_of(LERATO).questions[1]
+    heard = "Yes I have a licence, and I can do weekends"
+    result, brain = turn(
+        ctx,
+        heard,
+        asks(
+            ("record_answer", {"question_id": "q1", "value": "yes", "heard": heard}),
+            ("record_answer", {"question_id": "q2", "value": "weekends", "heard": heard}),
+        ),
+    )
+    assert set(ctx.ledger.answers("ACME-3108")) == {"q1"}  # type: ignore[union-attr]
+    assert result.spoken == f"Noted: yes. {q2.say}" and len(brain.calls) == 1
+    assert ctx.data["asked"] == "q2"
+    held = ctx.history[-2].tool_results[1]
+    assert held.is_error and "Not run" in held.content
+
+
+def test_a_booking_in_the_same_reply_as_the_last_answer_is_not_run() -> None:
+    """The met line offers the times; a book_slot beside the last answer would book one the applicant never heard."""
+    ctx = outbound_ctx()
+    confirm(ctx, LERATO["pin"])
+    screen(ctx, {k: v for k, v in MET_AIDE.items() if k != "q5"})
+    result, _ = turn(
+        ctx,
+        "Yes, and the first time please.",
+        asks(
+            ("record_answer", {"question_id": "q5", "value": "yes", "heard": "yes"}),
+            ("book_slot", {"slot_id": "S1105-0900"}),
+        ),
+    )
+    assert ctx.ledger.booked_slot("ACME-3108") is None  # type: ignore[union-attr]
+    assert result.spoken.startswith("Noted: yes. That's every question") and result.spoken.endswith(
+        "Which suits you?"
+    )
+    assert result.state["booked_slot"] is None  # type: ignore[index]
 
 
 def test_the_met_line_is_said_whole_with_its_slots_and_its_question_and_posts_nothing() -> None:
@@ -534,6 +577,69 @@ def test_an_applicant_who_calls_in_verifies_by_code_and_pin_and_resumes_at_the_f
     assert rest.spoken.startswith("Noted: 30 hours a week. ")
 
 
+# The callback and the FAQ for an applicant.
+
+
+def test_an_applicants_callback_mails_fixed_words_and_never_the_models_reason() -> None:
+    """Spec 9.11 and DR-025 Security: no answer and no unmet requirement in any email. The model's reason holds
+    both here, so the hand-off and the ledger carry fixed words instead."""
+    ctx = outbound_ctx()
+    confirm(ctx, LERATO["pin"])
+    answer(ctx, "q1", "no", "No, I don't drive.")
+    reason = "wants a person; has no driver's licence"
+    turn(
+        ctx,
+        "Person, please.",
+        asks(("request_callback", {"reason": reason})),
+        said("A recruiter will call you back."),
+    )
+    [hand_off] = ctx.escalations.items  # type: ignore[union-attr]
+    mail = f"{format_subject(hand_off)}\n{format_email(hand_off)}"
+    assert format_subject(hand_off) == "Callback request: Lerato (ACME-3108)"
+    assert reason not in mail and "licence" not in mail and "wants a person" not in mail
+    for q in role_of(LERATO).questions:
+        assert q.asks not in mail and q.say not in mail
+    assert "F8.2" not in mail and "/applicants/ACME-3108" in mail
+    assert "asked for a recruiter during the screening questions" in mail
+    [record] = ctx.ledger.callbacks()  # type: ignore[union-attr]
+    assert (
+        record["code"] == "ACME-3108"
+        and record["reason"] == "asked for a recruiter during the screening questions"
+    )
+
+
+def test_after_the_second_pin_miss_a_callback_names_the_dialled_application() -> None:
+    """PIN_SECOND_MISS_LINE promises a recruiter's call to this number, so the request names whose number it is;
+    it goes to staff only, so Never 5 holds."""
+    ctx = outbound_ctx()
+    confirm(ctx, "1111")
+    confirm(ctx, "2222")
+    result, _ = turn(
+        ctx,
+        "Yes, please.",
+        asks(("request_callback", {})),
+        said("I've asked a recruiter to call this number back."),
+    )
+    [hand_off] = ctx.escalations.items  # type: ignore[union-attr]
+    assert format_subject(hand_off) == "Callback request: Lerato (ACME-3108)"
+    assert hand_off.record_url is not None and hand_off.record_url.endswith("/applicants/ACME-3108")
+    body = format_email(hand_off)
+    assert "the PIN was not confirmed" in body and "F8.2" not in body
+    [record] = ctx.ledger.callbacks()  # type: ignore[union-attr]
+    assert record["code"] == "ACME-3108" and result.state["callback_requested"] is True  # type: ignore[index]
+    assert "candidate" not in ctx.data  # the callback proves nobody
+
+
+def test_before_the_pin_an_outbound_call_reads_no_faq_section() -> None:
+    """Never 5's outbound list: before the PIN the line says nothing from the FAQ (F9.1 names the role kind)."""
+    ctx = outbound_ctx()
+    outcome = actions.run_tool("answer_question", {"section_ids": ["F9.1"]}, ctx)
+    assert outcome.is_error and json.loads(outcome.content)["error"] == screening.NOT_CONFIRMED
+    confirm(ctx, LERATO["pin"])
+    outcome = actions.run_tool("answer_question", {"section_ids": ["F9.1"]}, ctx)
+    assert not outcome.is_error and outcome.cited == ("F9.1",)
+
+
 # The stop.
 
 
@@ -546,6 +652,45 @@ def test_stop_calls_cancels_every_dial_says_the_stop_line_and_hangs_up_with_no_f
     assert json.loads(ctx.history[-2].tool_results[0].content) == {"stopped": True, "dials_cancelled": 1}
     assert result.state["opted_out"] is True and result.state["dials_due"] == 0  # type: ignore[index]
     assert ctx.data["opted_out"] == "said on the call" and result.tier == "1"
+
+
+def test_a_stop_said_on_a_call_in_from_the_dialled_number_stops_every_dial() -> None:
+    """The voicemail line says "To stop these calls, call that number and say stop" (spec 9.9), so a stop from that
+    number holds though nobody verified (spec 9.12, 47 CFR 64.1200(a)(10)). The call carries only the From
+    number's HMAC (app.py); a number with no application keeps the inbound stop line."""
+    from candidate_line.outbound import number_hmac, number_key
+    from candidate_line.persona import STOP_LINE
+    from candidate_line.tools.ledger import PIN_PURPOSE, derive_key
+
+    key = "a synthetic signing key for the tests only"
+    ledger = Ledger(now=lambda: NOW, pin_key=derive_key(key, PIN_PURPOSE))
+    hashed = number_hmac(number_key(key), TEST_NUMBER)
+    app = ledger.add_application(
+        first_name="Dee",
+        role="care-aide",
+        zone="America/Chicago",
+        pin="1234",
+        consent={"version": "consent-2026-11-05", "accepted": True},
+        number_hmac=hashed,
+        number_masked="***-***-0142",
+        nonce="n" * 22,
+    )
+    ledger.schedule_dial(app.code, 2, NOW + timedelta(hours=2))
+    ctx = TurnContext(call_id="CA-back", channel="voice", system="sys", ledger=ledger)
+    ctx.data["caller_number_hmac"] = hashed
+    result, brain = turn(ctx, "Stop.", tools=TOOL_SPECS)
+    assert result.spoken == OUTBOUND_STOP_LINE and result.hang_up is True and brain.calls == []
+    assert ledger.opted_out(number_hmac=hashed) and ledger.state(app.code)["dials_due"] == 0
+    [stopped] = [o for o in ledger._overlay["opt_outs"] if o["number_hmac"] == hashed]
+    assert stopped["code"] == app.code and stopped["how"] == "said stop" and stopped["call_id"] == "CA-back"
+
+    other = TurnContext(call_id="CA-other", channel="voice", system="sys", ledger=ledger)
+    other.data["caller_number_hmac"] = number_hmac(number_key(key), "+15555550143")
+    result, brain = turn(other, "Stop.", tools=TOOL_SPECS)
+    assert result.spoken == STOP_LINE and brain.calls == []
+    unknown = TurnContext(call_id="CA-none", channel="voice", system="sys", ledger=ledger)
+    result, _ = turn(unknown, "Stop.", tools=TOOL_SPECS)
+    assert result.spoken == STOP_LINE
 
 
 def test_stop_calls_with_nobody_on_the_list_is_refused() -> None:

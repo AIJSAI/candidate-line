@@ -44,7 +44,7 @@ HAND_OFF_TOOLS = {
 _HAND_OFF_KINDS = {
     "move request": HAND_OFF_TOOLS["move_slot"],
     "callback request": HAND_OFF_TOOLS["request_callback"],
-    SCREENING_HAND_OFF: "a screening hand-off went to the role's recruiter",
+    SCREENING_HAND_OFF: "a screening hand-off was posted for the role's recruiter, to the operator's channel",
 }
 # Spec section 7 writes up the second failed verification, not the first, which is a mishearing more often than not.
 SECOND_MISS = 2

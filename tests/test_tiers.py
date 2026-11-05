@@ -113,7 +113,9 @@ SCREENING = HandOff(
 
 def test_any_turn_that_posted_a_hand_off_is_tier_two_whatever_the_tool() -> None:
     tier = assign(["record_answer"], hand_offs=(SCREENING,))
-    assert tier == Tier("2", "a screening hand-off went to the role's recruiter")
+    assert tier == Tier(
+        "2", "a screening hand-off was posted for the role's recruiter, to the operator's channel"
+    )
     # The same tool ending a screen with a booking offer posts nothing and is tier 1.
     assert assign(["record_answer"]).tier == "1"
     callback = HandOff(

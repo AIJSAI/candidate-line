@@ -29,6 +29,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from candidate_line.settings import Settings
 from candidate_line.tools.ledger import APPLICATIONS_PATH, ROLES_PATH, load_applications, load_role_plans
+from candidate_line.tools.roles import with_unit
 from candidate_line.traces.store import DEFAULT_PATH, CallRow, EscalationRow, SpanRow, TraceStore
 
 CENTRAL = ZoneInfo("America/Chicago")
@@ -330,7 +331,7 @@ def spoken_answer(question: Mapping[str, Any], value: object) -> str:
         if str(option.get("id")) == text:
             return str(option.get("say") or text)
     unit = (question.get("range") or {}).get("unit")
-    return f"{text} {unit}" if unit and text.isdigit() else text
+    return with_unit(text, str(unit)) if unit and text.isdigit() else text
 
 
 def _screening_call(state: Mapping[str, Any], code: str) -> str | None:

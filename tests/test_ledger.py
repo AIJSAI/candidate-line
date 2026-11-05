@@ -226,6 +226,7 @@ def test_an_application_off_the_list_or_without_consent_keeps_its_reason() -> No
         ({"nonce": "short"}, "bad_nonce"),
         ({"nonce": "has spaces in it, twenty two"}, "bad_nonce"),
         ({"zone": "Mars/Olympus_Mons"}, "bad_zone"),
+        ({"zone": "America/Sao_Paulo"}, "bad_zone"),  # a real zone, outside the US (spec 9.1)
     ],
 )
 def test_add_application_refuses_what_the_ledger_must_never_hold(
@@ -486,6 +487,21 @@ def test_the_claim_takes_the_earliest_due_dial_one_at_a_time() -> None:
     assert ledger.claim_due_dial(NOW, 20, _always)["dial_id"] == later["dial_id"]
 
 
+def test_a_due_dial_for_an_applicant_who_already_screened_is_never_claimed() -> None:
+    """Spec 9.4: a person reached ends the dialling, so an applicant who called in, verified and finished the screen
+    before the first dial came due is never called."""
+    ledger = _ledger()
+    app = _apply(ledger)
+    dial = ledger.schedule_dial(app.code, 1, NOW - timedelta(minutes=1))
+    _answer_all(ledger, app.code, CARE_AIDE_MET)
+    ledger.set_screen(app.code, "met", "CA-in", None)
+    assert ledger.claim_due_dial(NOW, 20, _always) is None
+    ended = ledger.dial(dial["dial_id"])
+    assert ended is not None and ended["status"] == "cancelled" and ended["outcome"] == "screened"
+    assert ended["ended_at"] == "2026-11-05T16:00:00+00:00" and ended["placed_at"] is None
+    assert ledger.state(app.code)["dials_due"] == 0
+
+
 def test_the_claim_respects_the_day_s_cap_counted_when_a_dial_is_placed() -> None:
     ledger = _ledger()
     for code in ("ACME-3108", "ACME-3474", "ACME-2609"):
@@ -710,18 +726,64 @@ def test_forget_everywhere_deletes_the_number_first_then_the_records() -> None:
         forget_everywhere(ledger, "ACME-0001", delete)
 
 
+def test_a_deletion_request_removes_the_traces_of_every_call_the_records_name() -> None:
+    """Spec 9.13: only the consent's version and time and the number's HMAC stay. The screening call's spans hold
+    the masked words and the values recorded, so the calls the answers, the screen, the dials and the callbacks
+    name go from the trace store, read before the records that name them go; another call stays."""
+    from candidate_line.traces.store import TraceStore
+
+    ledger = _ledger()
+    app = _apply(ledger)
+    _answer_all(ledger, app.code, CARE_AIDE_MET, call_id="CA-screen")
+    ledger.set_screen(app.code, "met", "CA-screen", None)
+    dial = ledger.schedule_dial(app.code, 1, NOW)
+    ledger.update_dial(dial["dial_id"], call_sid="CA-dial", status="done", outcome="screened")
+    ledger.request_callback(app.code, None, "asked for a recruiter", "CA-back")
+    store = TraceStore(":memory:")
+    for call in ("CA-screen", "CA-dial", "CA-back", "CA-other"):
+        store.start_call(call, "outbound", caller="+15555550142")
+        store.span(call, "tool", "record_answer", text="recorded q3: 30", meta={"heard": "thirty"})
+        store.add_escalation(call, "2", f"screening hand-off from {app.code} (Ama)", "read", "sns")
+    assert ledger.call_ids(app.code) == {"CA-screen", "CA-dial", "CA-back"}
+    deleted: list[str] = []
+
+    def delete_call(call_id: str) -> int:
+        assert ledger.applicant(app.code) is not None  # read and deleted before the records go
+        deleted.append(call_id)
+        return store.delete_call(call_id)
+
+    forget_everywhere(ledger, app.code, lambda code: True, delete_call)
+    assert deleted == ["CA-back", "CA-dial", "CA-screen"]
+    for call in deleted:
+        assert store.call(call) is None and store.spans(call) == [] and store.escalations(call) == []
+    assert store.call("CA-other") is not None and len(store.spans("CA-other")) == 1
+    assert ledger.call_ids(app.code) == set()
+
+
 def test_make_forget_runs_against_the_state_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     path = tmp_path / "state.json"
     ledger = _ledger(path)
     ledger.record_answer("ACME-3108", "q1", "yes", "yes", "CA1")
+    from candidate_line.traces.store import TraceStore
+
+    traces = TraceStore(tmp_path / "traces.sqlite")
+    for call in ("CA1", "CA2"):
+        traces.start_call(call, "outbound")
+        traces.span(call, "transcribe", "final", text="yes")
     monkeypatch.setenv("STATE_PATH", str(path))
     monkeypatch.setenv("CONTACTS_PATH", str(tmp_path / "contacts.json"))
+    monkeypatch.setenv("TRACE_STORE_PATH", str(tmp_path / "traces.sqlite"))
     monkeypatch.setattr(ledger_module, "_DEFAULTS", {})
     assert ledger_module.main(["forget", "ACME-3108"]) == 0
     assert "forgot ACME-3108" in capsys.readouterr().out
     assert json.loads(path.read_text())["answers"] == {}
+    assert traces.call("CA1") is None and traces.spans("CA1") == [] and traces.call("CA2") is not None
+    # A trace store that does not exist is never created by a deletion.
+    monkeypatch.setenv("TRACE_STORE_PATH", str(tmp_path / "none" / "traces.sqlite"))
+    assert ledger_module._trace_deleter(Settings.from_env()) is None
+    assert not (tmp_path / "none").exists()
     assert ledger_module.main(["forget", "ACME-0001"]) == 1
     monkeypatch.setenv("STATE_PATH", ":memory:")
     assert ledger_module.main(["forget", "ACME-3108"]) == 2

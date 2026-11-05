@@ -166,7 +166,13 @@ def format_email(e: Escalation) -> str:
         if e.caller and e.caller != "-"
         else f"The call came in at {_when(e.raised_at)}; no number is on record for it."
     )
-    todo = _NEXT.get(kind, e.suggested_action)
+    if e.record_url:
+        # An applicant's hand-off: the answers are read on the record, never in mail, and the promise is the
+        # recruiter's call, not F8.2's coordinator call to the number the caller rang from.
+        todo = e.suggested_action
+        where += f"\n\nThe applicant's record: {e.record_url}"
+    else:
+        todo = _NEXT.get(kind, e.suggested_action)
     return (
         f"{first}\n"
         "\n"

@@ -29,12 +29,12 @@ from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSoc
 from candidate_line.brain import Brain, ToolSpec, make_brain
 from candidate_line.escalation import EscalationQueue, default_queue
 from candidate_line.hooks import Hooks, default_hooks
-from candidate_line.outbound import OUTBOUND_TOOL_SPECS, PIN_ASK, outbound_opening
+from candidate_line.outbound import OUTBOUND_TOOL_SPECS, PIN_ASK, number_hmac, number_key, outbound_opening
 from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.dialler import PREFLIGHT_WORD, Dialler
 from candidate_line.outbound.intake import Intake
 from candidate_line.persona import GREETING, PLACEHOLDER_SYSTEM
-from candidate_line.settings import Settings
+from candidate_line.settings import US_E164, Settings
 from candidate_line.telephony.media import MediaSession
 from candidate_line.telephony.speech import PollySpeaker, Speaker, Transcriber, TranscribeStreamingTranscriber
 from candidate_line.telephony.twilio_rest import TwilioRest
@@ -54,6 +54,9 @@ CLOSED_OUTCOME = "closed: daily cap"
 # Twilio opens the stream a second or two after it reads the TwiML; a token older than this is refused.
 STREAM_TOKEN_TTL_S = 60
 HANGUP_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+# How long /voice keeps a call in's From-number HMAC for its stream to pick up: ten times the stream token's life,
+# and long enough for a stream that never opens to be forgotten.
+CALLER_HMAC_TTL_S = 600
 OUTBOUND_DIRECTION = "outbound-api"
 
 
@@ -234,6 +237,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
         deps.twilio,
         deps.clock,
         preflight=lambda: deps.speaker().say(PREFLIGHT_WORD),
+        traces=deps.store,
     )
     intake = Intake(settings, outbound_ledger, contacts, clock=deps.clock)
 
@@ -265,6 +269,21 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     # /voice minted for that call, so a client that learns the wss URL cannot step around the signature check or the
     # daily count and spend on Transcribe, Polly and the model. Each token opens one stream in this process.
     used_tokens: dict[str, float] = {}
+    # A call in's From number as its HMAC under the number key, by CallSid, from /voice to its stream (spec 9.12):
+    # a stop said from a number an application gave then stops the dials to it, though nobody verified. The number
+    # itself is never kept; an entry whose stream never opened goes after CALLER_HMAC_TTL_S.
+    caller_hmacs: dict[str, tuple[str, float]] = {}
+
+    def keep_caller_hmac(call_sid: str, caller: str) -> None:
+        now = time.time()
+        for stale in [sid for sid, (_, at) in caller_hmacs.items() if now - at > CALLER_HMAC_TTL_S]:
+            del caller_hmacs[stale]
+        if settings.intake_signing_key and call_sid and US_E164.match(caller):
+            caller_hmacs[call_sid] = (number_hmac(number_key(settings.intake_signing_key), caller), now)
+
+    def caller_hmac(call_sid: str) -> str | None:
+        kept = caller_hmacs.pop(call_sid, None)
+        return kept[0] if kept is not None and time.time() - kept[1] <= CALLER_HMAC_TTL_S else None
 
     def stream_allowed(meta: Mapping[str, Any]) -> bool:
         if not settings.twilio_auth_token:
@@ -412,6 +431,7 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             if deps.store is not None and call_sid:
                 deps.store.end_call(call_sid, CLOSED_OUTCOME)
             return Response(content=twiml_closed(), media_type="text/xml")
+        keep_caller_hmac(call_sid or "", form.get("From", ""))
         token = (
             stream_token(settings.twilio_auth_token, call_sid or "") if settings.twilio_auth_token else None
         )
@@ -488,6 +508,9 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
             max_call_seconds=settings.max_outbound_call_seconds if outbound else settings.max_call_seconds,
             **outbound_kwargs,
         )
+        hashed = None if outbound else caller_hmac(call_id)
+        if hashed is not None:
+            session.ctx.data["caller_number_hmac"] = hashed
         try:
             await session.run(incoming())
         except WebSocketDisconnect:

@@ -51,6 +51,42 @@ ROLES_PATH = DATA / "roles.yaml"
 MAX_LISTED = 6
 # The day the daily call cap counts in: the line's slots and its coordinator keep Central time (data/slots.yaml).
 CENTRAL = ZoneInfo("America/Chicago")
+# The US rows of zone1970.tab (tzdata 2026, 29 zones), the only zones an application may name (spec 9.1). A closed
+# set and not a prefix test, because "America/" holds Sao Paulo, St Johns and Noronha too, and the calling window is
+# read in the applicant's own zone: a zone outside the US would ring a US number at night there.
+US_ZONES = frozenset(
+    {
+        "America/New_York",
+        "America/Detroit",
+        "America/Kentucky/Louisville",
+        "America/Kentucky/Monticello",
+        "America/Indiana/Indianapolis",
+        "America/Indiana/Vincennes",
+        "America/Indiana/Winamac",
+        "America/Indiana/Marengo",
+        "America/Indiana/Petersburg",
+        "America/Indiana/Vevay",
+        "America/Indiana/Tell_City",
+        "America/Indiana/Knox",
+        "America/Chicago",
+        "America/Menominee",
+        "America/North_Dakota/Center",
+        "America/North_Dakota/New_Salem",
+        "America/North_Dakota/Beulah",
+        "America/Denver",
+        "America/Boise",
+        "America/Phoenix",
+        "America/Los_Angeles",
+        "America/Anchorage",
+        "America/Juneau",
+        "America/Sitka",
+        "America/Metlakatla",
+        "America/Yakutat",
+        "America/Nome",
+        "America/Adak",
+        "Pacific/Honolulu",
+    }
+)
 
 # The purposes derive_key is given, so the PIN hashes and the number hashes each have their own key and neither
 # shares one with the intake signature (DR-025 section 7). Intake hashes a number with NUMBER_PURPOSE.
@@ -723,6 +759,32 @@ class Ledger:
                 return True
             return self._is_opted_out(self._canonical(code) if code else None, number_hmac)
 
+    def call_ids(self, code: str) -> set[str]:
+        """The calls an application's records name (its answers, its screen, its dials and its callbacks), so a
+        deletion request can remove their traces too (spec 9.13)."""
+        with self._lock:
+            self._refresh()
+            return self._call_ids(self._canonical(code))
+
+    def calls_past_retention(self, before: datetime) -> set[str]:
+        """The calls of every application purge_answers(before) would remove, read before it removes them, so the
+        retention sweep can delete their traces too (spec 9.13)."""
+        with self._lock:
+            self._refresh()
+            found: set[str] = set()
+            for app in self._all_applicants():
+                received = _instant(app.received_at)
+                if received is not None and received < before and self._has_records(app.code):
+                    found |= self._call_ids(app.code)
+            return found
+
+    def codes_for_number(self, hashed: str) -> set[str]:
+        """The application codes whose number has this HMAC, so a stop said from that number on a call in reaches
+        the dials to it without the number ever being kept (spec 9.12)."""
+        with self._lock:
+            self._refresh()
+            return self._codes_for_number(hashed)
+
     def dial(self, key: str) -> dict[str, Any] | None:
         """One dial record by its dial id or its CallSid."""
         with self._lock:
@@ -849,8 +911,8 @@ class Ledger:
             raise LedgerError("bad_pin", "The PIN must be four digits.")
         if role not in self._roles:
             raise LedgerError("unknown_role", "There is no role with that id.")
-        if not isinstance(zone, str) or _zone(zone) is None:
-            raise LedgerError("bad_zone", "The time zone must be an IANA zone.")
+        if not isinstance(zone, str) or zone not in US_ZONES or _zone(zone) is None:
+            raise LedgerError("bad_zone", "The time zone must be a US IANA zone.")
         if not first_name.strip() or re.search(r"[0-9]", first_name) or len(first_name) > 40:
             raise LedgerError("bad_name", "The first name must be letters, at most 40 of them.")
         if not_dialled is not None and not_dialled not in NOT_DIALLED_REASONS:
@@ -1075,8 +1137,10 @@ class Ledger:
     ) -> dict[str, Any] | None:
         """The next dial to place, marked claimed under the file lock so it is placed once, by one dialler. None
         while a dial is claimed, placed or in progress (one call at a time), once the day's cap is reached, or when
-        no due dial is due by now whose applicant consented, has not opted out, has no reason not to be dialled and
-        passes `ready` (the dialler's window and allow-list checks)."""
+        no due dial is due by now whose applicant consented, has not opted out, has no reason not to be dialled,
+        has not finished the screen or booked, and passes `ready` (the dialler's window check). The allow-list is
+        checked after the claim, immediately before Calls.json (DR-025 section 12). A due dial whose applicant has
+        finished the screen or booked is cancelled with outcome `screened`."""
         if now.tzinfo is None:
             raise LedgerError("bad_time", "The claim's time must carry its zone.")
         with self._exclusive():
@@ -1093,6 +1157,14 @@ class Ledger:
             for _, d in sorted(due, key=lambda pair: pair[0]):
                 app = self._applicant(d.get("code"))
                 if app is None or self._not_dialable(app) is not None:
+                    continue
+                entry = self._overlay["answers"].get(app.code)
+                if (entry and entry.get("screen")) or self._booked_id(app.code):
+                    # The applicant finished the screen, or booked, on a call of their own before this dial came
+                    # due: a person reached ends the dialling (spec 9.4), so it is never placed.
+                    self._set_dial(
+                        d["dial_id"], {"status": "cancelled", "outcome": "screened", "ended_at": _stamp(now)}
+                    )
                     continue
                 if not ready(copy.deepcopy(d), app):
                     continue
@@ -1328,6 +1400,16 @@ class Ledger:
             return "opted_out"
         return None
 
+    def _call_ids(self, code: str) -> set[str]:
+        overlay = self._overlay
+        entry = overlay["answers"].get(code) or {}
+        ids = [r.get("call_id") for r in (entry.get("by_question") or {}).values() if isinstance(r, dict)]
+        screen = entry.get("screen")
+        ids.append(screen.get("call_id") if isinstance(screen, dict) else None)
+        ids += [d.get("call_sid") for d in overlay["dials"] if d.get("code") == code]
+        ids += [c.get("call_id") for c in overlay["callbacks"] if c.get("code") == code]
+        return {str(i) for i in ids if isinstance(i, str) and i}
+
     def _codes_for_number(self, hashed: str) -> set[str]:
         return {a.code for a in self._all_applicants() if a.number_hmac == hashed}
 
@@ -1547,13 +1629,23 @@ class Ledger:
         self._seen = self._file_stamp()
 
 
-def forget_everywhere(ledger: Ledger, code: str, delete_contact: Callable[[str], bool]) -> bool:
-    """A deletion request in full: the raw number first, from the contacts store, then the ledger's records. The
-    number goes first, so a failure part way never leaves a number with no application to find it by."""
+def forget_everywhere(
+    ledger: Ledger,
+    code: str,
+    delete_contact: Callable[[str], bool],
+    delete_call: Callable[[str], object] | None = None,
+) -> bool:
+    """A deletion request in full: the raw number first, from the contacts store, then the traces of the calls the
+    application's records name (`delete_call`, the trace store's), then the ledger's records. The number goes
+    first, so a failure part way never leaves a number with no application to find it by, and the call ids are read
+    before the records that name them go."""
     app = ledger.applicant(code)
     if app is None:
         raise LedgerError("unknown_applicant", "There is no application with that code.")
     removed = delete_contact(app.code)
+    if delete_call is not None:
+        for call_id in sorted(ledger.call_ids(app.code)):
+            delete_call(call_id)
     ledger.forget(app.code)
     return removed
 
@@ -1570,6 +1662,18 @@ def _contacts_deleter(settings: Settings) -> Callable[[str], bool]:
     return lambda code: bool(store.delete(code))
 
 
+def _trace_deleter(settings: Settings) -> Callable[[str], object] | None:
+    """TraceStore.delete_call over the line's store, when the store exists; a missing file holds no trace and is
+    never created by a deletion."""
+    # Imported here, as the contacts store is, so the ledger module stays free of the store at import.
+    from candidate_line.traces.store import DEFAULT_PATH, TraceStore
+
+    path = settings.trace_store_path or str(DEFAULT_PATH)
+    if path != ":memory:" and not Path(path).exists():
+        return None
+    return TraceStore(path).delete_call
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """`make forget CODE=ACME-dddd`: a deletion request against the live state file and the contacts store."""
     parser = argparse.ArgumentParser(description="the line's ledger: a deletion request")
@@ -1582,12 +1686,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("STATE_PATH is :memory:, so there is no state file to delete from")
         return 2
     try:
-        removed = forget_everywhere(ledger, args.code, _contacts_deleter(settings))
+        removed = forget_everywhere(ledger, args.code, _contacts_deleter(settings), _trace_deleter(settings))
     except LedgerError as refusal:
         print(f"not forgotten: {refusal}")
         return 1
     contact = "its number deleted from the contacts store" if removed else "no number was held for it"
-    print(f"forgot {ledger._canonical(args.code)}: application, answers and dials removed; {contact}")
+    print(
+        f"forgot {ledger._canonical(args.code)}: application, answers, dials and call traces removed; {contact}"
+    )
     return 0
 
 

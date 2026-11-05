@@ -197,6 +197,19 @@ def test_a_topic_in_the_reason_or_the_asks_is_refused_too(tmp_path: Path) -> Non
     _asking(tmp_path, "no criminal record", "arrests or convictions", field="asks")
 
 
+def test_a_topic_in_a_range_unit_is_refused(tmp_path: Path) -> None:
+    """The unit is said back after every answer ("Noted: 30 years of age."), so an age question cannot hide in it
+    behind a say that names no topic (DR-025 section 4)."""
+    doc = _doc()
+    q3 = doc["roles"][0]["questions"][2]
+    assert q3["kind"] == "range"
+    q3["say"] = "The posting asks for at least 21. How many years have you had so far?"
+    q3["range"]["unit"] = "years of age"
+    q3["asks"] = "at least 21"
+    q3["rule"] = {"at_least": 21}
+    _refused(tmp_path, doc, "its range unit asks about age or birth date")
+
+
 def test_no_committed_question_names_a_forbidden_topic() -> None:
     # The loader already refuses one at start; this says so in one line for the teach-back.
     assert len(FORBIDDEN_TOPICS) == 10 and load_roles()

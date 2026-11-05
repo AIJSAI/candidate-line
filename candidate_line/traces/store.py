@@ -280,6 +280,17 @@ class TraceStore:
             )
             self._conn.commit()
 
+    def delete_call(self, call_id: str) -> int:
+        """Removes one call's row, spans and hand-offs, for a deletion request or the end of an application's
+        retention (spec 9.13): the screening call's spans hold the applicant's masked words and the values
+        recorded, which the ledger's deletion would otherwise leave behind. Returns the rows removed."""
+        with self._lock:
+            removed = 0
+            for table in ("spans", "escalations", "calls"):
+                removed += self._conn.execute(f"DELETE FROM {table} WHERE call_id = ?", (call_id,)).rowcount
+            self._conn.commit()
+        return removed
+
     def escalations(self, call_id: str | None = None) -> list[EscalationRow]:
         with self._lock:
             if call_id is None:

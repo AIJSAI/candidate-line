@@ -323,6 +323,73 @@ def test_a_failed_rest_call_marks_the_dial_failed_and_schedules_the_next_attempt
     assert all(fictional(142)[-7:] not in r.getMessage() for r in caplog.records)
 
 
+class LostAnswerTwilio(FakeTwilio):
+    """Twilio took the Calls.json but its answer never came back: the read timed out (status None)."""
+
+    def place_call(self, to: str, from_: str, **kwargs) -> str:
+        self.calls.append({"To": to, "From": from_, **kwargs})
+        raise TwilioError(None, None, "Twilio could not be reached: TimeoutError")
+
+
+def test_a_lost_rest_answer_leaves_the_dial_in_flight_so_no_second_call_starts(tmp_path, caplog) -> None:
+    """Twilio may have placed the call, so the one-call gate stays shut: no second applicant is dialled on the next
+    tick, the person who answers gets the opening through /voice?dial=, and the recovery ends a dial that never
+    reached Twilio."""
+    w = World(tmp_path)
+    w.twilio = LostAnswerTwilio()
+    w.dialler._twilio = w.twilio  # type: ignore[assignment]
+    applicant, dial = w.apply()
+    w.apply(number=fictional(143))
+    with caplog.at_level(logging.WARNING):
+        assert w.dialler.tick() == "unknown at Twilio"
+    left = w.ledger.dial(dial["dial_id"])
+    assert (left["status"], left["outcome"], left["call_sid"]) == ("placed", None, None)
+    assert [d["attempt"] for d in w.ledger.dials(applicant.code)] == [1]  # no attempt 2 yet
+    w.clock.advance(seconds=15)
+    assert w.dialler.tick() == "a call is in flight" and len(w.twilio.calls) == 1
+    # Twilio did place it: the answered call's /voice binds the dial by the signed id.
+    found = w.dialler.find_dial("CA" + "7" * 32, dial["dial_id"])
+    assert found is not None and found["call_sid"] == "CA" + "7" * 32
+    assert all(fictional(142)[-7:] not in r.getMessage() for r in caplog.records)
+
+
+def test_a_lost_rest_answer_for_a_call_twilio_never_placed_is_ended_by_the_recovery(tmp_path) -> None:
+    w = World(tmp_path)
+    w.twilio = LostAnswerTwilio()
+    w.dialler._twilio = w.twilio  # type: ignore[assignment]
+    applicant, dial = w.apply()
+    assert w.dialler.tick() == "unknown at Twilio"
+    w.clock.advance(seconds=2 * (480 + 60 + 30 + 120) + 1)  # twice the call's whole limit, with no /voice
+    w.dialler.tick()
+    ended = w.ledger.dial(dial["dial_id"])
+    assert (ended["status"], ended["outcome"]) == ("failed", "failed")
+    assert [d["attempt"] for d in w.ledger.dials(applicant.code)] == [1, 2]
+
+
+def test_the_retention_sweep_removes_a_purged_applications_call_traces(tmp_path) -> None:
+    """Spec 9.13: the end of the answers' retention keeps only the consent's version and time and the number's
+    HMAC, so the screening call's trace goes with the records, on the same tick."""
+    from candidate_line.traces.store import TraceStore
+
+    w = World(tmp_path)
+    store = TraceStore(":memory:")
+    w.dialler._traces = store
+    applicant, dial = w.apply(due_in_s=10**8)
+    w.ledger.record_answer(applicant.code, "q1", "yes", "yes", "CA-screen")
+    w.ledger.update_dial(dial["dial_id"], call_sid="CA-dial")
+    for call in ("CA-screen", "CA-dial", "CA-other"):
+        store.start_call(call, "outbound")
+        store.span(call, "tool", "record_answer", text="recorded q1: yes")
+    w.clock.advance(days=1460, seconds=-2)
+    w.dialler.tick()
+    assert store.call("CA-screen") is not None  # not yet past its retention
+    w.clock.advance(seconds=4)
+    w.dialler.tick()
+    assert w.ledger.applicant(applicant.code) is None
+    assert store.call("CA-screen") is None and store.spans("CA-dial") == [] and store.call("CA-dial") is None
+    assert store.call("CA-other") is not None
+
+
 def test_the_sweep_deletes_a_number_on_the_first_tick_after_the_retention_with_dialling_on_or_off(
     tmp_path,
 ) -> None:

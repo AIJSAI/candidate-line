@@ -7,7 +7,7 @@ spans and invite-to-booked from the ledger: a span shows what happened on a call
 bookings that still stand, with their time, which is the clock invite-to-booked is about.
 
 The outbound rows (DR-025 section 17) read the applications, answers and dials from the same state file, never
-through a Ledger, and the recruiter's reads and call-backs from the store's hook spans and hand-off replies.
+through a Ledger, and the recruiter's reads and call-backs from the store's hook spans.
 """
 
 from __future__ import annotations
@@ -341,26 +341,22 @@ def read_seconds(calls: Sequence[CallTrace]) -> tuple[int, ...]:
     )
 
 
-def call_backs(calls: Sequence[CallTrace], store: TraceStore | None) -> dict[str, tuple[datetime, ...]]:
-    """When a recruiter logged a call-back, by screening call: the cockpit's called_back spans and the replies to
-    the screening hand-offs, either of which is the recruiter saying the call was made."""
+def call_backs(calls: Sequence[CallTrace]) -> dict[str, tuple[datetime, ...]]:
+    """When a recruiter logged a call-back, by screening call: the cockpit's called_back spans only. A reply to the
+    hand-off is not counted, because the generic reply box takes "no answer, will try tomorrow" as readily as a
+    call made, and spec 9.14 asks for hand-offs called back inside the promised time."""
     found: dict[str, list[datetime]] = {}
     for c in calls:
         for s in c.spans:
             at = _instant(s.meta.get("called_at")) if s.kind == "hook" and s.name == "called_back" else None
             if at is not None:
                 found.setdefault(c.call.call_id, []).append(at)
-    for e in store.escalations() if store is not None else []:
-        at = _instant(e.replied_at)
-        if e.reason.startswith(SCREENING_KIND) and at is not None:
-            found.setdefault(e.call_id, []).append(at)
     return {call: tuple(sorted(times)) for call, times in found.items()}
 
 
 def read_outbound(
     state_path: Path | None,
     calls: Sequence[CallTrace] = (),
-    store: TraceStore | None = None,
     applications_path: Path = APPLICATIONS_PATH,
     roles_path: Path = ROLES_PATH,
     screens_path: Path = SCREENS_BASELINE_PATH,
@@ -369,7 +365,7 @@ def read_outbound(
     """The outbound records, the state file read as the cockpit reads it (never through a Ledger)."""
     common: dict[str, Any] = {
         "read_seconds": read_seconds(calls),
-        "call_backs": call_backs(calls, store),
+        "call_backs": call_backs(calls),
         "screen_minutes": read_screen_minutes(screens_path),
         "now": now or datetime.now(UTC),
     }
@@ -548,8 +544,8 @@ def _outbound_rows(outbound: Outbound) -> list[Row]:
             f"slots offered {offered} of {len(met)}; called back in time {kept} of {due}",
             f"{_plural(len(screens), 'finished screen')}, {_plural(len(promised), 'hand-off')}",
             "met screens whose last line offered interview times, n of the met screens; screening hand-offs (a "
-            "posted requirement not met, or met with no open slot) whose called-back span or hand-off reply in the "
-            "cockpit came at or before the promised time, n of those whose time has come"
+            "posted requirement not met, or met with no open slot) whose called-back span in the cockpit came at "
+            "or before the promised time, n of those whose time has come"
             f" ({still_open} still open before their time); short of n is a defect",
         )
     )
@@ -779,7 +775,7 @@ def build(
     found = store_path == ":memory:" or Path(store_path).exists()
     store = TraceStore(store_path) if found else None
     calls = read_calls(store) if store is not None else []
-    outbound = read_outbound(state_path, calls, store, now=now)
+    outbound = read_outbound(state_path, calls, now=now)
     bookings = ledger_bookings(state_path)
     # An applicant's interview booking has no invitation, so invite-to-booked reads the candidates' bookings only.
     applicants = {str(a.get("code")) for a in outbound.applications}

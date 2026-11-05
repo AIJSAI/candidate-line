@@ -489,6 +489,10 @@ def move_slot(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
 
 @_tool
 def answer_question(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
+    if screening.dialled(ctx) is not None and screening.applicant(ctx, _ledger(ctx)) is None:
+        # Before the PIN, whoever answered the dial may not be the applicant, and an FAQ section (F9.1 names the
+        # role kind and the firm) says more than Never 5's outbound list allows.
+        raise BadArgument(screening.NOT_CONFIRMED)
     raw = args.get("section_ids")
     if isinstance(raw, str):
         # A model sometimes sends the list as JSON text; brackets and quotes are never part of an id.
@@ -508,26 +512,60 @@ def request_callback(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
     ledger = _ledger(ctx)
     cand = _verified(ctx, ledger)
     found = screening.applicant(ctx, ledger) if cand is None else None
+    # The application this outbound call was placed for, when nobody on it is proved yet: the PIN missed twice and
+    # PIN_SECOND_MISS_LINE offered a recruiter's call to this number, so the request must name whose it is.
+    seed = screening.dialled(ctx) if cand is None and found is None else None
     best_time = _scrub(_text(args, "best_time"), ctx, ledger)
-    reason = _scrub(_text(args, "reason"), ctx, ledger)
-    code = cand.code if cand else found.code if found else None
-    ledger.request_callback(code, best_time, reason, ctx.call_id)
-    # An applicant is named by first name only, which is all the application holds.
-    who = (
-        f"{cand.code} ({cand.name})"
-        if cand
-        else f"{found.code} ({found.first_name})"
-        if found
-        else "the caller"
-    )
     first = cand.first_name if cand else found.first_name if found else "the caller"
-    action = (
-        "call the candidate back"
-        if cand
-        else "call the applicant back"
-        if found
-        else "call the caller back on the masked number"
-    )
+    hand_off: HandOff
+    if found is not None:
+        # An applicant's reason is the model's own words for what they said, which may hold an answer or the
+        # requirement it missed; neither reaches mail or the ledger (spec 9.11, DR-025 Security), so the words are
+        # fixed.
+        when = "after" if ledger.screen(found.code) is not None else "during"
+        reason: str | None = f"asked for a recruiter {when} the screening questions"
+        code: str | None = found.code
+        hand_off = HandOff(
+            reason=(
+                f"callback request from {found.code} ({found.first_name}): {reason}; "
+                f"best time {best_time or 'not given'}"
+            ),
+            suggested_action=(
+                "call the applicant back; read the answers on the applicant's record first, and a person decides "
+                "the application"
+            ),
+            record_code=found.code,
+        )
+    elif seed is not None:
+        code = str(seed["code"])
+        reason = "asked for a recruiter's call after the PIN did not match"
+        # The hand-off goes to staff, never to the person on the line, so naming the application keeps Never 5.
+        hand_off = HandOff(
+            reason=(
+                f"callback request from {code} ({seed.get('first_name')}): {reason}; "
+                f"best time {best_time or 'not given'}"
+            ),
+            suggested_action=(
+                "call the number this application gave; the PIN was not confirmed, so confirm it before reading "
+                "anything from the record"
+            ),
+            record_code=code,
+        )
+    else:
+        reason = _scrub(_text(args, "reason"), ctx, ledger)
+        code = cand.code if cand else None
+        # A candidate is named in full, an unverified caller not at all.
+        who = f"{cand.code} ({cand.name})" if cand else "the caller"
+        hand_off = HandOff(
+            reason=(
+                f"callback request from {who}: {reason or 'no reason given'}; "
+                f"best time {best_time or 'not given'}"
+            ),
+            suggested_action="call the candidate back"
+            if cand
+            else "call the caller back on the masked number",
+        )
+    ledger.request_callback(code, best_time, reason, ctx.call_id)
     return ToolOutcome(
         content=_json(
             {
@@ -538,13 +576,7 @@ def request_callback(args: Mapping[str, Any], ctx: TurnContext) -> ToolOutcome:
             }
         ),
         state=ledger.state(code) if code else None,
-        escalate=HandOff(
-            reason=(
-                f"callback request from {who}: {reason or 'no reason given'}; "
-                f"best time {best_time or 'not given'}"
-            ),
-            suggested_action=action,
-        ),
+        escalate=hand_off,
     )
 
 

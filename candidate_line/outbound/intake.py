@@ -35,7 +35,7 @@ from candidate_line.outbound import Ledger, number_hmac, number_key
 from candidate_line.outbound.contacts import Contacts
 from candidate_line.outbound.window import first_dial_at
 from candidate_line.settings import Settings
-from candidate_line.tools.ledger import APPLICATIONS_PATH
+from candidate_line.tools.ledger import APPLICATIONS_PATH, US_ZONES
 from candidate_line.tools.roles import ROLES_PATH, load_roles
 from candidate_line.traces.store import mask_number
 
@@ -83,8 +83,9 @@ def _first_name(value: str) -> str:
 
 
 def _us_zone(value: str) -> str:
-    if not (value.startswith("America/") or value == "Pacific/Honolulu"):
-        raise ValueError("the zone is an IANA zone under America/ or Pacific/Honolulu")
+    # The ledger's closed set, so intake and add_application refuse the same zones (spec 9.1).
+    if value not in US_ZONES:
+        raise ValueError("the zone is a US IANA zone")
     try:
         ZoneInfo(value)
     except (ZoneInfoNotFoundError, ValueError):

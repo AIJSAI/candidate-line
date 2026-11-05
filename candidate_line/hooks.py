@@ -174,12 +174,15 @@ class LineHooks:
 
     def _opt_out(self, ctx: TurnContext, text: str) -> bool:
         """On an outbound call or for an applicant on the line, "stop" or a stop phrase ends the calls at once with
-        the outbound stop line and no model call (spec 9.12). From anyone else, "stop" keeps today's stop line
-        and a phrase goes to the model. True when it closed the call."""
+        the outbound stop line and no model call (spec 9.12). So does one said on a call in from a number an
+        application gave, which the voicemail line tells a person to do. From anyone else, "stop" keeps today's
+        stop line and a phrase goes to the model. True when it closed the call."""
         said = straighten(text).lower()
         stop, phrase = _is_stop(text), _is_opt_out(said)
-        if (not stop and not phrase) or not (ctx.data.get("outbound") or ctx.data.get("candidate")):
+        if not stop and not phrase:
             return False
+        if not (ctx.data.get("outbound") or ctx.data.get("candidate")):
+            return self._caller_opt_out(ctx)
         ledger = _ledger(ctx)
         if screening.opt_out_code(ctx, ledger) is None:
             return False
@@ -206,6 +209,31 @@ class LineHooks:
         ctx.data["hang_up"] = True
         ctx.data["say"] = OUTBOUND_STOP_LINE
         _span(ctx, "hook", "opt-out", text=f"the calls were stopped: {how}")
+        return True
+
+    def _caller_opt_out(self, ctx: TurnContext) -> bool:
+        """A stop from an unverified caller on a call in, from a number an application gave: the voicemail line
+        says "To stop these calls, call that number and say stop", and revocation by any reasonable means must hold
+        (47 CFR 64.1200(a)(10)). The webhook keeps only the From number's HMAC for the call, never the number, and
+        the ledger finds the applications by it. True when it closed the call."""
+        hashed = ctx.data.get("caller_number_hmac")
+        if not isinstance(hashed, str) or not hashed:
+            return False
+        ledger = _ledger(ctx)
+        codes = sorted(ledger.codes_for_number(hashed))
+        if not codes:
+            return False
+        try:
+            ledger.opt_out(codes[0], how=screening.SAID_STOP, call_id=ctx.call_id, number_hmac=hashed)
+        except Exception:  # the stop is still honoured on the call; a person must make it stick
+            log.exception("opt-out not saved for %s", ctx.call_id)
+            ctx.data["tier_request"] = "an opt-out could not be saved: cancel this number's dials by hand"
+            ctx.data["hang_up"] = True
+            ctx.data["say"] = STOP_LINE
+            return True
+        ctx.data["hang_up"] = True
+        ctx.data["say"] = OUTBOUND_STOP_LINE
+        _span(ctx, "hook", "opt-out", text="the calls were stopped: said stop on a call back")
         return True
 
     def _hello(self, ctx: TurnContext, text: str) -> bool:

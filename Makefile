@@ -60,7 +60,7 @@ probe-dial:
 # The outbound call's live check (card 08, lane B). It rings a real line and spends money, so the probe refuses
 # to run without --watched, and this target passes that only when the command line says WATCHED=1.
 probe-answer:
-	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.dial --answer $(if $(WATCHED),--watched) --public-url "$(PUBLIC)" $(if $(LINE),--line-url "$(LINE)")
+	. scripts/env.sh && AWS_PROFILE=$${AWS_PROFILE:-candidate-line} uv run python -m candidate_line.probe.dial --answer $(if $(and $(filter command line,$(origin WATCHED)),$(filter 1,$(WATCHED))),--watched) --public-url "$(PUBLIC)" $(if $(LINE),--line-url "$(LINE)")
 
 bakeoff:
 	@for c in bakeoff/cases/*.yaml; do echo "== $$c"; $(MAKE) --no-print-directory probe-dial CASE=$$c PUBLIC="$(PUBLIC)" ARM="$(ARM)" || true; done

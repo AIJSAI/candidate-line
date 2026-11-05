@@ -24,5 +24,3 @@ Written by lane 0 of the outbound build (Claude Opus 5.5) from the prompt below.
 7. `baseline_screens.csv`: forty past recruiter phone screens for these roles, with the time, the role, the minutes the screen took and the attempts it took to reach the applicant; a column `synthetic` is `true` on every row and the header comment says so. This is the scorecard's baseline for the recruiter minutes the line saves.
 
 Edited by hand on 2026-11-05: `faq.md` gains F9, screening questions and calls from this line, written by lane 0 from spec section 9; F8.1 and F1.1 are unchanged until James words Never 1 (`prompts/08`, open decision 1).
-
-Edited by hand later on 2026-11-05, by lane C of card 08 at the build's instruction: F8.1 and F1.1 now say what the proposed Never 1 says (the line evaluates no one; its one check is code that compares an applicant's answer with a requirement the employer posted; a person makes every decision). James's own words on Never 1 may change them again (`prompts/08`, open decision 1).

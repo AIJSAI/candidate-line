@@ -22,8 +22,9 @@ Parameters:
   MaxCallsPerDay:
     Type: Number
     Default: 30
-  # The outbound screening call (DR-025 section 11). Off by default; turning it on also needs the three secrets
-  # below in Secrets Manager, or the process stops at start.
+  # The outbound screening call (DR-025 section 11). Off by default. The three secrets in Secrets below must exist
+  # before any deploy of this template, whatever OutboundEnabled says (deploy.sh secrets): ECS cannot start a task
+  # whose secret reference is missing.
   OutboundEnabled:
     Type: String
     Default: "0"

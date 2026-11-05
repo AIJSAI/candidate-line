@@ -338,7 +338,7 @@ def test_the_four_outbound_rows_carry_their_method_and_n(tmp_path: Path) -> None
     state, store_path = _outbound_world(tmp_path)
     store = TraceStore(store_path)
     calls = read_calls(store)
-    outbound = scorecard.read_outbound(state, calls, store, now=AFTER)
+    outbound = scorecard.read_outbound(state, calls, now=AFTER)
     rows = {r.number: r for r in scorecard.scorecard(calls, {}, {}, read_baseline(), outbound)}
 
     contact = rows["minutes from application to first contact"]
@@ -367,9 +367,11 @@ def test_the_four_outbound_rows_carry_their_method_and_n(tmp_path: Path) -> None
     assert "a not-met hand-off saves nothing" in saved.method
 
     promise = rows["the promise (a check row)"]
-    assert promise.value == "slots offered 1 of 2; called back in time 2 of 3"
+    # A's called-back span counts; G's hand-off has a reply ("called") but no called-back span, and a reply is not
+    # a call made (spec 9.14), so G stays open before its time.
+    assert promise.value == "slots offered 1 of 2; called back in time 1 of 2"
     assert (
-        promise.n == "5 finished screens, 4 hand-offs" and "1 still open before their time" in promise.method
+        promise.n == "5 finished screens, 4 hand-offs" and "2 still open before their time" in promise.method
     )
     assert "short of n is a defect" in promise.method
 

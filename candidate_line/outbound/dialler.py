@@ -31,7 +31,7 @@ from candidate_line.outbound.window import in_window, next_attempt
 from candidate_line.settings import Settings
 from candidate_line.telephony.twilio_rest import TwilioError, TwilioRest, scrub_numbers
 from candidate_line.tools.ledger import LedgerError
-from candidate_line.traces.store import mask_number
+from candidate_line.traces.store import TraceStore, mask_number
 
 log = logging.getLogger("candidate_line.dialler")
 
@@ -122,8 +122,11 @@ class Dialler:
         clock: Callable[[], datetime],
         preflight: Callable[[], object],
         no_dial: Path = NO_DIAL,
+        traces: TraceStore | None = None,
     ) -> None:
         self._settings = settings
+        # The line's trace store, so the retention sweep removes a purged application's call traces with it.
+        self._traces = traces
         self._ledger = ledger
         self._contacts = contacts
         self._twilio = twilio
@@ -163,8 +166,9 @@ class Dialler:
         return self._place(ledger, dial, now)
 
     def sweep(self, now: datetime) -> None:
-        """The retention sweep: raw numbers past CONTACTS_RETENTION_DAYS, and answers, dials and applications past
-        ANSWERS_RETENTION_DAYS. Each half is tried on its own, so one failing never keeps the other from running."""
+        """The retention sweep: raw numbers past CONTACTS_RETENTION_DAYS, and answers, dials, applications and
+        their calls' traces past ANSWERS_RETENTION_DAYS. Each half is tried on its own, so one failing never keeps
+        the other from running."""
         try:
             purged = self._contacts.purge(now)
             if purged:
@@ -177,7 +181,13 @@ class Dialler:
             log.exception("the opt-out sweep of the contacts store failed")
         try:
             before = now - timedelta(days=self._settings.answers_retention_days)
-            forgotten = self._ledger().purge_answers(before)
+            ledger = self._ledger()
+            if self._traces is not None:
+                # The traces go first: their calls are found through the records the purge removes, and a trace
+                # of an application past its retention is due to go whether or not the purge then succeeds.
+                for call_id in sorted(ledger.calls_past_retention(before)):
+                    self._traces.delete_call(call_id)
+            forgotten = ledger.purge_answers(before)
             if forgotten:
                 log.info("retention: %d applications past the answers' retention removed", forgotten)
         except Exception:
@@ -285,6 +295,15 @@ class Dialler:
                 time_limit_s=self._settings.max_outbound_call_seconds + TIME_LIMIT_MARGIN_S,
             )
         except TwilioError as error:
+            if error.status is None:
+                # No HTTP answer, or one we could not read: Twilio may have placed the call. The dial stays placed
+                # with no CallSid, so /voice?dial= binds it if the call exists and _recover ends it if it never does.
+                log.warning(
+                    "dial %s: Twilio's answer was lost (%s); left in flight",
+                    dial_id,
+                    scrub_numbers(str(error)),
+                )
+                return "unknown at Twilio"
             ledger.update_dial(dial_id, status="failed", outcome="failed", ended_at=stamp(now))
             log.warning("dial %s failed at Twilio: %s", dial_id, scrub_numbers(str(error)))
             self._schedule_next(ledger, dial, applicant, now)

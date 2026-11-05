@@ -37,7 +37,7 @@ Per call on top: about 0.18 USD for a five-minute call (DR-001: Transcribe, Poll
 
 1. A `Dockerfile` and a `make image` that builds and runs the container on the Mac against the same secrets, proven by a text-mode turn and a local probe call. No account change.
 2. One CloudFormation template under `infra/aws/` (a VPC with two public subnets, the two security groups, the load balancer and target group with the `/health` check, the ECS cluster, task definition and service, the EFS file system and access point, the two roles, the secret references, the CloudFront distribution with the WebSocket origin request policy, the log group, the budget action). James reads the template; the stack is created with the admin profile.
-3. The secrets uploaded from the keychain, nothing printed.
+3. The secrets uploaded from the keychain, nothing printed. `deploy.sh secrets` runs before any `deploy.sh stack` that carries the outbound call (DR-025 section 19): the task references INTAKE_SIGNING_KEY, OUTBOUND_ALLOWED_NUMBERS and TWILIO_LINE_NUMBER whatever OutboundEnabled says, ECS cannot start a task whose secret reference is missing, and with the old task stopped first the inbound line would be down too. The stack step refuses to run while any of the three is missing.
 4. The image pushed to ECR; the service started; `/health` green through the CloudFront address.
 5. A probe call against the container (`make probe URL=wss://<id>.cloudfront.net/media`) with Hannah's code; the trace read from the store through the port-forward.
 6. `make webhook URL=https://<id>.cloudfront.net` points the number at the container, time noted; one real call by James; the Mac line stays up until that call passes.

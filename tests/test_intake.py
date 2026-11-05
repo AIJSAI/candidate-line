@@ -256,7 +256,23 @@ def test_a_bad_number_is_refused_and_never_echoed(tmp_path, form: str) -> None:
     assert nothing_stored(line)
 
 
-@pytest.mark.parametrize("zone", ["Europe/London", "America/Nowhere", "UTC", "", "Pacific/Guam"])
+# Every one of these but the first five is a real zone under America/ outside the US, which a prefix test let through
+# and the calling window would then be read in (spec 9.1 and 9.2).
+@pytest.mark.parametrize(
+    "zone",
+    [
+        "Europe/London",
+        "America/Nowhere",
+        "UTC",
+        "",
+        "Pacific/Guam",
+        "America/Sao_Paulo",
+        "America/Noronha",
+        "America/St_Johns",
+        "America/Argentina/Buenos_Aires",
+        "America/Godthab",
+    ],
+)
 def test_a_bad_zone_is_refused(tmp_path, zone: str) -> None:
     line = Line(tmp_path)
     assert line.post(body(zone=zone)).status_code == 422

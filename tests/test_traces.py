@@ -373,3 +373,23 @@ def test_the_applicant_pages_escape_what_the_file_holds(tmp_path: Path) -> None:
     for path in ("/applicants", "/applicants/ACME-0101"):
         text = client.get(path).text
         assert "<script>alert" not in text and "&lt;script&gt;" in text and "<b>yes" not in text
+
+
+def test_the_cockpit_shows_an_answer_in_the_words_the_applicant_heard() -> None:
+    """Spec 9.9: "Noted: 1 year." on the call, so the recruiter's page says "1 year" too, never "1 years"."""
+    from candidate_line.tools.roles import load_roles, spoken_value
+    from candidate_line.traces.cockpit import read_roles, spoken_answer
+
+    posted, _ = read_roles()
+    ranges = 0
+    for role in load_roles().values():
+        by_id = {str(q["id"]): q for q in posted[role.id]["questions"]}
+        for q in role.questions:
+            values = ["declined", "unclear"] + (["0", "1", "3"] if q.kind == "range" else [])
+            values += ["yes", "no"] if q.kind == "yes_no" else [o.id for o in q.options]
+            for value in values:
+                assert spoken_answer(by_id[q.id], value) == spoken_value(q, value)
+            ranges += q.kind == "range"
+    assert ranges >= 2
+    years = next(q for q in load_roles()["front-desk"].questions if q.kind == "range")
+    assert spoken_answer({"range": {"unit": years.range.unit}}, "1") == "1 year"  # type: ignore[union-attr]

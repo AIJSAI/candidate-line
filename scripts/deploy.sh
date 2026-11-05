@@ -58,6 +58,10 @@ case "${1:?step}" in
     for name in INTAKE_SIGNING_KEY OUTBOUND_ALLOWED_NUMBERS TWILIO_LINE_NUMBER; do store_secret "$name"; done ;;
   stack)
     [ -n "$OPERATOR_EMAIL" ] || { echo "set OPERATOR_EMAIL in the environment for the stack step"; exit 2; }
+    # The task references the outbound call's three secrets whatever OutboundEnabled says, and ECS cannot start a task
+    # whose secret reference is missing: with MinimumHealthyPercent 0 the old task stops first, so a stack deployed
+    # before `deploy.sh secrets` would take the inbound line down too.
+    for name in INTAKE_SIGNING_KEY OUTBOUND_ALLOWED_NUMBERS TWILIO_LINE_NUMBER; do aws secretsmanager describe-secret --profile "$ADMIN" --region "$REGION" --secret-id "candidate-line/$name" >/dev/null 2>&1 || { echo "candidate-line/$name is not in Secrets Manager: run deploy.sh secrets first, or the task cannot start"; exit 2; }; done
     pl="$(aws ec2 describe-managed-prefix-lists --profile "$ADMIN" --region "$REGION" --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing --query 'PrefixLists[0].PrefixListId' --output text)"
     echo "cloudfront prefix list: $pl"
     aws cloudformation deploy --profile "$ADMIN" --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
@@ -88,7 +92,7 @@ case "${1:?step}" in
     # retention sweep go on. OUTBOUND_ENABLED and the kill switch still decide when it is absent.
     if [ "$1" = "dial-off" ]; then on_task "touch /app/var/no-dial && echo 'dialling off: no call is placed; calls in and the retention sweep go on'"; else on_task "rm -f /app/var/no-dial && echo 'dialling on, if OUTBOUND_ENABLED is 1 and the line is not killed'"; fi ;;
   forget)
-    # A deletion request (spec 9.13): the application, its answers, its dials and its raw number, on the task or,
+    # A deletion request (spec 9.13): the application, its answers, its dials, its calls' traces and its raw number, on the task or,
     # with local as the third word, in this Mac's var/. The code is matched in full before it reaches any shell,
     # so nothing else can ride along with it.
     code="${2:-}"
@@ -98,7 +102,7 @@ case "${1:?step}" in
     if [ "${3:-}" = "local" ]; then
       (cd "$ROOT" && uv run python -c "$forget_py" forget "$code")
     else
-      on_task "STATE_PATH=/app/var/state.json CONTACTS_PATH=/app/var/contacts.json python -c '$forget_py' forget $code"
+      on_task "STATE_PATH=/app/var/state.json CONTACTS_PATH=/app/var/contacts.json TRACE_STORE_PATH=/app/var/traces.sqlite python -c '$forget_py' forget $code"
     fi ;;
   apply)
     # A signed synthetic application for a walk (DR-025 section 10), posted to URL (the line on this Mac by

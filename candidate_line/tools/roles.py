@@ -184,9 +184,14 @@ def spoken_value(question: Question, value: str) -> str:
         found = question.option(value)
         return found.say if found is not None else value
     assert question.range is not None
-    unit = question.range.unit
+    return with_unit(value, question.range.unit)
+
+
+def with_unit(value: str, unit: str) -> str:
+    """A number and its posted unit as spec 9.9 says them: the unit as posted, its first word in the singular for
+    the number 1 ("1 year"), because "1 years" said aloud is a slip a person would not make. The cockpit shows an
+    answer through this too, so the recruiter reads the words the applicant heard."""
     if value == "1":
-        # "1 years" said aloud is a slip a person would not make; the posted unit is kept, only its plural goes.
         first, _, rest = unit.partition(" ")
         unit = f"{first.removesuffix('s')} {rest}".strip() if first.endswith("s") else unit
     return f"{value} {unit}"
@@ -350,6 +355,9 @@ def _rule(raw: object, kind: Kind, options: tuple[Option, ...], scale: Range | N
 def _topics(question: Question, where: str) -> None:
     fields = {"say": question.say, "asks": question.asks, "reason": question.reason}
     fields |= {f"option {o.id}": o.say for o in question.options}
+    if question.range is not None:
+        # The line says the unit back in every "Noted:" line, so "30 years of age" asks the topic as plainly as a say.
+        fields["range unit"] = question.range.unit
     for field_name, words in fields.items():
         plain = _ACCOMMODATION.sub(" ", words)
         for topic, pattern in FORBIDDEN_TOPICS.items():

@@ -7,7 +7,7 @@ This is the FAQ the candidate line answers from. Every answer Gus gives from it 
 ## F1. The process
 
 ### F1.1 What are the stages?
-Four stages: an application review, a first-round interview, a take-home exercise, and a final round. Not every role uses every stage; the invitation you received says which stage is next for you. A person reviews each application and makes every decision; this line evaluates no one. For an hourly role, the line may first ask the questions the employer posted, and its one check is code that compares each answer with the requirement the employer posted, which decides only whether the line offers an interview time now or a recruiter calls you back (F9.2).
+Four stages: an application review, a first-round interview, a take-home exercise, and a final round. Not every role uses every stage; the invitation you received says which stage is next for you.
 
 ### F1.2 How long does the whole process take?
 Most candidates move from the first-round invitation to a final decision within three to four weeks. The coordinator keeps you informed at each stage. Timelines can stretch around holidays and when interviewers travel.
@@ -99,7 +99,7 @@ For some roles. The job description says whether the role is open to sponsorship
 ## F8. Callbacks and this line
 
 ### F8.1 What can this line do?
-Answer questions from this FAQ, book a first-round slot, hand a move to the coordinator, and take a callback request; for an hourly role, it also asks the employer's posted questions (F9). It cannot see interview notes, decisions or scores, and it does not evaluate anyone. Its one check is code that compares an applicant's own answer with a requirement the employer posted for the role; it decides only whether the line offers an interview time now or a recruiter calls back, and a person makes every hiring decision.
+Answer questions from this FAQ, book a first-round slot, hand a move to the coordinator, and take a callback request. It cannot see interview notes, decisions or scores, and it does not evaluate candidates.
 
 ### F8.2 How do I request a callback?
 Say that you want a callback and, if you like, the best time to reach you. The coordinator returns calls within one business day, using the number you called from unless you give another.

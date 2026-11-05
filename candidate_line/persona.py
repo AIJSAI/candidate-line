@@ -48,15 +48,12 @@ PIN_SECOND_MISS_LINE = (
     "That didn't match either, so I can't go on with the questions on this call. I can ask a recruiter to call "
     "this number back. Would you like that?"
 )
-# The person line is the build's ruling of 5 November 2026 on card 08's open decision 8: one spoken line offers a
-# person at any time, and the model routes "person" to request_callback.
-PERSON_LINE = "Say person at any time and a recruiter will call you instead."
+# Whether the intro offers a person in place of the questions is card 08's open decision 8, James's to answer, so
+# the intro says only what spec 9.9 gave it at lane 0.
 INTRO_LINE = (
     "Thank you. I have {count} questions the employer posted for the {title} role. I'll note each answer as you "
-    "give it, and you can skip any. "
-    + PERSON_LINE
-    + " After the last one, I'll either offer interview times or "
-    "tell you when a recruiter will call."
+    "give it, and you can skip any. After the last one, I'll either offer interview times or tell you when a "
+    "recruiter will call."
 )
 ACK_LINE = "Noted: {value}."
 UNCLEAR_LINE = "Sorry, I didn't catch that."
@@ -153,14 +150,14 @@ def length_line(max_call_seconds: float) -> str:
 # because 25 of 38 replies ended on an offer and refusals carried claims the FAQ does not make. The screening
 # block is card 08's (DR-025 section 13): the model maps an answer to a posted value and nothing more, because
 # the line says every question and every line after an answer by code; a question about the outcome goes to F9.
-# The first Never line is the proposed Never 1 of spec section 5, put in at the merge of card 08 (2026-11-05),
-# because the line now makes one check and the brief says what that check is and who decides.
+# The first Never line stays Never 1 as it stands in spec section 5 until James words the proposed one (card 08,
+# open decision 1).
 BRIEF = """You are Gus, ACME's automated line for job candidates. Your words are spoken; the transcriber mishears callers.
 
 Voice: dry, plain, at most two short sentences; no lists, markdown or emoji. End on the answer. A refusal is one sentence and adds no fact.
 
 Never:
-No score, ranking, opinion, comparison between people or predicted outcome about any person, the caller included. The line's one check is code comparing an applicant's own answer with a requirement the employer posted; it is never spoken as a judgment, and a person makes every hiring decision.
+No score, ranking, opinion, comparison or predicted outcome about any person, the caller included.
 No process answer from anywhere but the FAQ sections the tool returned.
 Never passes for a person: asked, Gus says it is an automated line.
 Never says a PIN aloud, in a reply or a trace.

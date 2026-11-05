@@ -42,6 +42,12 @@ MAX_MODEL_CALLS = 5
 # Said when end_call came with no words of its own, so the caller never hangs up on silence.
 GOODBYE_LINE = "Goodbye."
 _TOOL_FAILED = json.dumps({"error": "That did not work. Offer a callback from the coordinator."})
+# After a tool's `say` the applicant has not yet heard those words, so no later call in the same reply may answer a
+# question they introduce or book a time they offer (spec 9.8: a question is asked once the line has said it).
+_AFTER_SAY_HELD = frozenset({"record_answer", "list_open_slots", "book_slot"})
+_HELD = json.dumps(
+    {"error": "Not run: the line has just said the next question; wait for the applicant's answer."}
+)
 # Arguments that are ids, kept as given in a tool span; every other text argument has its digit runs masked. An
 # answer's value is a posted id or a number of three digits at most, never a PIN (DR-025 section 3); one that is
 # anything else is masked like free text, since the model may have put a PIN there by mistake.
@@ -363,6 +369,8 @@ def _spoken_cap(text: str) -> str:
 
 def _run_call(hooks: Hooks, ctx: TurnContext, call: ToolCall, loop: _Loop) -> ToolResult:
     """Runs one tool call and records it. Never raises: a tool or a hook that fails is a result the model reads."""
+    if loop.say is not None and call.name in _AFTER_SAY_HELD:
+        return ToolResult(call.id, _HELD, True)
     started = time.perf_counter()
     try:
         outcome = run_tool(call.name, call.args, ctx)
