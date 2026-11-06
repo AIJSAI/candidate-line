@@ -436,6 +436,29 @@ def test_the_spoken_cap_keeps_the_promise_after_a_p_m_inside_a_sentence() -> Non
     )
 
 
+def test_the_spoken_cap_drops_a_greeting_and_a_filler_before_the_ask() -> None:
+    # CL-005 on the eval step of 2026-11-05: four sentences, and the first two said nothing.
+    reply = (
+        "Hi Hannah. I can help with that. First I need your application code and your four-digit PIN. "
+        'Please say the code first, starting with "Application" and then the four digits.'
+    )
+    assert turn_module._spoken_cap(reply) == (
+        "First I need your application code and your four-digit PIN. "
+        'Please say the code first, starting with "Application" and then the four digits.'
+    )
+    # A closing offer goes before a sentence that says something; a section name still rides along.
+    assert turn_module._spoken_cap(
+        "Sure. The interview runs 45 minutes. That is in section F2.1. Anything else?"
+    ) == ("The interview runs 45 minutes. That is in section F2.1.")
+    # Two sentences are never touched, filler or not; all filler keeps its first two.
+    assert turn_module._spoken_cap("Hi Hannah. I can help with that.") == "Hi Hannah. I can help with that."
+    assert turn_module._spoken_cap("Hi. Sure. Of course.") == "Hi. Sure."
+    # A sentence that opens with a greeting word but says something is not filler.
+    assert turn_module._spoken_cap(
+        "Thanks, Hannah, you are verified. Thursday at 9:30 is open. Shall I book it?"
+    ) == ("Thanks, Hannah, you are verified. Thursday at 9:30 is open.")
+
+
 class Posted:
     """The escalation queue's submit, kept in a list: what the operator would be sent."""
 

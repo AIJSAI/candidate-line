@@ -367,13 +367,31 @@ def _heading_words(heading: str) -> str:
     return words[:1].lower() + words[1:]
 
 
+# A sentence that carries nothing: a greeting, a bare acknowledgement or a closing offer. The eval step of
+# 2026-11-05 (CL-005) heard "Hi Hannah. I can help with that." and nothing else, because the model wrote four
+# sentences and the cap kept the first two; the ask for the code and PIN was the third.
+_EMPTY_SENTENCE = re.compile(
+    r"^(?:"
+    r"(?:hi|hello|hey|good (?:morning|afternoon|evening))(?:,? [\w'-]+)?"
+    r"|(?:i can help(?: you)? with that|happy to help(?: with that)?|i(?:'m| am) here to help|sure|of course"
+    r"|certainly|absolutely|got it|okay|ok|no problem|thanks?(?: you)?(?:,? [\w'-]+)?)"
+    r"|(?:is there anything else(?: i can help(?: you)? with)?|let me know if (?:you need|there's) anything else"
+    r"|anything else(?: i can help with)?)"
+    r")[.!?]$",
+    re.IGNORECASE,
+)
+
+
 def _spoken_cap(text: str) -> str:
     """Two sentences, plus the one that names a section. The brief asks for two and the model wrote three or more
-    in 23 of 38 replies on the review walk of 2026-11-04; a caller is waiting (DR-003)."""
+    in 23 of 38 replies on the review walk of 2026-11-04; a caller is waiting (DR-003). A greeting, a bare
+    acknowledgement or a closing offer is dropped before any sentence that says something, so the cap never keeps
+    "Hi Hannah. I can help with that." and drops the ask (DR-024)."""
     sentences = split_sentences(text)
     if len(sentences) <= 2:
         return text
-    kept = sentences[:2] + [s for s in sentences[2:] if _CITE.search(s)][:1]
+    said = [s for s in sentences if not _EMPTY_SENTENCE.match(s.strip())] or sentences
+    kept = said[:2] + [s for s in said[2:] if _CITE.search(s)][:1]
     return " ".join(kept)
 
 

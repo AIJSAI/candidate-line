@@ -33,6 +33,8 @@ A second task (SQLite on EFS is a single-writer design: then RDS); a custom doma
 ## Evidence
 
 (filled at the end of the deployment: the stack's creation time, the CloudFront address's shape, the probe call's transcript and turn gap, the time the number was re-pointed, the operator's call, the time the Mac line came down, the first cost reading.)
+- 2026-11-05 evening: the hand-off notes from the container linked `http://127.0.0.1:8001/...`, the cockpit's port inside the task, which the operator's machine does not have; the port-forward of `make cockpit-forward` listens on 8011. The task now sets `COCKPIT_BASE_URL` to `http://127.0.0.1:8011` (asserted in `tests/test_stack.py`), so a note's link opens the call once the forward is running.
+
 
 ## Say it like this
 
