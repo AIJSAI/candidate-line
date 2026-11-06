@@ -2,6 +2,8 @@
 
 ![tests](https://github.com/AIJSAI/candidate-line/actions/workflows/ci.yml/badge.svg)
 
+> A personal project: a phone line where job candidates at ACME, a fictional firm, book a first interview with a voice agent built on AWS with Claude, and since 5 November get a call back that asks the role's posted screening questions; a person makes every hiring decision. All data is synthetic.
+
 A phone line for the job candidates of ACME, a fictional firm, built on AWS: Amazon Transcribe for the ears, Amazon Polly for the voice, Claude for the conversation (Haiku 5.5 on the Anthropic API today, with Claude on Amazon Bedrock one environment variable away, `DR-003` says why), Twilio for the number, and IAM Identity Center for a sign-in with no long-lived key. A voice agent called Gus verifies a caller by application code and PIN, books a first-round interview slot, answers process questions from an FAQ and names the section he used, takes a callback request, hands a slot move to a person, and never evaluates anyone. The plumbing (the phone path, text mode, the tests, the eval runner, the trace store and the recruiter's cockpit) was built on 1 to 3 November 2026 and is declared in `PREBUILT.md`. The parts that decide what Gus says (the spec, the tools over the data, the persona, the guard, the tiers and the eval cases) were planned for a one-hour live session on 4 November that went to another topic, and were built the same evening after a test call with a valid code found the placeholder prompt refusing it; `spec.md` and the records from `DR-016` on say what was decided and why. On 5 November the line gained an outbound screening call, built from card 08 after James ruled its shape the same day (`spec.md` section 9, `DR-025`). All data is synthetic. No account, key or phone number is in this repository.
 
 The author is James Shehan; "James" in the files is him. The tree was built with Claude Code from the numbered items in `KICKOFF.md`, with every decision written down as it was made; the seven cards in `prompts/` were written for the session and dry-run twice in scratch copies (`docs/decisions/DR-015`), and an eighth, card 08, was written on 5 November for the outbound call. The files call that live session "the room" or "the hour"; "the session" in this README means the same thing.
@@ -37,7 +39,7 @@ Why the call exists: in home care, where the demo's roles sit, turnover runs nea
 With `uv` installed (`brew install uv` on a Mac, or the installer on uv's own site; the project pins Python 3.12):
 
 ```
-make test                       # the test suite, no account needed (1,079 passed on 5 November)
+make test                       # the test suite, no account needed (1,132 passed on 5 November)
 make eval                       # the eval cases through the same turn loop the phone uses; needs ANTHROPIC_API_KEY
 make text                       # text mode on Claude Haiku 5.5; needs ANTHROPIC_API_KEY in the environment
 BRAIN_PROVIDER=echo make text   # text mode with no account: Gus says back what you type; /quit ends it
@@ -74,7 +76,7 @@ The tag `room-2026-11-04` marks the tree as it was when the session opened: the 
 
 ## The Build of 5 November 2026
 
-James ruled the outbound call's shape on 5 November, with the gate in code, and at 09:21 CT ruled on the rewording of Never 1, the new Never 7 and the outbound lines under Never 3 and Never 5, which stand in `spec.md` section 5 (`DR-025`, "The decision"). Lane 0 wrote spec section 9, the record, card 08 and the synthetic roles and applications; three lanes built the tools and the gate, the intake and the dialler, and the ledger, the cockpit, the scorecard and the stack, and were merged the same day. At this commit the suite is 1,130 tests and all of them pass (`uv run pytest -q`). The sixteen outbound eval cases, CL-041 to CL-056, entered `evals/cases` under the rule 4 amendment in `AGENTS.md`. The line's first two outbound calls were placed the same afternoon to the probe's own number through the deployed container, one met and booked, one not met and handed off to a recruiter by email; `DR-025`'s evidence records both calls turn by turn, and the seven eval runs behind the baseline.
+James ruled the outbound call's shape on 5 November, with the gate in code, and at 09:21 CT ruled on the rewording of Never 1, the new Never 7 and the outbound lines under Never 3 and Never 5, which stand in `spec.md` section 5 (`DR-025`, "The decision"). Lane 0 wrote spec section 9, the record, card 08 and the synthetic roles and applications; three lanes built the tools and the gate, the intake and the dialler, and the ledger, the cockpit, the scorecard and the stack, and were merged the same day. At this commit the suite is 1,132 tests and all of them pass (`uv run pytest -q`). The sixteen outbound eval cases, CL-041 to CL-056, entered `evals/cases` under the rule 4 amendment in `AGENTS.md`. The line's first two outbound calls were placed the same afternoon to the probe's own number through the deployed container, one met and booked, one not met and handed off to a recruiter by email; `DR-025`'s evidence records both calls turn by turn, and the seven eval runs behind the baseline.
 
 ## What Gus Must Never Do
 
