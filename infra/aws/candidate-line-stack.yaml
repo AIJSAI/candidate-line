@@ -291,6 +291,9 @@ Resources:
             - { Name: MAX_CALL_SECONDS, Value: !Ref MaxCallSeconds }
             - { Name: MAX_CALLS_PER_DAY, Value: !Ref MaxCallsPerDay }
             - { Name: LOG_LEVEL, Value: INFO }
+            # The links in a hand-off note open the cockpit through the port-forward (scripts/deploy.sh
+            # cockpit-forward), which listens on this port of the operator's own machine.
+            - { Name: COCKPIT_BASE_URL, Value: http://127.0.0.1:8011 }
             - { Name: OUTBOUND_ENABLED, Value: !Ref OutboundEnabled }
             - { Name: MAX_OUTBOUND_PER_DAY, Value: !Ref MaxOutboundPerDay }
             - { Name: CALL_WINDOW, Value: !Ref CallWindow }

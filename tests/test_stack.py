@@ -136,6 +136,8 @@ def test_the_new_parameters_reach_the_task_with_their_defaults() -> None:
     assert environment["CALL_WINDOW"] == {"Ref": "CallWindow"}
     assert environment["MAX_OUTBOUND_CALL_SECONDS"] == {"Ref": "MaxOutboundCallSeconds"}
     assert environment["CONTACTS_PATH"] == "/app/var/contacts.json"  # on the encrypted volume
+    # The notes' links open the cockpit through the port-forward on the operator's machine (deploy.sh cockpit-forward)
+    assert environment["COCKPIT_BASE_URL"] == "http://127.0.0.1:8011"
 
 
 def test_one_task_and_never_two_and_no_new_resource() -> None:

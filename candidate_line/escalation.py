@@ -126,15 +126,21 @@ def _screening_email(e: Escalation, who: str, detail: str) -> str:
         "What to do: read the answers on the record and call the applicant by the promised time; a person decides "
         "every application.\n"
         "\n"
-        f"Call record {e.call_id}, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
+        f"{_record_line(e)}"
     )
 
 
 def format_subject(e: Escalation) -> str:
     """One line a coordinator can act on from the inbox list: "Callback request: Mei Petrov (ACME-1022)". Never the
     detail, which may hold free text. Cut to SES's and SNS's limit on one line of printable ASCII."""
-    kind, who, _ = _parts(e)
-    subject = f"{kind[:1].upper()}{kind[1:]}: {who}" if who else kind[:1].upper() + kind[1:]
+    kind, who, detail = _parts(e)
+    if who:
+        subject = f"{kind[:1].upper()}{kind[1:]}: {who}"
+    elif kind == SCREENING_HAND_OFF:
+        subject = "Screening hand-off"
+    else:
+        # A write-up: what to look at, in the recruiter's words ("A call to look at: unanswered question").
+        subject = f"A call to look at: {_write_up(detail)[0]}"
     subject = "".join(ch if 32 <= ord(ch) < 127 else " " for ch in subject)
     return subject[:SNS_SUBJECT_MAX]
 
@@ -145,6 +151,85 @@ _NEXT = {
 }
 
 
+# A tier-3 write-up's reasons are the line's own words (tiers.write_ups and the hooks); the recruiter reads them
+# in plain words, with what to do about each. The first hand-off emails read in Gmail on 2026-11-05 said "the
+# guard replaced a sentence (p08)" and "read the trace", which a recruiter cannot act on.
+_WRITE_UPS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "the guard replaced a sentence",
+        "safety check",
+        "the line's safety check replaced one sentence of a reply before it was spoken",
+        "read the call; nothing the rules forbid reached the caller, and the replaced sentence is on the call page",
+    ),
+    (
+        "the refusal line was said",
+        "unanswered question",
+        "a caller asked something the FAQ does not answer, so the line said it could not help with that",
+        "listen to the question on the call page; if it deserves an answer, add it to the FAQ or call the caller back",
+    ),
+    (
+        "verification failed",
+        "code and PIN did not match",
+        "the caller's application code and PIN did not match twice, so the line offered a callback",
+        "check the call page for the callback request and call the caller back from the application's own number",
+    ),
+    (
+        "the length cap ended the call",
+        "call cut short",
+        "the call reached its length cap before the last screening question",
+        "read the answers on the applicant's record and call the applicant to finish the questions",
+    ),
+    (
+        "a wrong person answered",
+        "wrong person answered",
+        "someone who is not the applicant answered the line's call, so this number will not be called again",
+        "check the number on the application before anyone calls it",
+    ),
+    (
+        "the pin did not match",
+        "PIN did not match",
+        "the person who answered the line's call did not give the applicant's PIN twice",
+        "call the applicant from the application's own number and confirm the PIN before reading the record",
+    ),
+    (
+        "an opt-out could not be saved",
+        "opt-out not saved",
+        "a caller asked for no more calls and the request could not be saved",
+        "cancel this application's dials by hand on the cockpit",
+    ),
+)
+
+
+def _write_up(reason: str) -> tuple[str, list[str], list[str]]:
+    """The short name, the plain sentences and the to-dos of a write-up, part by part ("; " joins them). A part no
+    table row names is kept in the line's own words, so nothing is lost."""
+    shorts: list[str] = []
+    sentences: list[str] = []
+    todos: list[str] = []
+    for part in [x.strip() for x in reason.split(";") if x.strip()]:
+        low = part.lower()
+        for prefix, short, sentence, todo in _WRITE_UPS:
+            if low.startswith(prefix):
+                shorts.append(short)
+                sentences.append(sentence)
+                todos.append(todo)
+                break
+        else:
+            shorts.append(part[:40])
+            sentences.append(part)
+            todos.append("read the call page")
+    return ", ".join(dict.fromkeys(shorts)) or "see the note", sentences, list(dict.fromkeys(todos))
+
+
+def _record_line(e: Escalation) -> str:
+    """The last lines of every note: the call's page on the cockpit, which the recruiter opens to act (through the
+    port-forward when the line runs in its container, DR-023), and that nobody reads a reply."""
+    return (
+        f"Call record {e.call_id}: {e.trace_url} (the line's cockpit).\n"
+        "This note was sent by the line itself; nobody reads replies to it."
+    )
+
+
 def format_email(e: Escalation) -> str:
     """The email body, written as a note: who asked for what, when and from which number, what to do, and the call
     record's id. No template lines, no internal words: the first hand-off email of 2026-11-04 arrived as the
@@ -152,15 +237,22 @@ def format_email(e: Escalation) -> str:
     kind, who, detail = _parts(e)
     if kind == SCREENING_HAND_OFF:
         return _screening_email(e, who, detail)
-    ask = {"callback request": "for a callback", "move request": "to move a first-round slot"}.get(
-        kind, f"for {kind}"
-    )
-    first = (
-        f"{who} asked the ACME candidate line {ask}" if who else f"The ACME candidate line raised a {kind}"
-    )
-    if detail:
-        first += f": {detail}"
-    first = first.rstrip(".") + "."
+    if not who:
+        # A write-up (tier 3) or any hand-off in no "kind from who: detail" shape: plain words, part by part.
+        _short, sentences, todos = _write_up(detail)
+        first = (
+            "The ACME candidate line flagged a call for a person to look at: " + "; ".join(sentences) + "."
+        )
+        todo = "; ".join(todos)
+    else:
+        ask = {"callback request": "for a callback", "move request": "to move a first-round slot"}.get(
+            kind, f"for {kind}"
+        )
+        first = f"{who} asked the ACME candidate line {ask}"
+        if detail:
+            first += f": {detail}"
+        first = first.rstrip(".") + "."
+        todo = ""
     where = (
         f"The call came from {e.caller} at {_when(e.raised_at)}."
         if e.caller and e.caller != "-"
@@ -169,19 +261,11 @@ def format_email(e: Escalation) -> str:
     if e.record_url:
         # An applicant's hand-off: the answers are read on the record, never in mail, and the promise is the
         # recruiter's call, not F8.2's coordinator call to the number the caller rang from.
-        todo = e.suggested_action
+        todo = todo or e.suggested_action
         where += f"\n\nThe applicant's record: {e.record_url}"
     else:
-        todo = _NEXT.get(kind, e.suggested_action)
-    return (
-        f"{first}\n"
-        "\n"
-        f"{where}\n"
-        "\n"
-        f"What to do: {todo}.\n"
-        "\n"
-        f"Call record {e.call_id}, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
-    )
+        todo = todo or _NEXT.get(kind, e.suggested_action)
+    return f"{first}\n\n{where}\n\nWhat to do: {todo}.\n\n{_record_line(e)}"
 
 
 def format_message(e: Escalation) -> str:

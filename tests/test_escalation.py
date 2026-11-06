@@ -287,7 +287,35 @@ def test_the_subject_is_one_short_ascii_line() -> None:
         "\n" not in subject and len(subject) <= SNS_SUBJECT_MAX and all(32 <= ord(c) < 127 for c in subject)
     )
     bare = Escalation("CA4", "3", "", "a", "u")
-    assert format_subject(bare) == "Tier 3 hand-off"
+    assert format_subject(bare) == "A call to look at: see the note"
+
+
+# The first hand-off emails read in the operator's inbox on 2026-11-05 said "raised a tier 3 hand-off: the guard
+# replaced a sentence (p08)" and "What to do: read the trace", with no link: a recruiter cannot act on that.
+def test_a_write_up_reads_in_plain_words_with_what_to_do_and_the_call_link() -> None:
+    from candidate_line.escalation import format_email, format_subject
+
+    e = Escalation(
+        "probe-CL-032",
+        "3",
+        "the guard replaced a sentence (p08); the refusal line was said: the FAQ has no answer to the question",
+        "read the trace",
+        "http://127.0.0.1:8011/calls/probe-CL-032",
+        raised_at="2026-11-05 17:41",
+    )
+    assert format_subject(e) == "A call to look at: safety check, unanswered question"
+    body = format_email(e)
+    assert body.startswith(
+        "The ACME candidate line flagged a call for a person to look at: the line's safety check replaced one "
+        "sentence of a reply before it was spoken; a caller asked something the FAQ does not answer, so the line "
+        "said it could not help with that."
+    )
+    assert "What to do: read the call; nothing the rules forbid reached the caller" in body
+    assert "listen to the question on the call page" in body
+    assert "Call record probe-CL-032: http://127.0.0.1:8011/calls/probe-CL-032 (the line's cockpit)." in body
+    assert "p08" not in body and "tier 3" not in body and "read the trace" not in body
+    unknown = Escalation("CA5", "3", "something new happened", "a", "http://c/calls/CA5")
+    assert "something new happened" in format_email(unknown)  # a part the table does not name is kept whole
 
 
 class FakeSes:
@@ -407,7 +435,8 @@ def test_the_screening_email_names_who_the_role_the_promised_time_and_the_record
         "What to do: read the answers on the record and call the applicant by the promised time; a person decides "
         "every application.\n"
         "\n"
-        "Call record CA-out, on the line's cockpit. This note was sent by the line itself; nobody reads replies to it."
+        "Call record CA-out: http://127.0.0.1:8001/calls/CA-out (the line's cockpit).\n"
+        "This note was sent by the line itself; nobody reads replies to it."
     )
 
 
