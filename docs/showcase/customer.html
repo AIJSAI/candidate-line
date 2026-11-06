@@ -14,15 +14,16 @@
   h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
   .promise { font-size: 15px; color: var(--muted); margin: 4px 0 0; }
   .runs { font-size: 12px; color: var(--muted); text-align: right; max-width: 360px; }
-  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 0 28px; padding-top: 10px; }
-  section { margin-bottom: 10px; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 0 26px; padding-top: 10px; }
+  section { margin-bottom: 8px; }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 0 0 6px; }
   ul { margin: 0; padding-left: 18px; }
   li { margin: 2px 0; }
   ol { margin: 0; padding-left: 20px; }
   ol li { margin: 4px 0; }
   .law { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  td:first-child, th:first-child { width: 40%; }
   th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
   td.v { color: var(--ink); }
@@ -49,7 +50,7 @@
     <div>
       <h1>The Candidate Line</h1>
       <p class="promise">Candidates book their first interview by phone, any hour, and never hear a word about how they're doing.</p>
-      <p class="promise">A working prototype on synthetic data, built 1 to 5 November 2026.</p>
+      <p class="promise">A working prototype on synthetic data, built 1 to 5 November 2026; since 5 November it also calls applicants back to ask the posted screening questions.</p>
     </div>
     <div class="runs">Runs on AWS for speech, Claude by Anthropic for the conversation, and Twilio for the phone number.</div>
   </header>
@@ -115,15 +116,20 @@
 
     <div class="wide">
       <section>
+        <h2>Why It Matters</h2>
+        <ul>
+          <li>Home care, the demo's roles: turnover near 75% a year (PHI), about 760,500 aide openings a year (BLS), and first contact after 3.47 days on average (CareerPlug, 2026).</li>
+          <li>Vendors sell this by text: Workday paid 1.0 billion USD for Paradox in 2025, which screens on the job's stated requirements; HelloHire texts home-care applicants within minutes and screens on the agency's requirements.</li>
+          <li>This line does it by voice, the one check in code, every decision a person's. On stated assumptions (a 15 to 30 minute screen call, three minutes to read the answers, a recruiter at 52 USD an hour), a hundred screens return about 17 to 42 recruiter hours for about 21 USD of calls, and the first call comes about two minutes after an application.</li>
+        </ul>
+      </section>
+      <section>
         <h2>The Numbers You'll Get</h2>
         <table>
           <tr><th>Measure</th><th>Where it stands</th></tr>
-          <tr><td>Calls handled, and turns per call</td><td class="pilot">Measured in the pilot</td></tr>
-          <tr><td>Handled alone, handed to a person, written up afterwards</td><td class="pilot">Measured in the pilot</td></tr>
-          <tr><td>Hours from invite to booked, against your past baseline</td><td class="pilot">Measured in the pilot</td></tr>
-          <tr><td>FAQ answers with the section named, and refusals</td><td class="pilot">Measured in the pilot</td></tr>
-          <tr><td>Response delay, from the caller's last word to the reply</td><td class="v">Budget: 2 seconds for the median. Measured 2.1 seconds median by call recording, 2026-11-02, over 23 turns in 16 calls; 2.6 seconds on the latest call, after Gus began waiting for the caller to finish a sentence.</td></tr>
-          <tr><td>Cost per call</td><td class="v">About 18 cents per five-minute call, estimated 2026-11-02 from the bake-off calls and the price lists read 2026-11-01.</td></tr>
+          <tr><td colspan="2"><span class="pilot">Measured in the pilot:</span> calls handled and turns per call; handled alone, handed to a person or written up afterwards; hours from invite to booked against your past baseline; FAQ answers with the section named, and refusals.</td></tr>
+          <tr><td>Response delay, from the caller's last word to the reply</td><td class="v">Budget 2 seconds for the median; measured 2.1 seconds median by call recording, 2026-11-02, over 23 turns in 16 calls, and 2.6 seconds on the latest call.</td></tr>
+          <tr><td>Cost per call</td><td class="v">About 18 cents per five-minute call, estimated 2026-11-02 from the bake-off calls and the price lists; an outbound screen about 21 cents (DR-025).</td></tr>
           <tr><td>Spend limits during the proof of concept</td><td class="v">A 50-dollar monthly cap on the conversation model (set 2026-11-02) and a 50-dollar monthly alarm on AWS (set 2026-11-01).</td></tr>
         </table>
         <p class="note">Each measured number names its method, its date and its count.</p>
